@@ -149,7 +149,7 @@ describe('InvoiceForm', () => {
       await user.click(screen.getByRole('button', { name: /rechnung speichern|save invoice/i }));
 
       await waitFor(() => {
-        expect(screen.getByText(/erforderlich/i)).toBeInTheDocument();
+        expect(screen.getByTestId('error-invoiceNumber')).toHaveTextContent(/erforderlich/i);
       });
 
       expect(mockOnSubmit).not.toHaveBeenCalled();
