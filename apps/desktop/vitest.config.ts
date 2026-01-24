@@ -7,6 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.{test,spec}.{ts,tsx}'],
+    fileParallelism: false,
     coverage: {
       provider: 'istanbul',
       reporter: ['text', 'json', 'html'],
