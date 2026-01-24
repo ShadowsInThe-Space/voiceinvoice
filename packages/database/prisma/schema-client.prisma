@@ -8,13 +8,13 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./voiceinvoice.db"
+  url      = env("DATABASE_URL")
 }
 
 /// Customer or supplier entity for invoice management.
 /// Supports German accounting requirements with tax IDs and VAT numbers.
 model Customer {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   /// Classification: CUSTOMER, SUPPLIER, or BOTH
   type            String
 
@@ -37,13 +37,109 @@ model Customer {
   zip             String?
   city            String?
   /// ISO 3166-1 alpha-2 country code
-  country         String   @default("DE")
+  country         String    @default("DE")
 
   /// Privacy token for anonymized references
-  anonymizedToken String?  @unique
+  anonymizedToken String?   @unique
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  /// Invoices associated with this customer
+  invoices        Invoice[]
+
+  @@index([companyName])
+  @@index([email])
+  @@index([type])
+}
+
+/// Invoice document for billing customers.
+/// Supports German invoice requirements (Rechnung).
+model Invoice {
+  id              String        @id @default(uuid())
+
+  /// Sequential invoice number (Rechnungsnummer)
+  invoiceNumber   String        @unique
+
+  /// Invoice status: DRAFT, SENT, PAID, OVERDUE, CANCELLED
+  status          String        @default("DRAFT")
+
+  /// Invoice date (Rechnungsdatum)
+  invoiceDate     DateTime      @default(now())
+
+  /// Payment due date (Faelligkeitsdatum)
+  dueDate         DateTime
+
+  /// Invoice currency (ISO 4217)
+  currency        String        @default("EUR")
+
+  /// Net amount before tax (Nettobetrag)
+  netAmount       Float         @default(0)
+
+  /// Tax amount (Steuerbetrag)
+  taxAmount       Float         @default(0)
+
+  /// Gross amount including tax (Bruttobetrag)
+  grossAmount     Float         @default(0)
+
+  /// Optional notes or payment terms
+  notes           String?
+
+  /// Reference to customer
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id])
+
+  /// Line items on this invoice
+  items           InvoiceItem[]
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([invoiceNumber])
+  @@index([status])
+  @@index([customerId])
+  @@index([invoiceDate])
+  @@index([dueDate])
+}
+
+/// Individual line item on an invoice.
+model InvoiceItem {
+  id              String   @id @default(uuid())
+
+  /// Item description
+  description     String
+
+  /// Quantity of items
+  quantity        Float    @default(1)
+
+  /// Unit of measurement (e.g., "hours", "pieces", "kg")
+  unit            String   @default("pcs")
+
+  /// Price per unit (Einzelpreis)
+  unitPrice       Float
+
+  /// Tax rate as percentage (e.g., 19 for 19%)
+  taxRate         Float    @default(19)
+
+  /// Net amount for this item (quantity * unitPrice)
+  netAmount       Float
+
+  /// Tax amount for this item
+  taxAmount       Float
+
+  /// Gross amount for this item
+  grossAmount     Float
+
+  /// Sort order within the invoice
+  sortOrder       Int      @default(0)
+
+  /// Reference to parent invoice
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@index([companyName])
+  @@index([invoiceId])
+  @@index([sortOrder])
 }
