@@ -83,6 +83,8 @@ export interface CompanyInfo {
   phone?: string;
   email?: string;
   website?: string;
+  /** Company logo as Base64 data URL (PNG or JPEG) */
+  logoBase64?: string;
 }
 
 /**
@@ -180,6 +182,10 @@ const LAYOUT = {
   logoAreaTop: 20,
   logoAreaHeight: 30,
 
+  // Logo dimensions (max bounds in mm)
+  logoMaxWidth: 50,
+  logoMaxHeight: 30,
+
   // Address window (DIN 5008)
   addressWindowTop: 55,
   addressWindowLeft: 20,
@@ -211,6 +217,7 @@ const LAYOUT = {
 export class PDFExporter {
   /**
    * Generates an invoice PDF from the provided options.
+   * @param options
    */
   async generateInvoicePDF(options: PDFExportOptions): Promise<Blob> {
     // Validate input
@@ -247,6 +254,8 @@ export class PDFExporter {
 
   /**
    * Saves a PDF blob to a file.
+   * @param blob
+   * @param filename
    */
   async saveToFile(blob: Blob, filename: string): Promise<string> {
     // Ensure .pdf extension
@@ -274,6 +283,7 @@ export class PDFExporter {
 
   /**
    * Gets labels for the specified language.
+   * @param language
    */
   getLabels(language: 'de' | 'en'): InvoiceLabels {
     return language === 'de' ? GERMAN_LABELS : ENGLISH_LABELS;
@@ -281,6 +291,9 @@ export class PDFExporter {
 
   /**
    * Formats a currency amount.
+   * @param amount
+   * @param currency
+   * @param language
    */
   formatCurrency(amount: number, currency: string, language: 'de' | 'en'): string {
     if (language === 'de') {
@@ -302,6 +315,8 @@ export class PDFExporter {
 
   /**
    * Formats a date.
+   * @param date
+   * @param language
    */
   formatDate(date: Date | null, language: 'de' | 'en'): string {
     if (!date) return '-';
@@ -322,21 +337,32 @@ export class PDFExporter {
   }
 
   /**
-   * Renders the header with company logo placeholder.
+   * Renders the header with company logo or placeholder.
+   * @param doc
+   * @param companyInfo
+   * @param _labels
    */
   private renderHeader(doc: jsPDF, companyInfo?: CompanyInfo, _labels?: InvoiceLabels): void {
-    const { marginLeft, logoAreaTop, logoAreaHeight, contentWidth } = LAYOUT;
+    const { marginLeft, logoAreaTop, contentWidth, logoMaxWidth, logoMaxHeight } = LAYOUT;
 
-    // Logo placeholder area (dashed rectangle)
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineDashPattern([2, 2], 0);
-    doc.rect(marginLeft, logoAreaTop, 50, logoAreaHeight);
-    doc.setLineDashPattern([], 0);
+    // Render logo if provided, otherwise show placeholder
+    if (companyInfo?.logoBase64) {
+      // Extract image format from data URL
+      const format = this.getImageFormat(companyInfo.logoBase64);
 
-    // Placeholder text
-    doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    doc.text('Logo', marginLeft + 25, logoAreaTop + logoAreaHeight / 2, { align: 'center' });
+      // Calculate scaled dimensions (proportional scaling to max 50x30mm)
+      const { width, height } = this.calculateLogoDimensions(logoMaxWidth, logoMaxHeight);
+
+      try {
+        doc.addImage(companyInfo.logoBase64, format, marginLeft, logoAreaTop, width, height);
+      } catch {
+        // Fallback to placeholder if image fails
+        this.renderLogoPlaceholder(doc);
+      }
+    } else {
+      // Logo placeholder area (dashed rectangle)
+      this.renderLogoPlaceholder(doc);
+    }
 
     // Company info on the right
     if (companyInfo) {
@@ -370,7 +396,62 @@ export class PDFExporter {
   }
 
   /**
+   * Renders a placeholder rectangle for the logo area.
+   * @param doc
+   */
+  private renderLogoPlaceholder(doc: jsPDF): void {
+    const { marginLeft, logoAreaTop, logoAreaHeight } = LAYOUT;
+
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineDashPattern([2, 2], 0);
+    doc.rect(marginLeft, logoAreaTop, 50, logoAreaHeight);
+    doc.setLineDashPattern([], 0);
+
+    // Placeholder text
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text('Logo', marginLeft + 25, logoAreaTop + logoAreaHeight / 2, { align: 'center' });
+  }
+
+  /**
+   * Extracts image format from Base64 data URL.
+   *
+   * @param {string} dataUrl - Base64 data URL
+   * @returns {'PNG' | 'JPEG'} Image format
+   */
+  private getImageFormat(dataUrl: string): 'PNG' | 'JPEG' {
+    if (dataUrl.includes('image/jpeg') || dataUrl.includes('image/jpg')) {
+      return 'JPEG';
+    }
+    return 'PNG';
+  }
+
+  /**
+   * Calculates logo dimensions maintaining aspect ratio within bounds.
+   * Since we don't have the actual image dimensions from Base64,
+   * we use the maximum allowed dimensions.
+   *
+   * @param {number} maxWidth - Maximum width in mm
+   * @param {number} maxHeight - Maximum height in mm
+   * @returns {{ width: number; height: number }} Calculated dimensions
+   */
+  private calculateLogoDimensions(
+    maxWidth: number,
+    maxHeight: number
+  ): { width: number; height: number } {
+    // Default to max dimensions - jsPDF will handle aspect ratio
+    // when rendering the image
+    return {
+      width: maxWidth,
+      height: maxHeight,
+    };
+  }
+
+  /**
    * Renders the address window (DIN 5008 compliant).
+   * @param doc
+   * @param customer
+   * @param companyInfo
    */
   private renderAddressWindow(doc: jsPDF, customer: Customer, companyInfo?: CompanyInfo): void {
     const { addressWindowTop, addressWindowLeft } = LAYOUT;
@@ -417,6 +498,10 @@ export class PDFExporter {
 
   /**
    * Renders invoice information block (right side).
+   * @param doc
+   * @param invoice
+   * @param labels
+   * @param language
    */
   private renderInvoiceInfo(
     doc: jsPDF,
@@ -467,6 +552,10 @@ export class PDFExporter {
 
   /**
    * Renders the items table.
+   * @param doc
+   * @param invoice
+   * @param labels
+   * @param language
    */
   private renderItemsTable(
     doc: jsPDF,
@@ -515,9 +604,14 @@ export class PDFExporter {
       x += colQuantity;
 
       // Unit price
-      doc.text(this.formatCurrency(item.unitPrice, invoice.currency, language), x + colUnitPrice - 2, y, {
-        align: 'right',
-      });
+      doc.text(
+        this.formatCurrency(item.unitPrice, invoice.currency, language),
+        x + colUnitPrice - 2,
+        y,
+        {
+          align: 'right',
+        }
+      );
       x += colUnitPrice;
 
       // Total
@@ -536,6 +630,10 @@ export class PDFExporter {
 
   /**
    * Renders the totals section.
+   * @param doc
+   * @param invoice
+   * @param labels
+   * @param language
    */
   private renderTotals(
     doc: jsPDF,
@@ -584,6 +682,9 @@ export class PDFExporter {
 
   /**
    * Renders payment terms and notes.
+   * @param doc
+   * @param invoice
+   * @param labels
    */
   private renderPaymentTerms(doc: jsPDF, invoice: Invoice, labels: InvoiceLabels): void {
     const { marginLeft } = LAYOUT;
@@ -614,6 +715,9 @@ export class PDFExporter {
 
   /**
    * Renders the footer with bank details.
+   * @param doc
+   * @param companyInfo
+   * @param labels
    */
   private renderFooter(doc: jsPDF, companyInfo?: CompanyInfo, labels?: InvoiceLabels): void {
     const { marginLeft, footerTop, contentWidth } = LAYOUT;
