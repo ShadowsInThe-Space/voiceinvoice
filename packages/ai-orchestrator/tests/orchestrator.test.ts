@@ -59,13 +59,33 @@ describe('AgentOrchestrator', () => {
   });
 
   describe('classifyIntent', () => {
-    it('should return UNKNOWN for placeholder implementation', async () => {
+    it('should return UNKNOWN for ambiguous text without clear intent', async () => {
       const orchestrator = new AgentOrchestrator();
 
       const result = await orchestrator.classifyIntent('Any text');
 
       expect(result.intent).toBe('UNKNOWN');
-      expect(result.confidence).toBe(0);
+      expect(result.confidence).toBeLessThan(0.5);
+      expect(result.method).toBe('RULES');
+    });
+
+    it('should detect INVOICE intent for invoice-related text', async () => {
+      const orchestrator = new AgentOrchestrator();
+
+      const result = await orchestrator.classifyIntent('Rechnung für Müller GmbH');
+
+      expect(result.intent).toBe('INVOICE');
+      expect(result.confidence).toBeGreaterThanOrEqual(0.8);
+      expect(result.method).toBe('RULES');
+    });
+
+    it('should detect ANALYTICS intent for analytics-related text', async () => {
+      const orchestrator = new AgentOrchestrator();
+
+      const result = await orchestrator.classifyIntent('Zeige mir die Statistik');
+
+      expect(result.intent).toBe('ANALYTICS');
+      expect(result.confidence).toBeGreaterThanOrEqual(0.8);
       expect(result.method).toBe('RULES');
     });
   });
