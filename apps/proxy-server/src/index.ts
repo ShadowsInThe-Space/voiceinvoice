@@ -2,14 +2,16 @@
  * VoiceInvoice Proxy Server entry point.
  *
  * Fastify-based API server providing:
- * - /transcribe: Audio transcription via Chirp 3
+ * - /transcribe: Audio transcription via Chirp 3 / Gemini
  * - /enrich: Invoice data extraction via Gemini 2.5 Flash
- * - License validation and rate limiting
+ * - /health: Health check endpoint
  *
  * Deployed on Hetzner Cloud in Frankfurt for GDPR compliance.
  *
  * @module proxy-server
  */
+
+import { buildServer } from './server';
 
 /**
  * Server configuration options.
@@ -47,20 +49,43 @@ export function createConfig(): ServerConfig {
 /**
  * Starts the proxy server.
  *
- * This is a placeholder that will be replaced with the full
- * Fastify server setup in Subagent #7.
- *
  * @param {Partial<ServerConfig>} config - Configuration overrides
  * @returns {Promise<void>} Resolves when server is running
  */
 export async function startServer(config?: Partial<ServerConfig>): Promise<void> {
   const finalConfig = { ...createConfig(), ...config };
-  console.log(`VoiceInvoice Proxy Server starting on ${finalConfig.host}:${finalConfig.port}`);
-  // Placeholder - will be implemented in Subagent #7
+
+  const server = await buildServer({
+    logger: finalConfig.enableLogging,
+    rateLimit: finalConfig.rateLimit,
+  });
+
+  try {
+    await server.listen({
+      port: finalConfig.port,
+      host: finalConfig.host,
+    });
+
+    console.log(`VoiceInvoice Proxy Server running on ${finalConfig.host}:${finalConfig.port}`);
+  } catch (error) {
+    server.log.error(error);
+    process.exit(1);
+  }
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    console.log('\nShutting down server...');
+    await server.close();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 // Auto-start if run directly
-if (process.argv[1]?.includes('proxy-server')) {
+const isMainModule = process.argv[1]?.includes('proxy-server');
+if (isMainModule && !process.env.VITEST) {
   startServer().catch(console.error);
 }
 

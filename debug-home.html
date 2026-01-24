@@ -1,0 +1,13 @@
+<html><head></head><body><pre>missing required error components, refreshing...</pre>
+              <script>
+                async function check() {
+                  const res = await fetch(location.href).catch(() => ({}))
+
+                  if (res.status === 200) {
+                    location.reload()
+                  } else {
+                    setTimeout(check, 1000)
+                  }
+                }
+                check()
+              </script></body></html>

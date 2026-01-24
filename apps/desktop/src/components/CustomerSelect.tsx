@@ -2,13 +2,15 @@
  * CustomerSelect component.
  *
  * A searchable dropdown for selecting customers with filtering
- * capabilities.
+ * capabilities, styled as a modern Command/Combobox.
  *
  * @module components/CustomerSelect
  */
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { Customer } from '@voiceinvoice/shared-types';
+import { cn } from '../lib/utils';
+import { Check, ChevronsUpDown, Search, User } from 'lucide-react';
 
 /**
  * Props for CustomerSelect component.
@@ -25,8 +27,8 @@ export interface CustomerSelectProps {
 /**
  * Gets display label for customer type.
  *
- * @param {string} type - Customer type
- * @returns {string} Localized type label
+ * @param {string} type - The customer type enum value
+ * @returns {string} The localized label
  */
 function getTypeLabel(type: string): string {
   switch (type) {
@@ -44,21 +46,11 @@ function getTypeLabel(type: string): string {
 /**
  * Searchable customer selection dropdown.
  *
- * Features:
- * - Search by company name or contact person
- * - Case-insensitive filtering
- * - Keyboard navigation support
- * - Customer type indicators
- *
- * @param {CustomerSelectProps} props - Component props
- * @returns {JSX.Element} Rendered component
- *
- * @example
- * <CustomerSelect
- *   value={selectedCustomerId}
- *   onChange={(id) => setSelectedCustomerId(id)}
- *   customers={customerList}
- * />
+ * @param {CustomerSelectProps} root0 - The component props
+ * @param {string} [root0.value] - The selected customer ID
+ * @param {Function} root0.onChange - Callback function when selection changes
+ * @param {Array} root0.customers - Array of customer objects to select from
+ * @returns {JSX.Element} The rendered component
  */
 export function CustomerSelect({
   value,
@@ -108,11 +100,8 @@ export function CustomerSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  /**
-   * Handles customer selection.
-   */
   const handleSelect = useCallback(
-    (customerId: string) => {
+    (customerId: string): void => {
       onChange(customerId);
       setIsOpen(false);
       setSearchTerm('');
@@ -120,9 +109,6 @@ export function CustomerSelect({
     [onChange]
   );
 
-  /**
-   * Handles keyboard navigation.
-   */
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       switch (e.key) {
@@ -156,87 +142,71 @@ export function CustomerSelect({
     [isOpen, filteredCustomers, highlightedIndex, handleSelect]
   );
 
-  /**
-   * Handles combobox toggle.
-   */
-  const handleToggle = useCallback(() => {
+  const handleToggle = useCallback((): void => {
     setIsOpen((prev) => !prev);
     if (!isOpen) {
-      // Focus search input when opening
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   }, [isOpen]);
 
-  // Empty state when no customers
   if (customers.length === 0) {
     return (
-      <div className="text-gray-500 text-sm p-2 border rounded-md">
-        Keine Kunden verfuegbar
+      <div className="flex items-center gap-2 text-muted-foreground text-sm p-3 border border-dashed rounded-md bg-muted/50">
+        <User className="h-4 w-4" />
+        <span>Keine Kunden verfügbar</span>
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="relative">
-      {/* Combobox trigger */}
+    <div ref={containerRef} className="relative w-full">
+      {/* Combobox Trigger */}
       <button
         type="button"
         role="combobox"
-        aria-label="Kunde auswaehlen"
+        aria-label="Kunde auswählen"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
-        className="
-          w-full flex items-center justify-between
-          px-3 py-2 text-left
-          bg-white border border-gray-300 rounded-md shadow-sm
-          hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500
-        "
+        className={cn(
+          "flex h-12 w-full items-center justify-between rounded-xl border-2 border-transparent bg-muted/20 px-4 py-2 text-sm shadow-sm transition-all focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary",
+          !selectedCustomer && "text-muted-foreground",
+          isOpen && "border-primary bg-background shadow-lg"
+        )}
       >
-        <span className={selectedCustomer ? 'text-gray-900' : 'text-gray-500'}>
-          {selectedCustomer?.companyName || 'Kunde auswaehlen'}
+        <span className="truncate font-medium">
+          {selectedCustomer?.companyName || 'Kunde auswählen...'}
         </span>
-        <svg
-          className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </button>
 
-      {/* Dropdown panel */}
+      {/* Popover Content */}
       {isOpen && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
-          {/* Search input */}
-          <div className="p-2 border-b">
+        <div className="absolute z-50 mt-2 max-h-[400px] w-full min-w-[320px] overflow-hidden rounded-xl border border-border/50 bg-card text-popover-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 duration-200">
+          {/* Search Input */}
+          <div className="flex items-center border-b border-border/50 px-4 bg-muted/10">
+            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <input
               ref={inputRef}
               type="text"
-              placeholder="Suchen..."
+              placeholder="Kunden suchen..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="
-                w-full px-3 py-2
-                border border-gray-300 rounded-md
-                focus:outline-none focus:ring-2 focus:ring-blue-500
-              "
+              className="flex h-12 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
 
-          {/* Customer list */}
+          {/* Results List */}
           <ul
             role="listbox"
-            className="max-h-60 overflow-auto py-1"
+            className="max-h-[280px] overflow-y-auto p-2 space-y-1"
             aria-label="Kundenliste"
           >
             {filteredCustomers.length === 0 ? (
-              <li className="px-3 py-2 text-gray-500 text-sm">
-                Keine Kunden gefunden
+              <li className="relative flex cursor-default select-none items-center rounded-lg px-2 py-8 text-sm outline-none text-muted-foreground justify-center italic">
+                Keine Kunden gefunden.
               </li>
             ) : (
               filteredCustomers.map((customer, index) => (
@@ -246,36 +216,42 @@ export function CustomerSelect({
                   aria-selected={customer.id === value}
                   onClick={() => handleSelect(customer.id)}
                   onMouseEnter={() => setHighlightedIndex(index)}
-                  className={`
-                    px-3 py-2 cursor-pointer
-                    ${index === highlightedIndex ? 'bg-blue-50' : ''}
-                    ${customer.id === value ? 'bg-blue-100' : ''}
-                    hover:bg-blue-50
-                  `}
+                  className={cn(
+                    "relative flex cursor-default select-none items-center rounded-lg px-3 py-2.5 text-sm outline-none transition-all",
+                    index === highlightedIndex 
+                      ? "bg-primary/10 text-primary" 
+                      : "text-foreground hover:bg-muted/50",
+                    customer.id === value && "bg-primary text-white font-bold"
+                  )}
                 >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium text-gray-900">
-                        {customer.companyName}
-                      </div>
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4 shrink-0",
+                      customer.id === value ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <div className="flex flex-1 items-center justify-between gap-4 overflow-hidden">
+                    <div className="flex flex-col truncate">
+                      <span className="truncate">{customer.companyName}</span>
                       {customer.contactPerson && (
-                        <div className="text-sm text-gray-500">
+                        <span className={cn(
+                          "text-[10px] uppercase font-black tracking-widest",
+                          customer.id === value ? "text-white/70" : "text-muted-foreground"
+                        )}>
                           {customer.contactPerson}
-                        </div>
+                        </span>
                       )}
                     </div>
                     <span
                       data-testid={`customer-type-${customer.id}`}
-                      className={`
-                        text-xs px-2 py-1 rounded-full
-                        ${
-                          customer.type === 'SUPPLIER'
-                            ? 'bg-orange-100 text-orange-800'
-                            : customer.type === 'BOTH'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-green-100 text-green-800'
-                        }
-                      `}
+                      className={cn(
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-tighter border shrink-0",
+                        customer.id === value 
+                          ? "border-white/20 bg-white/20 text-white"
+                          : customer.type === 'SUPPLIER'
+                            ? "border-secondary/20 bg-secondary/10 text-secondary"
+                            : "border-primary/20 bg-primary/5 text-primary"
+                      )}
                     >
                       {getTypeLabel(customer.type)}
                     </span>
@@ -289,3 +265,4 @@ export function CustomerSelect({
     </div>
   );
 }
+

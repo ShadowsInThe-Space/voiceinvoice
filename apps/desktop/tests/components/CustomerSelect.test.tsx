@@ -67,7 +67,10 @@ describe('CustomerSelect', () => {
       // Search input is only visible when dropdown is open
       await user.click(screen.getByRole('combobox'));
 
-      expect(screen.getByPlaceholderText(/suchen|search/i)).toBeInTheDocument();
+      // Wait for animation/render
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText(/suchen|search/i)).toBeInTheDocument();
+      });
     });
 
     it('should display all customers initially', async () => {
@@ -99,7 +102,7 @@ describe('CustomerSelect', () => {
     it('should show placeholder when no value selected', () => {
       render(<CustomerSelect onChange={mockOnChange} customers={mockCustomers} />);
 
-      expect(screen.getByText(/kunde auswaehlen|select customer/i)).toBeInTheDocument();
+      expect(screen.getByText(/kunde auswählen|select customer/i)).toBeInTheDocument();
     });
   });
 
