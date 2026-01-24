@@ -169,8 +169,6 @@ Existing data: {invoice}`,
  */
 export class GeminiClient {
   private apiKey: string;
-  private projectId: string;
-  private location: string;
   private locale: 'de' | 'en';
   private maxRetries: number;
 
@@ -190,8 +188,6 @@ export class GeminiClient {
    */
   constructor(config: GeminiClientConfig) {
     this.apiKey = config.apiKey;
-    this.projectId = config.projectId ?? 'default';
-    this.location = config.location ?? 'europe-west1';
     this.locale = config.locale ?? 'de';
     this.maxRetries = config.maxRetries ?? 3;
   }
@@ -231,18 +227,21 @@ export class GeminiClient {
     const response = await this.makeChirpRequest(requestBody);
 
     if (!response.success) {
-      return { success: false, error: response.error };
+      return { success: false, error: response.error ?? 'Unknown error during transcription' };
     }
 
     const results = response.data?.results ?? [];
     const transcripts = results
-      .map(
-        (r: { alternatives?: Array<{ transcript?: string; confidence?: number }> }) =>
-          r.alternatives?.[0]?.transcript ?? ''
-      )
+      .map((r: unknown) => {
+        const item = r as { alternatives?: Array<{ transcript?: string; confidence?: number }> };
+        return item.alternatives?.[0]?.transcript ?? '';
+      })
       .join(' ');
 
-    const confidence = results[0]?.alternatives?.[0]?.confidence ?? 0;
+    const firstResult = results[0] as
+      | { alternatives?: Array<{ transcript?: string; confidence?: number }> }
+      | undefined;
+    const confidence = firstResult?.alternatives?.[0]?.confidence ?? 0;
 
     return {
       success: true,
@@ -261,7 +260,7 @@ export class GeminiClient {
     const response = await this.makeGeminiRequest(prompt);
 
     if (!response.success) {
-      return { success: false, confidence: 0, error: response.error };
+      return { success: false, confidence: 0, error: response.error ?? 'Unknown error during invoice parsing' };
     }
 
     const responseText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
@@ -299,7 +298,7 @@ export class GeminiClient {
     const response = await this.makeGeminiRequest(prompt);
 
     if (!response.success) {
-      return { success: false, error: response.error };
+      return { success: false, error: response.error ?? 'Unknown error during invoice completion' };
     }
 
     const responseText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
@@ -315,11 +314,13 @@ export class GeminiClient {
         reason?: string;
       };
 
-      return {
+      const output: InvoiceCompletionResult = {
         success: true,
-        suggestions: result.suggestions,
-        reason: result.reason,
       };
+      if (result.suggestions) output.suggestions = result.suggestions;
+      if (result.reason) output.reason = result.reason;
+
+      return output;
     } catch {
       return { success: false };
     }

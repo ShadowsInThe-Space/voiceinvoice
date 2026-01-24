@@ -1,14 +1,16 @@
 /**
  * VoiceRecorderButton component.
  *
- * A button component for starting and stopping voice recordings
- * with visual feedback during recording.
+ * A prominent, animated recording button for the voice-first workflow.
+ * Features a glowing pulse effect during recording and clear visual feedback.
  *
  * @module components/VoiceRecorderButton
  */
 
 import React, { useCallback } from 'react';
 import { useVoiceRecording } from '../hooks/use-voice-recording';
+import { cn } from '../lib/utils';
+import { Mic, Square } from 'lucide-react';
 
 /**
  * Props for VoiceRecorderButton component.
@@ -24,7 +26,7 @@ export interface VoiceRecorderButtonProps {
  * Formats duration in milliseconds to MM:SS format.
  *
  * @param {number} ms - Duration in milliseconds
- * @returns {string} Formatted duration string
+ * @returns {string} Formatted string
  */
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -36,20 +38,10 @@ function formatDuration(ms: number): string {
 /**
  * Voice recorder button with start/stop functionality.
  *
- * Provides a visual interface for voice recording with:
- * - Recording state indicator
- * - Duration display during recording
- * - Error state feedback
- *
- * @param {VoiceRecorderButtonProps} props - Component props
- * @returns {JSX.Element} Rendered component
- *
- * @example
- * <VoiceRecorderButton
- *   onRecordingComplete={(blob, duration) => {
- *     console.log(`Recorded ${duration}ms of audio`);
- *   }}
- * />
+ * @param {VoiceRecorderButtonProps} root0 - The component props
+ * @param {Function} root0.onRecordingComplete - Callback when recording finishes
+ * @param {boolean} [root0.disabled] - Whether the button is disabled
+ * @returns {JSX.Element} The rendered component
  */
 export function VoiceRecorderButton({
   onRecordingComplete,
@@ -69,9 +61,6 @@ export function VoiceRecorderButton({
     },
   });
 
-  /**
-   * Handles button click to toggle recording state.
-   */
   const handleClick = useCallback(async () => {
     if (isRecording) {
       await stopRecording();
@@ -83,77 +72,74 @@ export function VoiceRecorderButton({
   const ariaLabel = isRecording ? 'Aufnahme stoppen' : 'Aufnahme starten';
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={disabled}
-        aria-label={ariaLabel}
-        className={`
-          relative flex items-center justify-center
-          w-16 h-16 rounded-full
-          transition-all duration-200 ease-in-out
-          focus:outline-none focus:ring-2 focus:ring-offset-2
-          ${
+    <div className="flex flex-col items-center justify-center gap-6 p-8">
+      <div className="relative group">
+        {/* Pulsing Ring Background */}
+        <div
+          className={cn(
+            "absolute inset-0 rounded-full bg-accent/30 blur-2xl transition-all duration-700",
+            isRecording ? "opacity-100 animate-pulse-glow" : "opacity-0 scale-50"
+          )}
+        />
+        
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={disabled}
+          aria-label={ariaLabel}
+          className={cn(
+            "relative flex items-center justify-center w-28 h-28 rounded-full shadow-2xl transition-all duration-500 ease-out transform active:scale-90 border-8",
             isRecording
-              ? 'bg-red-500 hover:bg-red-600 focus:ring-red-500'
-              : 'bg-blue-500 hover:bg-blue-600 focus:ring-blue-500'
-          }
-          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        `}
-      >
-        {/* Microphone icon when idle */}
-        {!isRecording && (
-          <svg
-            className="w-8 h-8 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-            />
-          </svg>
-        )}
+              ? "bg-accent border-accent-foreground/20 hover:bg-accent/90"
+              : "bg-primary border-primary-foreground/10 hover:bg-primary/90 hover:scale-105",
+            disabled && "opacity-50 cursor-not-allowed saturate-0"
+          )}
+        >
+          {isRecording ? (
+            <Square className="w-12 h-12 text-white fill-current" />
+          ) : (
+            <Mic className="w-12 h-12 text-white" />
+          )}
+        </button>
+      </div>
 
-        {/* Stop icon when recording */}
-        {isRecording && (
-          <svg
-            className="w-8 h-8 text-white"
-            fill="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <rect x="6" y="6" width="12" height="12" rx="2" />
-          </svg>
-        )}
-
-        {/* Recording pulse animation */}
-        {isRecording && (
-          <span
+      <div className="flex flex-col items-center gap-3 h-20">
+        {/* Status Text & Timer */}
+        <div className={cn(
+          "flex items-center gap-2 px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all duration-500 border-2",
+          isRecording 
+            ? "bg-accent/10 text-accent border-accent/20 animate-pulse" 
+            : "bg-muted text-muted-foreground border-transparent"
+        )}>
+          {isRecording ? (
+            <>
+              <div 
             data-testid="recording-indicator"
-            className="absolute inset-0 rounded-full animate-ping bg-red-400 opacity-75"
+            className="w-2.5 h-2.5 rounded-full bg-accent animate-ping" 
           />
-        )}
-      </button>
+              <span>Live Transkription...</span>
+            </>
+          ) : (
+            <span>Bereit für Spracheingabe</span>
+          )}
+        </div>
 
-      {/* Duration display */}
-      {isRecording && (
-        <span className="text-sm font-mono text-gray-700">
+        {/* Timer Display */}
+        <div className={cn(
+          "font-mono text-2xl font-bold tracking-wider transition-opacity duration-300",
+          isRecording ? "opacity-100 text-foreground" : "opacity-0"
+        )}>
           {formatDuration(duration)}
-        </span>
-      )}
+        </div>
 
-      {/* Error display */}
-      {error && (
-        <span className="text-sm text-red-600">
-          Fehler: {error.message}
-        </span>
-      )}
+        {/* Error Display */}
+        {error && (
+          <div className="absolute mt-20 text-sm font-medium text-destructive bg-destructive/10 px-3 py-1 rounded-md">
+            Fehler: {error.message}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+

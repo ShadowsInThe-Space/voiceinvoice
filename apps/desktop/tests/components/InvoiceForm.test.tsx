@@ -43,13 +43,13 @@ describe('InvoiceForm', () => {
       expect(screen.getByLabelText(/rechnungsnummer|invoice number/i)).toBeInTheDocument();
 
       // Date - be specific to avoid matching both date fields
-      expect(screen.getByLabelText(/^datum$/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/ausstellungsdatum|issue date/i)).toBeInTheDocument();
 
       // Net amount
       expect(screen.getByLabelText(/nettobetrag|net amount/i)).toBeInTheDocument();
 
-      // Tax rate
-      expect(screen.getByLabelText(/steuersatz|tax rate/i)).toBeInTheDocument();
+      // Tax rate - now uses buttons
+      expect(screen.getByText(/mehrwertsteuer|tax rate/i)).toBeInTheDocument();
 
       // Description
       expect(screen.getByLabelText(/beschreibung|description/i)).toBeInTheDocument();
@@ -58,7 +58,7 @@ describe('InvoiceForm', () => {
     it('should render submit and cancel buttons', () => {
       render(<InvoiceForm onSubmit={mockOnSubmit} onCancel={mockOnCancel} />);
 
-      expect(screen.getByRole('button', { name: /speichern|save|submit/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /rechnung speichern|save invoice/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /abbrechen|cancel/i })).toBeInTheDocument();
     });
 
@@ -81,8 +81,9 @@ describe('InvoiceForm', () => {
     it('should show correct tax rate when editing', () => {
       render(<InvoiceForm invoice={mockInvoice} onSubmit={mockOnSubmit} />);
 
-      const taxRateSelect = screen.getByLabelText(/steuersatz|tax rate/i);
-      expect(taxRateSelect).toHaveValue('19');
+      // Selected tax rate button should have active classes
+      const taxRateButton = screen.getByRole('button', { name: '19%' });
+      expect(taxRateButton).toHaveClass('bg-white');
     });
   });
 
@@ -97,7 +98,7 @@ describe('InvoiceForm', () => {
       await user.type(screen.getByLabelText(/beschreibung|description/i), 'Test invoice');
 
       // Submit form
-      await user.click(screen.getByRole('button', { name: /speichern|save|submit/i }));
+      await user.click(screen.getByRole('button', { name: /rechnung speichern|save invoice/i }));
 
       await waitFor(() => {
         expect(mockOnSubmit).toHaveBeenCalledWith(
@@ -117,10 +118,9 @@ describe('InvoiceForm', () => {
       // Set net amount and tax rate
       await user.type(screen.getByLabelText(/nettobetrag|net amount/i), '100');
 
-      // Should display calculated amounts
+      // Should display calculated amounts (look for the large total)
       await waitFor(() => {
-        expect(screen.getByTestId('tax-amount')).toHaveTextContent(/19/); // 19% of 100
-        expect(screen.getByTestId('gross-amount')).toHaveTextContent(/119/); // 100 + 19
+        expect(screen.getByText(/119\.00/)).toBeInTheDocument(); // 100 + 19
       });
     });
 
@@ -132,11 +132,10 @@ describe('InvoiceForm', () => {
       await user.type(screen.getByLabelText(/nettobetrag|net amount/i), '100');
 
       // Change tax rate to 7%
-      await user.selectOptions(screen.getByLabelText(/steuersatz|tax rate/i), '7');
+      await user.click(screen.getByRole('button', { name: '7%' }));
 
       await waitFor(() => {
-        expect(screen.getByTestId('tax-amount')).toHaveTextContent(/7/);
-        expect(screen.getByTestId('gross-amount')).toHaveTextContent(/107/);
+        expect(screen.getByText(/107\.00/)).toBeInTheDocument();
       });
     });
   });
@@ -147,10 +146,10 @@ describe('InvoiceForm', () => {
       render(<InvoiceForm onSubmit={mockOnSubmit} />);
 
       // Try to submit without filling invoice number
-      await user.click(screen.getByRole('button', { name: /speichern|save|submit/i }));
+      await user.click(screen.getByRole('button', { name: /rechnung speichern|save invoice/i }));
 
       await waitFor(() => {
-        expect(screen.getByText(/rechnungsnummer.*erforderlich|invoice number.*required/i)).toBeInTheDocument();
+        expect(screen.getByText(/erforderlich/i)).toBeInTheDocument();
       });
 
       expect(mockOnSubmit).not.toHaveBeenCalled();
@@ -163,10 +162,10 @@ describe('InvoiceForm', () => {
       await user.type(screen.getByLabelText(/rechnungsnummer|invoice number/i), 'RE-001');
       await user.type(screen.getByLabelText(/nettobetrag|net amount/i), '-50');
 
-      await user.click(screen.getByRole('button', { name: /speichern|save|submit/i }));
+      await user.click(screen.getByRole('button', { name: /rechnung speichern|save invoice/i }));
 
       await waitFor(() => {
-        expect(screen.getByText(/betrag.*positiv|amount.*positive/i)).toBeInTheDocument();
+        expect(screen.getByText(/muss positiv sein/i)).toBeInTheDocument();
       });
 
       expect(mockOnSubmit).not.toHaveBeenCalled();
@@ -179,10 +178,10 @@ describe('InvoiceForm', () => {
       await user.type(screen.getByLabelText(/rechnungsnummer|invoice number/i), 'RE-001');
       await user.type(screen.getByLabelText(/nettobetrag|net amount/i), '0');
 
-      await user.click(screen.getByRole('button', { name: /speichern|save|submit/i }));
+      await user.click(screen.getByRole('button', { name: /rechnung speichern|save invoice/i }));
 
       await waitFor(() => {
-        expect(screen.getByText(/betrag.*groesser|amount.*greater/i)).toBeInTheDocument();
+        expect(screen.getByText(/> 0 erforderlich/i)).toBeInTheDocument();
       });
 
       expect(mockOnSubmit).not.toHaveBeenCalled();
@@ -205,10 +204,10 @@ describe('InvoiceForm', () => {
       const user = userEvent.setup();
       render(<InvoiceForm invoice={mockInvoice} onSubmit={mockOnSubmit} />);
 
-      const statusSelect = screen.getByLabelText(/status/i);
+      const statusSelect = screen.getByLabelText(/zahlungsstatus|status/i);
       await user.selectOptions(statusSelect, 'PENDING');
 
-      await user.click(screen.getByRole('button', { name: /speichern|save|submit/i }));
+      await user.click(screen.getByRole('button', { name: /rechnung speichern|save invoice/i }));
 
       await waitFor(() => {
         expect(mockOnSubmit).toHaveBeenCalledWith(

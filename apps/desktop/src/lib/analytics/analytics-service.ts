@@ -353,10 +353,10 @@ export class AnalyticsService {
         country: row.c_country,
         taxId: row.c_taxId,
         notes: row.c_notes,
-        createdAt: row.c_createdAt,
-        updatedAt: row.c_updatedAt,
+        createdAt: new Date(row.c_createdAt),
+        updatedAt: new Date(row.c_updatedAt),
         syncVersion: row.c_syncVersion,
-        deletedAt: row.c_deletedAt,
+        deletedAt: row.c_deletedAt ? new Date(row.c_deletedAt) : null,
       } as Customer,
     }));
   }

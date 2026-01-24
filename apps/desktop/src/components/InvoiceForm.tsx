@@ -1,14 +1,7 @@
-/**
- * InvoiceForm component.
- *
- * A form component for creating and editing invoices with
- * automatic tax calculations.
- *
- * @module components/InvoiceForm
- */
-
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import type { Invoice, InvoiceStatus, TaxRate } from '@voiceinvoice/shared-types';
+import { FileText, Calendar, DollarSign, Tag, Info, CheckCircle2 } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 /**
  * Form data structure for invoice submission.
@@ -61,7 +54,7 @@ const INVOICE_STATUSES: { value: InvoiceStatus; label: string }[] = [
   { value: 'PENDING', label: 'Offen' },
   { value: 'PAID', label: 'Bezahlt' },
   { value: 'CANCELLED', label: 'Storniert' },
-  { value: 'OVERDUE', label: 'Ueberfaellig' },
+  { value: 'OVERDUE', label: 'Überfällig' },
 ];
 
 /**
@@ -79,21 +72,11 @@ function formatDateForInput(date: Date | undefined): string {
 /**
  * Invoice creation and editing form.
  *
- * Features:
- * - Automatic tax and gross amount calculation
- * - Form validation
- * - Support for all German tax rates
- * - Status management
- *
- * @param {InvoiceFormProps} props - Component props
- * @returns {JSX.Element} Rendered form
- *
- * @example
- * <InvoiceForm
- *   invoice={existingInvoice}
- *   onSubmit={(data) => saveInvoice(data)}
- *   onCancel={() => closeModal()}
- * />
+ * @param {InvoiceFormProps} props - The component props.
+ * @param {object} [props.invoice] - Initial invoice data for editing.
+ * @param {Function} props.onSubmit - Submission handler.
+ * @param {Function} [props.onCancel] - Cancellation handler.
+ * @returns {JSX.Element} The rendered form component.
  */
 export function InvoiceForm({
   invoice,
@@ -126,21 +109,10 @@ export function InvoiceForm({
    */
   const validate = useCallback((): ValidationErrors => {
     const newErrors: ValidationErrors = {};
-
-    if (!invoiceNumber.trim()) {
-      newErrors.invoiceNumber = 'Rechnungsnummer ist erforderlich';
-    }
-
-    if (netAmount === '' || netAmount === 0) {
-      newErrors.netAmount = 'Betrag muss groesser als 0 sein';
-    } else if (typeof netAmount === 'number' && netAmount < 0) {
-      newErrors.netAmount = 'Betrag muss positiv sein';
-    }
-
-    if (!date) {
-      newErrors.date = 'Datum ist erforderlich';
-    }
-
+    if (!invoiceNumber.trim()) newErrors.invoiceNumber = 'Erforderlich';
+    if (netAmount === '' || netAmount === 0) newErrors.netAmount = '> 0 erforderlich';
+    else if (typeof netAmount === 'number' && netAmount < 0) newErrors.netAmount = 'Muss positiv sein';
+    if (!date) newErrors.date = 'Erforderlich';
     return newErrors;
   }, [invoiceNumber, netAmount, date]);
 
@@ -150,20 +122,11 @@ export function InvoiceForm({
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-
       const validationErrors = validate();
       setErrors(validationErrors);
+      setTouched({ invoiceNumber: true, netAmount: true, date: true });
 
-      // Mark all fields as touched on submit to show validation errors
-      setTouched({
-        invoiceNumber: true,
-        netAmount: true,
-        date: true,
-      });
-
-      if (Object.keys(validationErrors).length > 0) {
-        return;
-      }
+      if (Object.keys(validationErrors).length > 0) return;
 
       const formData: InvoiceFormData = {
         invoiceNumber: invoiceNumber.trim(),
@@ -178,246 +141,240 @@ export function InvoiceForm({
         description: description.trim() || undefined,
         customerId: invoice?.customerId,
       };
-
       onSubmit(formData);
     },
-    [
-      invoiceNumber,
-      date,
-      dueDate,
-      netAmount,
-      taxRate,
-      taxAmount,
-      grossAmount,
-      status,
-      description,
-      invoice?.customerId,
-      onSubmit,
-      validate,
-    ]
+    [invoiceNumber, date, dueDate, netAmount, taxRate, taxAmount, grossAmount, status, description, invoice?.customerId, onSubmit, validate]
   );
 
-  /**
-   * Marks a field as touched on blur.
-   */
   const handleBlur = useCallback((field: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
   }, []);
 
-  // Validate on change when fields are touched
   useEffect(() => {
-    if (Object.keys(touched).length > 0) {
-      setErrors(validate());
-    }
+    if (Object.keys(touched).length > 0) setErrors(validate());
   }, [invoiceNumber, netAmount, date, touched, validate]);
 
   return (
     <form
       role="form"
       onSubmit={handleSubmit}
-      className="space-y-6 max-w-lg"
+      className="max-w-4xl mx-auto space-y-8"
       aria-label="Rechnungsformular"
     >
-      {/* Invoice Number */}
-      <div>
-        <label
-          htmlFor="invoiceNumber"
-          className="block text-sm font-medium text-gray-700"
-        >
-          Rechnungsnummer
-        </label>
-        <input
-          type="text"
-          id="invoiceNumber"
-          value={invoiceNumber}
-          onChange={(e) => setInvoiceNumber(e.target.value)}
-          onBlur={() => handleBlur('invoiceNumber')}
-          className={`
-            mt-1 block w-full rounded-md shadow-sm
-            ${errors.invoiceNumber && touched.invoiceNumber
-              ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
-              : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
-            }
-          `}
-          aria-invalid={!!errors.invoiceNumber}
-          aria-describedby={errors.invoiceNumber ? 'invoiceNumber-error' : undefined}
-        />
-        {errors.invoiceNumber && touched.invoiceNumber && (
-          <p id="invoiceNumber-error" className="mt-1 text-sm text-red-600">
-            {errors.invoiceNumber}
-          </p>
-        )}
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Left Column: Core Details */}
+        <div className="space-y-8">
+          <section className="bg-card rounded-2xl border border-border/50 shadow-xl p-8 space-y-6">
+            <div className="flex items-center gap-3 border-b border-border/50 pb-4 mb-2">
+              <FileText className="w-5 h-5 text-primary" />
+              <h2 className="text-xl font-bold text-foreground">Rechnungsdetails</h2>
+            </div>
 
-      {/* Date */}
-      <div>
-        <label
-          htmlFor="date"
-          className="block text-sm font-medium text-gray-700"
-        >
-          Datum
-        </label>
-        <input
-          type="date"
-          id="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          onBlur={() => handleBlur('date')}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
-      </div>
+            <div className="grid grid-cols-1 gap-6">
+              {/* Invoice Number */}
+              <div className="space-y-2">
+                <label htmlFor="invoiceNumber" className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+                  Rechnungsnummer
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="invoiceNumber"
+                    value={invoiceNumber}
+                    onChange={(e) => setInvoiceNumber(e.target.value)}
+                    onBlur={() => handleBlur('invoiceNumber')}
+                    placeholder="RE-2025-001"
+                    className={cn(
+                      "w-full px-4 py-3 bg-muted/20 rounded-xl border-2 transition-all focus:outline-none focus:ring-4 focus:ring-primary/10",
+                      errors.invoiceNumber && touched.invoiceNumber ? "border-destructive/50" : "border-transparent focus:border-primary"
+                    )}
+                  />
+                  {errors.invoiceNumber && touched.invoiceNumber && (
+                    <span className="absolute right-3 top-3 text-destructive text-xs font-bold">{errors.invoiceNumber}</span>
+                  )}
+                </div>
+              </div>
 
-      {/* Due Date */}
-      <div>
-        <label
-          htmlFor="dueDate"
-          className="block text-sm font-medium text-gray-700"
-        >
-          Faelligkeitsdatum
-        </label>
-        <input
-          type="date"
-          id="dueDate"
-          value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
-      </div>
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="date" className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <Calendar className="w-3 h-3" /> Ausstellungsdatum
+                  </label>
+                  <input
+                    type="date"
+                    id="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full px-4 py-3 bg-muted/20 rounded-xl border-2 border-transparent focus:border-primary transition-all focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="dueDate" className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <Calendar className="w-3 h-3" /> Fälligkeit
+                  </label>
+                  <input
+                    type="date"
+                    id="dueDate"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full px-4 py-3 bg-muted/20 rounded-xl border-2 border-transparent focus:border-primary transition-all focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
 
-      {/* Net Amount */}
-      <div>
-        <label
-          htmlFor="netAmount"
-          className="block text-sm font-medium text-gray-700"
-        >
-          Nettobetrag (EUR)
-        </label>
-        <input
-          type="number"
-          id="netAmount"
-          value={netAmount}
-          onChange={(e) => setNetAmount(e.target.value ? parseFloat(e.target.value) : '')}
-          onBlur={() => handleBlur('netAmount')}
-          step="0.01"
-          min="0"
-          className={`
-            mt-1 block w-full rounded-md shadow-sm
-            ${errors.netAmount && touched.netAmount
-              ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
-              : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
-            }
-          `}
-          aria-invalid={!!errors.netAmount}
-          aria-describedby={errors.netAmount ? 'netAmount-error' : undefined}
-        />
-        {errors.netAmount && touched.netAmount && (
-          <p id="netAmount-error" className="mt-1 text-sm text-red-600">
-            {errors.netAmount}
-          </p>
-        )}
-      </div>
+          <section className="bg-card rounded-2xl border border-border/50 shadow-xl p-8 space-y-6">
+            <div className="flex items-center gap-3 border-b border-border/50 pb-4 mb-2">
+              <Tag className="w-5 h-5 text-primary" />
+              <h2 className="text-xl font-bold text-foreground">Status & Beschreibung</h2>
+            </div>
+            
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label htmlFor="status" className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+                  Zahlungsstatus
+                </label>
+                <select
+                  id="status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as InvoiceStatus)}
+                  className="w-full px-4 py-3 bg-muted/20 rounded-xl border-2 border-transparent focus:border-primary transition-all focus:outline-none appearance-none cursor-pointer"
+                >
+                  {INVOICE_STATUSES.map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
 
-      {/* Tax Rate */}
-      <div>
-        <label
-          htmlFor="taxRate"
-          className="block text-sm font-medium text-gray-700"
-        >
-          Steuersatz
-        </label>
-        <select
-          id="taxRate"
-          value={taxRate}
-          onChange={(e) => setTaxRate(parseInt(e.target.value, 10) as TaxRate)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        >
-          {TAX_RATES.map((rate) => (
-            <option key={rate} value={rate}>
-              {rate}%
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Calculated Amounts Display */}
-      <div className="bg-gray-50 p-4 rounded-md space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Netto:</span>
-          <span className="font-medium">
-            {typeof netAmount === 'number' ? netAmount.toFixed(2) : '0.00'} EUR
-          </span>
+              <div className="space-y-2">
+                <label htmlFor="description" className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+                  Beschreibung / Notiz
+                </label>
+                <textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={4}
+                  placeholder="Details zur Leistung..."
+                  className="w-full px-4 py-3 bg-muted/20 rounded-xl border-2 border-transparent focus:border-primary transition-all focus:outline-none resize-none"
+                />
+              </div>
+            </div>
+          </section>
         </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">MwSt ({taxRate}%):</span>
-          <span data-testid="tax-amount" className="font-medium">
-            {taxAmount.toFixed(2)} EUR
-          </span>
+
+        {/* Right Column: Financials */}
+        <div className="space-y-8">
+          <section className="bg-primary text-white rounded-2xl shadow-xl shadow-primary/20 p-8 space-y-8 overflow-hidden relative">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <DollarSign size={120} />
+            </div>
+            
+            <div className="relative z-10 space-y-6">
+              <div className="flex items-center gap-3 border-b border-white/20 pb-4">
+                <CheckCircle2 className="w-5 h-5 text-white" />
+                <h2 className="text-xl font-bold">Beträge & Kalkulation</h2>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label htmlFor="netAmount" className="text-sm font-black uppercase tracking-widest opacity-80">
+                    Nettobetrag (EUR)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      id="netAmount"
+                      value={netAmount}
+                      onChange={(e) => setNetAmount(e.target.value ? parseFloat(e.target.value) : '')}
+                      step="0.01"
+                      className="w-full bg-white/10 border-2 border-white/20 rounded-xl px-4 py-4 text-2xl font-black focus:outline-none focus:border-white transition-all placeholder:text-white/30"
+                      placeholder="0,00"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="taxRate" className="text-sm font-black uppercase tracking-widest opacity-80">
+                    Mehrwertsteuer
+                  </label>
+                  <div className="flex gap-2">
+                    {TAX_RATES.map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => setTaxRate(rate)}
+                        className={cn(
+                          "flex-1 py-3 rounded-xl font-bold transition-all border-2",
+                          taxRate === rate 
+                            ? "bg-white text-primary border-white" 
+                            : "bg-white/5 border-white/10 hover:bg-white/10"
+                        )}
+                      >
+                        {rate}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-white/20 space-y-4">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="font-medium opacity-80">Netto Summe:</span>
+                  <span className="font-bold">{(typeof netAmount === 'number' ? netAmount : 0).toFixed(2)} €</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="font-medium opacity-80">MwSt ({taxRate}%):</span>
+                  <span className="font-bold">{taxAmount.toFixed(2)} €</span>
+                </div>
+                <div className="flex justify-between items-center pt-4">
+                  <span className="text-lg font-black uppercase tracking-tighter">Gesamtbetrag</span>
+                  <div className="text-right">
+                    <span className="text-4xl font-black block tracking-tighter">{grossAmount.toFixed(2)} €</span>
+                    <span className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Inkl. MwSt</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Tips / Info */}
+          <div className="bg-accent/5 border-2 border-accent/10 rounded-2xl p-6 flex gap-4">
+            <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
+              <Info className="w-5 h-5 text-accent" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-foreground">Pro-Tipp</h4>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Verwenden Sie Sprachbefehle wie <span className="font-bold text-accent italic">"Netto einhundert Euro"</span> um Felder automatisch zu füllen.
+              </p>
+            </div>
+          </div>
+
+          {/* Form Actions */}
+          <div className="flex flex-col gap-3">
+            <button
+              type="submit"
+              className="w-full py-4 bg-accent text-white rounded-xl font-black text-lg shadow-xl shadow-accent/25 hover:bg-accent/90 transition-all transform active:scale-95 flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-6 h-6" />
+              Rechnung speichern
+            </button>
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="w-full py-3 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Abbrechen & Verwerfen
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex justify-between text-sm border-t pt-2">
-          <span className="text-gray-900 font-semibold">Brutto:</span>
-          <span data-testid="gross-amount" className="font-semibold text-blue-600">
-            {grossAmount.toFixed(2)} EUR
-          </span>
-        </div>
-      </div>
-
-      {/* Status */}
-      <div>
-        <label
-          htmlFor="status"
-          className="block text-sm font-medium text-gray-700"
-        >
-          Status
-        </label>
-        <select
-          id="status"
-          value={status}
-          onChange={(e) => setStatus(e.target.value as InvoiceStatus)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        >
-          {INVOICE_STATUSES.map(({ value, label }) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Description */}
-      <div>
-        <label
-          htmlFor="description"
-          className="block text-sm font-medium text-gray-700"
-        >
-          Beschreibung
-        </label>
-        <textarea
-          id="description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex justify-end gap-3">
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Abbrechen
-          </button>
-        )}
-        <button
-          type="submit"
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          Speichern
-        </button>
       </div>
     </form>
   );
 }
+

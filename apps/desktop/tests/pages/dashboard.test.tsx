@@ -47,7 +47,7 @@ describe('Dashboard Page', () => {
 
       // Wait for content to be loaded
       await waitFor(() => {
-        expect(screen.getByText(/umsatz/i)).toBeInTheDocument();
+        expect(screen.getByText(/gesamtumsatz|umsatz/i)).toBeInTheDocument();
       });
     });
   });
@@ -57,7 +57,7 @@ describe('Dashboard Page', () => {
       render(<DashboardPage />);
 
       await waitFor(() => {
-        expect(screen.getByText(/umsatz/i)).toBeInTheDocument();
+        expect(screen.getByText(/gesamtumsatz|umsatz/i)).toBeInTheDocument();
       });
 
       expect(screen.getByTestId('total-revenue')).toBeInTheDocument();
@@ -96,7 +96,7 @@ describe('Dashboard Page', () => {
       render(<DashboardPage />);
 
       await waitFor(() => {
-        expect(screen.getByText(/letzte rechnungen/i)).toBeInTheDocument();
+        expect(screen.getByText(/letzte transaktionen|letzte rechnungen/i)).toBeInTheDocument();
       });
     });
 
@@ -125,7 +125,7 @@ describe('Dashboard Page', () => {
       render(<DashboardPage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /neue rechnung/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /neue rechnung|erstellen/i })).toBeInTheDocument();
       });
 
       expect(screen.getByRole('button', { name: /exportieren/i })).toBeInTheDocument();
@@ -137,10 +137,10 @@ describe('Dashboard Page', () => {
       render(<DashboardPage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /neue rechnung/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /neue rechnung|erstellen/i })).toBeInTheDocument();
       });
 
-      const newInvoiceButton = screen.getByRole('button', { name: /neue rechnung/i });
+      const newInvoiceButton = screen.getByRole('button', { name: /neue rechnung|erstellen/i });
       await user.click(newInvoiceButton);
 
       expect(mockPush).toHaveBeenCalledWith('/invoices/new');
