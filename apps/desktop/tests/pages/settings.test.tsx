@@ -280,4 +280,152 @@ describe('Settings Page', () => {
       });
     });
   });
+
+  describe('Webhook Settings', () => {
+    it('should display automation and webhooks section', () => {
+      render(<SettingsPage />);
+
+      expect(screen.getByText(/automatisierung & webhooks/i)).toBeInTheDocument();
+    });
+
+    it('should have webhook enable toggle', () => {
+      render(<SettingsPage />);
+
+      const toggle = screen.getByRole('checkbox', { name: /webhooks aktivieren/i });
+      expect(toggle).toBeInTheDocument();
+    });
+
+    it('should have n8n webhook URL input', () => {
+      render(<SettingsPage />);
+
+      const urlInput = screen.getByLabelText(/n8n webhook url/i);
+      expect(urlInput).toBeInTheDocument();
+      expect(urlInput).toHaveAttribute('type', 'url');
+    });
+
+    it('should have backup webhook URL input', () => {
+      render(<SettingsPage />);
+
+      const backupInput = screen.getByLabelText(/backup webhook url/i);
+      expect(backupInput).toBeInTheDocument();
+      expect(backupInput).toHaveAttribute('type', 'url');
+    });
+
+    it('should load saved webhook config from localStorage', () => {
+      localStorageMock.getItem.mockImplementation((key: string) => {
+        if (key === 'voiceinvoice_webhook_enabled') return 'true';
+        if (key === 'voiceinvoice_webhook_url') return 'https://n8n.example.com/webhook';
+        if (key === 'voiceinvoice_webhook_backup_url') return 'https://backup.example.com/webhook';
+        return null;
+      });
+
+      render(<SettingsPage />);
+
+      const toggle = screen.getByRole('checkbox', {
+        name: /webhooks aktivieren/i,
+      }) as HTMLInputElement;
+      const urlInput = screen.getByLabelText(/n8n webhook url/i) as HTMLInputElement;
+      const backupInput = screen.getByLabelText(/backup webhook url/i) as HTMLInputElement;
+
+      expect(toggle.checked).toBe(true);
+      expect(urlInput.value).toBe('https://n8n.example.com/webhook');
+      expect(backupInput.value).toBe('https://backup.example.com/webhook');
+    });
+
+    it('should save webhook config to localStorage', async () => {
+      const user = userEvent.setup();
+      render(<SettingsPage />);
+
+      // First add an API key so validation passes
+      const apiKeyInput = screen.getByLabelText(/google ai api key/i);
+      await user.type(apiKeyInput, 'test-key');
+
+      // Enable webhooks
+      const toggle = screen.getByRole('checkbox', { name: /webhooks aktivieren/i });
+      await user.click(toggle);
+
+      // Enter webhook URL
+      const urlInput = screen.getByLabelText(/n8n webhook url/i);
+      await user.type(urlInput, 'https://n8n.example.com/webhook');
+
+      // Save
+      const saveButton = screen.getByRole('button', { name: /speichern/i });
+      await user.click(saveButton);
+
+      expect(localStorageMock.setItem).toHaveBeenCalledWith('voiceinvoice_webhook_enabled', 'true');
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(
+        'voiceinvoice_webhook_url',
+        'https://n8n.example.com/webhook'
+      );
+    });
+
+    it('should show validation error for invalid webhook URL', async () => {
+      const user = userEvent.setup();
+      render(<SettingsPage />);
+
+      // Enable webhooks
+      const toggle = screen.getByRole('checkbox', { name: /webhooks aktivieren/i });
+      await user.click(toggle);
+
+      // Enter invalid URL
+      const urlInput = screen.getByLabelText(/n8n webhook url/i);
+      await user.type(urlInput, 'not-a-valid-url');
+
+      // Blur to trigger validation
+      await user.tab();
+
+      expect(screen.getByText(/ungueltige webhook url/i)).toBeInTheDocument();
+    });
+
+    it('should disable URL inputs when webhooks are disabled', () => {
+      render(<SettingsPage />);
+
+      const toggle = screen.getByRole('checkbox', {
+        name: /webhooks aktivieren/i,
+      }) as HTMLInputElement;
+      const urlInput = screen.getByLabelText(/n8n webhook url/i) as HTMLInputElement;
+      const backupInput = screen.getByLabelText(/backup webhook url/i) as HTMLInputElement;
+
+      // By default webhooks are disabled
+      expect(toggle.checked).toBe(false);
+      expect(urlInput).toBeDisabled();
+      expect(backupInput).toBeDisabled();
+    });
+
+    it('should enable URL inputs when webhooks are enabled', async () => {
+      const user = userEvent.setup();
+      render(<SettingsPage />);
+
+      const toggle = screen.getByRole('checkbox', { name: /webhooks aktivieren/i });
+      await user.click(toggle);
+
+      const urlInput = screen.getByLabelText(/n8n webhook url/i) as HTMLInputElement;
+      const backupInput = screen.getByLabelText(/backup webhook url/i) as HTMLInputElement;
+
+      expect(urlInput).not.toBeDisabled();
+      expect(backupInput).not.toBeDisabled();
+    });
+
+    it('should clear webhook settings on reset', async () => {
+      const user = userEvent.setup();
+
+      localStorageMock.getItem.mockImplementation((key: string) => {
+        if (key === 'voiceinvoice_webhook_enabled') return 'true';
+        if (key === 'voiceinvoice_webhook_url') return 'https://n8n.example.com/webhook';
+        return null;
+      });
+
+      render(<SettingsPage />);
+
+      const resetButton = screen.getByRole('button', { name: /zuruecksetzen/i });
+      await user.click(resetButton);
+
+      const confirmButton = screen.getByRole('button', { name: /ja, zuruecksetzen/i });
+      await user.click(confirmButton);
+
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith('voiceinvoice_webhook_enabled');
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith('voiceinvoice_webhook_url');
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith('voiceinvoice_webhook_backup_url');
+    });
+  });
 });
