@@ -482,3 +482,28 @@ export class AgentOrchestrator {
  * AI Orchestrator version for compatibility checking.
  */
 export const AI_ORCHESTRATOR_VERSION = '0.1.0';
+
+// Re-export routing module
+export {
+  makeRoutingDecision,
+  canAutoSave,
+  requiresUserConfirmation,
+  requiresManualInput,
+  DEFAULT_ROUTING_THRESHOLDS,
+  type Route,
+  type RoutingThresholds,
+  type RoutingDecision,
+} from './routing';
+
+// Re-export pipeline module
+export {
+  PipelineOrchestrator,
+  PipelineStage,
+  type TranscriptionResult,
+  type PipelineError,
+  type StageLatencies,
+  type PipelineResult,
+  type PipelineCallbacks,
+  type TranscriptionHandler,
+  type PipelineConfig,
+} from './pipeline';
