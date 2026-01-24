@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "VoiceInvoice Desktop Application (Electron + Next.js)",
-  "main": "electron/main.js",
+  "main": "dist/electron/main.js",
   "scripts": {
-    "dev": "next dev",
-    "dev:electron": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "dev": "next dev -p 3002",
+    "dev:electron": "tsc electron/main.ts --outDir dist/electron --esModuleInterop --skipLibCheck && concurrently \"npm run dev\" \"wait-on http://localhost:3002 && electron . --no-sandbox\"",
     "build": "next build",
-    "build:electron": "next build && electron-builder",
+    "build:electron": "tsc electron/main.ts --outDir dist/electron --esModuleInterop --skipLibCheck && next build && electron-builder",
     "start": "next start",
     "lint": "next lint && eslint electron --ext .ts",
     "typecheck": "tsc --noEmit",
@@ -22,10 +22,13 @@
     "@voiceinvoice/database": "workspace:*",
     "@voiceinvoice/privacy-engine": "workspace:*",
     "@voiceinvoice/shared-types": "workspace:*",
+    "clsx": "^2.1.1",
     "jspdf": "^4.0.0",
+    "lucide-react": "^0.563.0",
     "next": "^14.1.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.2.0",

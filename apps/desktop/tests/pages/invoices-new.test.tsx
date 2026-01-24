@@ -51,7 +51,7 @@ describe('Invoice Creation Page', () => {
     it('should display transcription area', () => {
       render(<NewInvoicePage />);
 
-      expect(screen.getByLabelText(/transkription/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/echtzeit-transkription|transkription/i)).toBeInTheDocument();
     });
   });
 
@@ -67,7 +67,7 @@ describe('Invoice Creation Page', () => {
       const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      const transcriptionArea = screen.getByLabelText(/transkription/i);
+      const transcriptionArea = screen.getByLabelText(/echtzeit-transkription|transkription/i);
       await user.clear(transcriptionArea);
       await user.type(transcriptionArea, 'Neue Rechnung fuer Test GmbH');
 
@@ -79,7 +79,7 @@ describe('Invoice Creation Page', () => {
     it('should display invoice preview section', () => {
       render(<NewInvoicePage />);
 
-      expect(screen.getByText(/vorschau/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /dokumentenvorschau|vorschau/i })).toBeInTheDocument();
     });
 
     it('should show invoice number in preview', async () => {
@@ -119,7 +119,7 @@ describe('Invoice Creation Page', () => {
       render(<NewInvoicePage />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('confidence-score')).toBeInTheDocument();
+        expect(screen.getByText(/genauigkeit/i)).toBeInTheDocument();
       });
     });
   });
@@ -129,7 +129,7 @@ describe('Invoice Creation Page', () => {
       render(<NewInvoicePage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /bearbeiten/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /anpassen|bearbeiten/i })).toBeInTheDocument();
       });
     });
 
@@ -137,7 +137,7 @@ describe('Invoice Creation Page', () => {
       render(<NewInvoicePage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /speichern/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /finalisieren|speichern/i })).toBeInTheDocument();
       });
     });
 
@@ -146,14 +146,14 @@ describe('Invoice Creation Page', () => {
       render(<NewInvoicePage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /speichern/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /finalisieren|speichern/i })).toBeInTheDocument();
       });
 
-      const saveButton = screen.getByRole('button', { name: /speichern/i });
+      const saveButton = screen.getByRole('button', { name: /finalisieren|speichern/i });
       await user.click(saveButton);
 
       await waitFor(() => {
-        expect(screen.getByText(/rechnung gespeichert/i)).toBeInTheDocument();
+        expect(screen.getByText(/erfolgreich gespeichert/i)).toBeInTheDocument();
       }, { timeout: 3000 });
     });
   });
@@ -163,7 +163,7 @@ describe('Invoice Creation Page', () => {
       render(<NewInvoicePage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /pdf exportieren/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /pdf export/i })).toBeInTheDocument();
       });
     });
 
@@ -172,14 +172,14 @@ describe('Invoice Creation Page', () => {
       render(<NewInvoicePage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /pdf exportieren/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /pdf export/i })).toBeInTheDocument();
       });
 
-      const exportButton = screen.getByRole('button', { name: /pdf exportieren/i });
+      const exportButton = screen.getByRole('button', { name: /pdf export/i });
       await user.click(exportButton);
 
       await waitFor(() => {
-        expect(screen.getByText(/pdf erstellt/i)).toBeInTheDocument();
+        expect(screen.getByText(/export erfolgreich/i)).toBeInTheDocument();
       }, { timeout: 3000 });
     });
   });
@@ -188,14 +188,14 @@ describe('Invoice Creation Page', () => {
     it('should have back button', () => {
       render(<NewInvoicePage />);
 
-      expect(screen.getByRole('button', { name: /zurueck/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /zurück|zurueck/i })).toBeInTheDocument();
     });
 
     it('should navigate back when clicking back button', async () => {
       const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      const backButton = screen.getByRole('button', { name: /zurueck/i });
+      const backButton = screen.getByRole('button', { name: /zurück|zurueck/i });
       await user.click(backButton);
 
       expect(mockBack).toHaveBeenCalled();

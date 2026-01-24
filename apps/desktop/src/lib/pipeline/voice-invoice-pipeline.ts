@@ -104,7 +104,9 @@ export class VoiceInvoicePipeline {
   constructor(config: PipelineConfig) {
     this.geminiClient = config.geminiClient;
     this.databaseService = config.databaseService;
-    this.privacyEngine = config.privacyEngine;
+    if (config.privacyEngine) {
+      this.privacyEngine = config.privacyEngine;
+    }
     this.language = config.language ?? 'de-DE';
     this.defaultTaxRate = config.defaultTaxRate ?? 19;
     this.state = {
@@ -335,19 +337,31 @@ export class VoiceInvoicePipeline {
     const customerId = await this.findOrCreateCustomer(parsedInvoice);
 
     // Map parsed invoice to database input
-    const invoiceInput: CreateInvoiceInput = {
-      customerId,
-      items: parsedInvoice.items.map((item) => ({
+    const items = parsedInvoice.items.map((item) => {
+      const dbItem: { description: string; quantity: number; unitPrice: number; category?: string } = {
         description: item.description,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        category: item.category,
-      })),
+      };
+      if (item.category) {
+        dbItem.category = item.category;
+      }
+      return dbItem;
+    });
+
+    const invoiceInput: CreateInvoiceInput = {
+      customerId,
+      items,
       taxRate: this.defaultTaxRate,
-      notes: parsedInvoice.notes,
-      paymentTerms: parsedInvoice.paymentTerms,
       transcription,
     };
+
+    if (parsedInvoice.notes) {
+      invoiceInput.notes = parsedInvoice.notes;
+    }
+    if (parsedInvoice.paymentTerms) {
+      invoiceInput.paymentTerms = parsedInvoice.paymentTerms;
+    }
 
     return this.databaseService.createInvoice(invoiceInput);
   }
@@ -372,9 +386,14 @@ export class VoiceInvoicePipeline {
     // Create new customer
     const customerInput: CreateCustomerInput = {
       name: parsedInvoice.customerName,
-      email: parsedInvoice.customerEmail,
-      address: parsedInvoice.customerAddress,
     };
+
+    if (parsedInvoice.customerEmail) {
+      customerInput.email = parsedInvoice.customerEmail;
+    }
+    if (parsedInvoice.customerAddress) {
+      customerInput.address = parsedInvoice.customerAddress;
+    }
 
     const newCustomer = await this.databaseService.createCustomer(customerInput);
     return newCustomer.id;

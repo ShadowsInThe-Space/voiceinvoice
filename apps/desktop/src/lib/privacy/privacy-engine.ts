@@ -235,10 +235,11 @@ export class PrivacyEngine {
       type,
       granted: true,
       grantedAt: new Date(),
-      purpose: options?.purpose,
-      ipAddress: options?.ipAddress,
-      userAgent: options?.userAgent,
     };
+
+    if (options?.purpose) record.purpose = options.purpose;
+    if (options?.ipAddress) record.ipAddress = options.ipAddress;
+    if (options?.userAgent) record.userAgent = options.userAgent;
 
     this.consents.set(type, record);
     await this.storage.set(`consent:${type}`, JSON.stringify(record));
@@ -283,11 +284,14 @@ export class PrivacyEngine {
       return { granted: false };
     }
 
-    return {
+    const status: ConsentStatus = {
       granted: record.granted,
-      grantedAt: record.grantedAt,
-      revokedAt: record.revokedAt,
     };
+
+    if (record.grantedAt) status.grantedAt = record.grantedAt;
+    if (record.revokedAt) status.revokedAt = record.revokedAt;
+
+    return status;
   }
 
   /**
@@ -479,7 +483,7 @@ export class PrivacyEngine {
 
     for (const field of PII_FIELDS) {
       if (field in anonymized && typeof anonymized[field] === 'string') {
-        anonymized[field] = this.generateAnonymousValue(field) as T[keyof T];
+        (anonymized as Record<string, unknown>)[field] = this.generateAnonymousValue(field);
       }
     }
 
