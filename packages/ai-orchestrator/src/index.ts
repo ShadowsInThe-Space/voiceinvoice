@@ -507,3 +507,15 @@ export {
   type TranscriptionHandler,
   type PipelineConfig,
 } from './pipeline';
+
+// Re-export entity extraction module
+export {
+  extractEntities,
+  parseGermanAmount,
+  parseGermanDate,
+  parsePercentage,
+  extractInvoiceItems,
+  type InvoiceEntity,
+  type InvoiceItem,
+  type ExtractionResult,
+} from './entity-extraction';
