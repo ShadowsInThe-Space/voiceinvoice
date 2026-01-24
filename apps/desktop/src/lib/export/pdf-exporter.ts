@@ -253,9 +253,11 @@ export class PDFExporter {
     const finalFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
 
     // In Electron environment, use the electronAPI
-    if (typeof window !== 'undefined' && (window as Window & { electronAPI?: { writeFile: (filename: string, data: ArrayBuffer) => Promise<void> } }).electronAPI) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
       const arrayBuffer = await blob.arrayBuffer();
-      await (window as Window & { electronAPI: { writeFile: (filename: string, data: ArrayBuffer) => Promise<void> } }).electronAPI.writeFile(finalFilename, arrayBuffer);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (window as any).electronAPI.writeFile(finalFilename, arrayBuffer);
       return finalFilename;
     }
 
@@ -633,7 +635,7 @@ export class PDFExporter {
         doc.setFont('helvetica', 'normal');
 
         const bankLines = companyInfo.bankInfo.split('\n');
-        let x = marginLeft + 30;
+        const x = marginLeft + 30;
         for (const line of bankLines) {
           doc.text(line, x, y);
           y += 4;

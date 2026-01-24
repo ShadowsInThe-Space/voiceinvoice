@@ -4,8 +4,8 @@
  * @module lib/analytics
  */
 
-export {
-  AnalyticsService,
+export { AnalyticsService } from './analytics-service';
+export type {
   DateRange,
   RevenueStats,
   CustomerInsights,

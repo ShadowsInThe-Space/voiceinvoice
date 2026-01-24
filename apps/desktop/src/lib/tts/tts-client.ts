@@ -272,7 +272,11 @@ export class TTSClient {
    * @param {string} voice - Optional voice override
    */
   queueText(text: string, voice?: string): void {
-    this.queue.push({ text, voice });
+    const item: QueueItem = { text };
+    if (voice) {
+      item.voice = voice;
+    }
+    this.queue.push(item);
   }
 
   /**
@@ -305,7 +309,11 @@ export class TTSClient {
       while (this.queue.length > 0) {
         const item = this.queue.shift();
         if (item) {
-          await this.speak({ text: item.text, voice: item.voice });
+          const options: SpeakOptions = { text: item.text };
+          if (item.voice) {
+            options.voice = item.voice;
+          }
+          await this.speak(options);
         }
       }
     } finally {
@@ -328,7 +336,8 @@ export class TTSClient {
     const languageCode = voice.substring(0, 5); // e.g., 'de-DE'
 
     const requestBody: TTSRequest = {
-      input: input.ssml ? { ssml: input.ssml } : { text: input.text },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      input: (input.ssml ? { ssml: input.ssml } : { text: input.text }) as any,
       voice: {
         languageCode,
         name: voice,

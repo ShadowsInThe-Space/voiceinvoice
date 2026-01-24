@@ -85,7 +85,7 @@ function createMainWindow(): BrowserWindow {
   // Load the appropriate URL
   if (isDev) {
     // Development: Load from Next.js dev server
-    const devServerUrl = process.env.ELECTRON_DEV_URL ?? 'http://localhost:3000';
+    const devServerUrl = process.env.ELECTRON_DEV_URL ?? 'http://localhost:3002';
     win.loadURL(devServerUrl);
 
     // Open DevTools in development
@@ -99,204 +99,73 @@ function createMainWindow(): BrowserWindow {
   return win;
 }
 
-/**
- * Creates the IPC handler context.
- *
- * This context provides dependencies to IPC handlers.
- * Currently uses a placeholder database that will be
- * replaced with the real Prisma client in Subagent #4.
- *
- * @returns {IpcHandlerContext} The handler context
- */
-function createHandlerContext(): IpcHandlerContext {
-  // Placeholder database operations - will be replaced in Subagent #4
-  const database = {
-    createInvoice: async (data: unknown): Promise<unknown> => {
-      console.log('[Database] Creating invoice:', data);
-      return {
-        id: `inv-${Date.now()}`,
-        ...(data as Record<string, unknown>),
-        status: 'DRAFT',
-        createdAt: new Date(),
-      };
-    },
-    getCustomers: async (): Promise<unknown[]> => {
-      console.log('[Database] Getting customers');
-      return [];
-    },
-    getSettings: async (): Promise<unknown> => {
-      console.log('[Database] Getting settings');
-      return null;
-    },
-    updateSettings: async (data: unknown): Promise<unknown> => {
-      console.log('[Database] Updating settings:', data);
-      return data;
-    },
-  };
+// Mock Database Implementation for UI Demo
+// In a real app, this would import @voiceinvoice/database
+const databaseOperations = {
+  createInvoice: async (data: unknown) => {
+    console.log('Mock DB: createInvoice', data);
+    return { id: 'mock-id', ...data as object };
+  },
+  getCustomers: async () => {
+    return [
+      { id: 'c1', companyName: 'Acme Corp', type: 'CUSTOMER' },
+      { id: 'c2', companyName: 'Globex', type: 'SUPPLIER' }
+    ];
+  },
+  getSettings: async () => {
+    return { privacyMode: 'STRICT', n8nEnabled: false };
+  },
+  updateSettings: async (data: unknown) => {
+    console.log('Mock DB: updateSettings', data);
+    return data;
+  }
+};
 
-  return { database };
-}
+const context: IpcHandlerContext = {
+  database: databaseOperations
+};
 
-/**
- * Registers all IPC handlers.
- *
- * Sets up the communication bridge between the renderer
- * process and the main process.
- *
- * @param {IpcHandlerContext} context - The handler context
- */
-function registerIpcHandlers(context: IpcHandlerContext): void {
+// Setup handlers
+function setupHandlers(): void {
   // Invoice handlers
-  ipcMain.handle('invoice:create', async (_event, data) => {
-    return createInvoiceHandler(context, data);
-  });
-
-  ipcMain.handle('invoice:getAll', async () => {
-    // Will be implemented in Subagent #4
-    return { success: true, data: [] };
-  });
-
-  ipcMain.handle('invoice:getById', async (_event, _id) => {
-    // Will be implemented in Subagent #4
-    return { success: false, error: { message: 'Not implemented' } };
-  });
-
-  ipcMain.handle('invoice:update', async (_event, _id, _data) => {
-    // Will be implemented in Subagent #4
-    return { success: false, error: { message: 'Not implemented' } };
-  });
-
-  ipcMain.handle('invoice:delete', async (_event, _id) => {
-    // Will be implemented in Subagent #4
-    return { success: false, error: { message: 'Not implemented' } };
-  });
-
-  // Customer handlers
-  ipcMain.handle('customer:getAll', async () => {
-    return getCustomersHandler(context);
-  });
-
-  ipcMain.handle('customer:create', async (_event, _data) => {
-    // Will be implemented in Subagent #4
-    return { success: false, error: { message: 'Not implemented' } };
-  });
-
-  ipcMain.handle('customer:getById', async (_event, _id) => {
-    // Will be implemented in Subagent #4
-    return { success: false, error: { message: 'Not implemented' } };
-  });
-
-  ipcMain.handle('customer:update', async (_event, _id, _data) => {
-    // Will be implemented in Subagent #4
-    return { success: false, error: { message: 'Not implemented' } };
-  });
-
-  ipcMain.handle('customer:delete', async (_event, _id) => {
-    // Will be implemented in Subagent #4
-    return { success: false, error: { message: 'Not implemented' } };
-  });
-
+  ipcMain.handle('invoice:create', (_event, data) => createInvoiceHandler(context, data));
+  ipcMain.handle('customer:list', () => getCustomersHandler(context));
+  
   // Settings handlers
-  ipcMain.handle('settings:get', async () => {
-    return getSettingsHandler(context);
-  });
-
-  ipcMain.handle('settings:update', async (_event, data) => {
-    return updateSettingsHandler(context, data);
-  });
+  ipcMain.handle('settings:get', () => getSettingsHandler(context));
+  ipcMain.handle('settings:update', (_event, data) => updateSettingsHandler(context, data));
 
   // Voice handlers
-  ipcMain.handle('voice:startRecording', async () => {
-    // Recording is handled in renderer process
-    // Main process just acknowledges the start
-    return { success: true };
-  });
-
-  ipcMain.handle('voice:stopRecording', async () => {
-    // Recording result is sent separately via voice:saveRecording
-    return { success: true, data: { transcription: '' } };
-  });
-
-  ipcMain.handle(
-    'voice:saveRecording',
-    async (_event, audioData: ArrayBuffer, duration: number, mimeType: string) => {
-      return saveRecording(audioData, duration, mimeType);
-    }
+  ipcMain.handle('voice:save-recording', (_event, audioData, duration, mimeType) => 
+    saveRecording(audioData, duration, mimeType)
   );
-
-  ipcMain.handle('voice:getRecordings', async () => {
-    const recordings = await listRecordings();
-    return { success: true, data: recordings };
-  });
-
-  ipcMain.handle('voice:deleteRecording', async (_event, filePath: string) => {
-    const deleted = await deleteRecording(filePath);
-    return { success: deleted };
-  });
-
-  // App info handlers
-  ipcMain.handle('app:getVersion', async () => {
-    return app.getVersion();
-  });
-
-  ipcMain.handle('app:getPlatform', async () => {
-    return process.platform;
-  });
+  ipcMain.handle('voice:list-recordings', () => listRecordings());
+  ipcMain.handle('voice:delete-recording', (_event, filePath) => deleteRecording(filePath));
 }
 
-/**
- * Application ready handler.
- *
- * Called when Electron has finished initialization and
- * is ready to create browser windows.
- */
-async function onAppReady(): Promise<void> {
-  // Create handler context
-  const context = createHandlerContext();
-
-  // Register IPC handlers
-  registerIpcHandlers(context);
-
-  // Create main window
+// App lifecycle
+app.whenReady().then(() => {
+  setupHandlers();
   mainWindow = createMainWindow();
 
-  console.log('VoiceInvoice Enterprise started');
-}
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      mainWindow = createMainWindow();
+    }
+  });
+});
 
-/**
- * All windows closed handler.
- *
- * Quits the app on Windows/Linux, but not on macOS
- * where apps typically stay active until explicitly quit.
- */
-function onWindowAllClosed(): void {
+app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
-}
-
-/**
- * Activate handler (macOS).
- *
- * Recreates the window when the dock icon is clicked
- * and no windows are open.
- */
-function onActivate(): void {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    mainWindow = createMainWindow();
-  }
-}
-
-// Application lifecycle handlers
-app.whenReady().then(onAppReady);
-app.on('window-all-closed', onWindowAllClosed);
-app.on('activate', onActivate);
+});
 
 // Security: Disable navigation to external URLs
 app.on('web-contents-created', (_event, contents) => {
   contents.on('will-navigate', (event, url) => {
     const parsedUrl = new URL(url);
-    const isAllowed = parsedUrl.origin === 'http://localhost:3000' || url.startsWith('file://');
+    const isAllowed = parsedUrl.origin === 'http://localhost:3002' || url.startsWith('file://');
 
     if (!isAllowed) {
       console.warn('[Security] Blocked navigation to:', url);

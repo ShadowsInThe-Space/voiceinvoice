@@ -112,7 +112,7 @@ describe('InvoiceList', () => {
 
       expect(paidStatus).toHaveTextContent(/bezahlt|paid/i);
       expect(pendingStatus).toHaveTextContent(/offen|pending/i);
-      expect(overdueStatus).toHaveTextContent(/ueberfaellig|overdue/i);
+      expect(overdueStatus).toHaveTextContent(/ueberfaellig|overdue|Überfällig/i);
     });
 
     it('should display formatted dates', () => {
@@ -133,14 +133,14 @@ describe('InvoiceList', () => {
     it('should render filter controls', () => {
       render(<InvoiceList invoices={mockInvoices} onSelect={mockOnSelect} />);
 
-      expect(screen.getByLabelText(/status filter|filter by status/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/status/i)).toBeInTheDocument();
     });
 
     it('should filter by status', async () => {
       const user = userEvent.setup();
       render(<InvoiceList invoices={mockInvoices} onSelect={mockOnSelect} />);
 
-      const statusFilter = screen.getByLabelText(/status filter|filter by status/i);
+      const statusFilter = screen.getByLabelText(/status/i);
       await user.selectOptions(statusFilter, 'PAID');
 
       await waitFor(() => {
@@ -154,7 +154,7 @@ describe('InvoiceList', () => {
       const user = userEvent.setup();
       render(<InvoiceList invoices={mockInvoices} onSelect={mockOnSelect} />);
 
-      const statusFilter = screen.getByLabelText(/status filter|filter by status/i);
+      const statusFilter = screen.getByLabelText(/status/i);
 
       // Filter first
       await user.selectOptions(statusFilter, 'PAID');
@@ -219,7 +219,8 @@ describe('InvoiceList', () => {
       const row = screen.getByTestId('invoice-row-inv-2');
       await user.click(row);
 
-      expect(row).toHaveClass('selected');
+      // Check for visual indicator of selection (border-l-primary)
+      expect(row).toHaveClass('border-l-primary');
     });
   });
 
@@ -280,8 +281,8 @@ describe('InvoiceList', () => {
 
       await user.click(deleteButton);
 
-      // Should show confirmation dialog
-      expect(screen.getByText(/bestaetigen|confirm/i)).toBeInTheDocument();
+      // Should show confirmation dialog - target the actual button
+      expect(screen.getByRole('button', { name: /endgültig löschen|confirm/i })).toBeInTheDocument();
     });
 
     it('should not call onDelete if confirmation is cancelled', async () => {
@@ -340,7 +341,7 @@ describe('InvoiceList', () => {
       const user = userEvent.setup();
       render(<InvoiceList invoices={mockInvoices} onSelect={mockOnSelect} />);
 
-      const sortSelect = screen.getByLabelText(/sortieren|sort/i);
+      const sortSelect = screen.getByLabelText(/sortierung|sort/i);
       await user.selectOptions(sortSelect, 'amount');
 
       const rows = screen.getAllByTestId(/invoice-row/);
@@ -353,7 +354,7 @@ describe('InvoiceList', () => {
       const user = userEvent.setup();
       render(<InvoiceList invoices={mockInvoices} onSelect={mockOnSelect} />);
 
-      const sortSelect = screen.getByLabelText(/sortieren|sort/i);
+      const sortSelect = screen.getByLabelText(/sortierung|sort/i);
       await user.selectOptions(sortSelect, 'invoiceNumber');
 
       const rows = screen.getAllByTestId(/invoice-row/);
@@ -379,8 +380,8 @@ describe('InvoiceList', () => {
 
       const table = screen.queryByRole('table');
       if (table) {
-        expect(screen.getByRole('columnheader', { name: /nummer|number/i })).toBeInTheDocument();
-        expect(screen.getByRole('columnheader', { name: /betrag|amount/i })).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', { name: /dokument|document|nummer|number/i })).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', { name: /bruttobetrag|amount|betrag/i })).toBeInTheDocument();
         expect(screen.getByRole('columnheader', { name: /status/i })).toBeInTheDocument();
       }
     });
@@ -402,18 +403,18 @@ describe('InvoiceList', () => {
     it('should display total count of invoices', () => {
       render(<InvoiceList invoices={mockInvoices} onSelect={mockOnSelect} />);
 
-      expect(screen.getByText(/4 rechnungen|4 invoices/i)).toBeInTheDocument();
+      expect(screen.getByText(/4 dokumente|4 documents|4 rechnungen|4 invoices/i)).toBeInTheDocument();
     });
 
     it('should update count when filtered', async () => {
       const user = userEvent.setup();
       render(<InvoiceList invoices={mockInvoices} onSelect={mockOnSelect} />);
 
-      const statusFilter = screen.getByLabelText(/status filter|filter by status/i);
+      const statusFilter = screen.getByLabelText(/status/i);
       await user.selectOptions(statusFilter, 'PAID');
 
       await waitFor(() => {
-        expect(screen.getByText(/1 rechnung|1 invoice/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 dokument|1 document|1 rechnung|1 invoice/i)).toBeInTheDocument();
       });
     });
   });

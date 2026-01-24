@@ -1,82 +1,42 @@
 /**
- * Next.js App Component with Layout
+ * Next.js App Component with Enterprise Layout
  *
- * Wraps all pages with navigation sidebar, header, and theme support.
+ * Wraps all pages with a professional sidebar navigation,
+ * header, and theme support using the new design system.
  *
  * @module pages/_app
  */
 
 import type { AppProps } from 'next/app';
+import '../styles/globals.css';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import { cn } from '../lib/utils';
+import {
+  LayoutDashboard,
+  FilePlus,
+  FileText,
+  Settings,
+  Menu,
+  Moon,
+  Sun,
+  X,
+  Search,
+  Bell,
+  User,
+  Mic,
+} from 'lucide-react';
 
 /**
  * Navigation items configuration.
  */
 const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Dashboard', icon: 'chart' },
-  { href: '/invoices/new', label: 'Neue Rechnung', icon: 'plus' },
-  { href: '/invoices', label: 'Rechnungen', icon: 'document' },
-  { href: '/settings', label: 'Einstellungen', icon: 'cog' },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/invoices/new', label: 'Neue Rechnung', icon: FilePlus },
+  { href: '/invoices', label: 'Rechnungen', icon: FileText },
+  { href: '/settings', label: 'Einstellungen', icon: Settings },
 ];
-
-/**
- * Icon component for navigation items.
- */
-function NavIcon({ name }: { name: string }): React.ReactElement {
-  switch (name) {
-    case 'chart':
-      return (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-      );
-    case 'plus':
-      return (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-        </svg>
-      );
-    case 'document':
-      return (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      );
-    case 'cog':
-      return (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      );
-    default:
-      return <span />;
-  }
-}
-
-/**
- * Sun icon for light mode toggle.
- */
-function SunIcon(): React.ReactElement {
-  return (
-    <svg data-testid="sun-icon" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  );
-}
-
-/**
- * Moon icon for dark mode toggle.
- */
-function MoonIcon(): React.ReactElement {
-  return (
-    <svg data-testid="moon-icon" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-    </svg>
-  );
-}
 
 /**
  * Application wrapper component with layout.
@@ -88,7 +48,7 @@ export default function App({ Component, pageProps }: AppProps): React.ReactElem
   const router = useRouter();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [navStatus, setNavStatus] = useState('');
+  const [isScrolled, setIsScrolled] = useState(false);
 
   // Initialize theme from localStorage
   useEffect(() => {
@@ -100,7 +60,6 @@ export default function App({ Component, pageProps }: AppProps): React.ReactElem
       setIsDarkMode(false);
       document.documentElement.classList.remove('dark');
     } else {
-      // Check system preference (with fallback for test environment)
       try {
         const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false;
         setIsDarkMode(prefersDark);
@@ -108,10 +67,18 @@ export default function App({ Component, pageProps }: AppProps): React.ReactElem
           document.documentElement.classList.add('dark');
         }
       } catch {
-        // Fallback for environments without matchMedia
         setIsDarkMode(false);
       }
     }
+  }, []);
+
+  // Handle Scroll for Header Shadow
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   // Toggle dark mode
@@ -138,128 +105,155 @@ export default function App({ Component, pageProps }: AppProps): React.ReactElem
   useEffect(() => {
     const handleRouteChange = () => {
       setIsSidebarOpen(false);
-      setNavStatus('Navigation abgeschlossen');
     };
-
     router.events?.on('routeChangeComplete', handleRouteChange);
-
     return () => {
       router.events?.off('routeChangeComplete', handleRouteChange);
     };
   }, [router.events]);
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-      {/* Skip to main content link */}
+    <div className="min-h-screen bg-background font-sans antialiased text-foreground">
+      {/* Skip to Main Content Link */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-md focus:m-2"
       >
         Zum Inhalt springen
       </a>
 
-      {/* Navigation status for screen readers */}
-      <div
-        role="status"
-        aria-label="Navigation Status"
-        aria-live="polite"
-        className="sr-only"
-      >
-        {navStatus}
+      {/* Navigation Status for Screen Readers */}
+      <div role="status" aria-live="polite" className="sr-only" aria-label="Navigation Status">
+        Seite geladen
       </div>
 
-      {/* Header */}
-      <header role="banner" className="fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 shadow-sm">
-        <div className="flex items-center justify-between h-16 px-4">
-          {/* Mobile menu button */}
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            aria-label="Menue"
-            className="md:hidden p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-
-          {/* App logo and name */}
-          <div data-testid="app-logo" className="flex items-center">
-            <svg className="w-8 h-8 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">
-              VoiceInvoice
-            </span>
-          </div>
-
-          {/* Dark mode toggle */}
-          <button
-            type="button"
-            onClick={toggleDarkMode}
-            aria-label="Modus wechseln"
-            className="p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            {isDarkMode ? <SunIcon /> : <MoonIcon />}
-          </button>
-        </div>
-      </header>
-
-      {/* Sidebar Navigation */}
-      <nav
-        role="navigation"
-        className={`
-          fixed top-16 left-0 bottom-0 z-30 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
-          transform transition-transform duration-200 ease-in-out
-          ${isSidebarOpen ? 'translate-x-0 block' : '-translate-x-full hidden md:translate-x-0 md:block'}
-        `}
-      >
-        <div className="py-4">
-          <ul className="space-y-1">
-            {NAV_ITEMS.map(({ href, label, icon }) => {
-              const isActive = router.pathname === href || router.pathname.startsWith(href + '/');
-              return (
-                <li key={href}>
-                  <Link
-                    href={href}
-                    className={`
-                      flex items-center gap-3 px-4 py-3 text-sm font-medium
-                      transition-colors duration-150
-                      ${isActive
-                        ? 'active bg-blue-50 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-r-2 border-blue-600'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                      }
-                    `}
-                  >
-                    <NavIcon name={icon} />
-                    {label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </nav>
-
-      {/* Sidebar overlay for mobile */}
+      {/* Mobile Overlay */}
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 z-20 bg-black bg-opacity-50 md:hidden"
+          className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
           onClick={toggleSidebar}
-          aria-hidden="true"
         />
       )}
 
-      {/* Main content area */}
-      <main
-        id="main-content"
-        role="main"
-        className="pt-16 md:ml-64 min-h-screen"
+      {/* Sidebar Navigation */}
+      <aside
+        role="navigation"
+        className={cn(
+          "fixed top-0 left-0 z-50 h-screen w-72 bg-card border-r border-border transition-transform duration-300 ease-in-out md:translate-x-0",
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
       >
-        <div className="p-6">
-          <Component {...pageProps} />
+        {/* Logo Area */}
+        <div className="flex h-16 items-center border-b border-border px-6">
+          <div data-testid="app-logo" className="flex items-center gap-2 font-bold text-xl tracking-tight">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Mic className="h-5 w-5" />
+            </div>
+            <span>VoiceInvoice</span>
+          </div>
+          <button
+            onClick={toggleSidebar}
+            className="ml-auto md:hidden text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
-      </main>
+
+        {/* Nav Links */}
+        <div className="flex flex-col gap-1 p-4">
+          <div className="px-2 py-2 text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+            Menu
+          </div>
+          {NAV_ITEMS.map((item) => {
+            const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-primary/10 text-primary hover:bg-primary/20"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <item.icon className={cn("h-4 w-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* User Profile / Bottom Section */}
+        <div className="mt-auto border-t border-border p-4">
+          <div className="flex items-center gap-3 rounded-md bg-muted/50 p-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/20 text-primary">
+              <User className="h-5 w-5" />
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <p className="text-sm font-medium truncate">Max Mustermann</p>
+              <p className="text-xs text-muted-foreground truncate">Enterprise Plan</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <div className="md:ml-72 flex min-h-screen flex-col">
+        {/* Header */}
+        <header
+          role="banner"
+          className={cn(
+            "sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/95 px-6 backdrop-blur transition-shadow",
+            isScrolled && "shadow-sm"
+          )}
+        >
+          <button
+            onClick={toggleSidebar}
+            aria-label="Menue"
+            className="md:hidden text-muted-foreground hover:text-foreground"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+
+          {/* Breadcrumbs or Page Title could go here */}
+          <div className="hidden md:flex items-center text-sm font-medium text-muted-foreground">
+            <span className="text-foreground">Dashboard</span>
+          </div>
+
+          <div className="ml-auto flex items-center gap-4">
+            {/* Search (Mock) */}
+            <div className="relative hidden sm:block">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <input
+                type="search"
+                placeholder="Suche..."
+                className="h-9 w-64 rounded-md border border-input bg-background pl-9 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              />
+            </div>
+
+            {/* Notifications */}
+            <button className="relative text-muted-foreground hover:text-foreground">
+              <Bell className="h-5 w-5" />
+              <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-destructive" />
+            </button>
+
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleDarkMode}
+              aria-label="Modus wechseln"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {isDarkMode ? <Sun data-testid="sun-icon" className="h-4 w-4" /> : <Moon data-testid="moon-icon" className="h-4 w-4" />}
+            </button>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main id="main-content" className="flex-1 p-6 md:p-8">
+          <Component {...pageProps} />
+        </main>
+      </div>
     </div>
   );
 }
