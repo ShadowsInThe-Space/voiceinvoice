@@ -190,7 +190,7 @@ export function InvoiceForm({
                     )}
                   />
                   {errors.invoiceNumber && touched.invoiceNumber && (
-                    <span className="absolute right-3 top-3 text-destructive text-xs font-bold">{errors.invoiceNumber}</span>
+                    <span data-testid="error-invoiceNumber" className="absolute right-3 top-3 text-destructive text-xs font-bold">{errors.invoiceNumber}</span>
                   )}
                 </div>
               </div>
@@ -289,10 +289,17 @@ export function InvoiceForm({
                       id="netAmount"
                       value={netAmount}
                       onChange={(e) => setNetAmount(e.target.value ? parseFloat(e.target.value) : '')}
+                      onBlur={() => handleBlur('netAmount')}
                       step="0.01"
-                      className="w-full bg-white/10 border-2 border-white/20 rounded-xl px-4 py-4 text-2xl font-black focus:outline-none focus:border-white transition-all placeholder:text-white/30"
+                      className={cn(
+                        "w-full bg-white/10 border-2 rounded-xl px-4 py-4 text-2xl font-black focus:outline-none transition-all placeholder:text-white/30",
+                        errors.netAmount && touched.netAmount ? "border-red-400" : "border-white/20 focus:border-white"
+                      )}
                       placeholder="0,00"
                     />
+                    {errors.netAmount && touched.netAmount && (
+                      <span className="absolute right-3 top-4 text-red-300 text-xs font-bold">{errors.netAmount}</span>
+                    )}
                   </div>
                 </div>
 

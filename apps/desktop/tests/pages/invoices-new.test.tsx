@@ -23,8 +23,39 @@ vi.mock('next/router', () => ({
   })),
 }));
 
+// Mock the VoiceRecorderButton to allow triggering onRecordingComplete
+let mockOnRecordingComplete: ((blob: Blob, duration: number) => void) | null = null;
+vi.mock('../../src/components/VoiceRecorderButton', () => ({
+  VoiceRecorderButton: ({ onRecordingComplete, disabled }: { onRecordingComplete: (blob: Blob, duration: number) => void; disabled?: boolean }) => {
+    mockOnRecordingComplete = onRecordingComplete;
+    return (
+      <button
+        type="button"
+        aria-label="Aufnahme starten"
+        disabled={disabled}
+        onClick={() => onRecordingComplete(new Blob(['test'], { type: 'audio/wav' }), 1000)}
+      >
+        Aufnahme starten
+      </button>
+    );
+  },
+}));
+
 // Import after mocks
 import NewInvoicePage from '../../src/pages/invoices/new';
+
+/**
+ * Helper function to trigger the recording flow and wait for invoice to load.
+ */
+async function triggerRecordingFlow(user: ReturnType<typeof userEvent.setup>) {
+  const recordButton = screen.getByRole('button', { name: /aufnahme starten/i });
+  await user.click(recordButton);
+
+  // Wait for the processing to complete (800ms timeout in the component)
+  await waitFor(() => {
+    expect(screen.getByText('RE-2025-001')).toBeInTheDocument();
+  }, { timeout: 3000 });
+}
 
 describe('Invoice Creation Page', () => {
   beforeEach(() => {
@@ -83,73 +114,78 @@ describe('Invoice Creation Page', () => {
     });
 
     it('should show invoice number in preview', async () => {
+      const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      await waitFor(() => {
-        expect(screen.getByText('RE-2025-001')).toBeInTheDocument();
-      });
+      await triggerRecordingFlow(user);
+
+      expect(screen.getByText('RE-2025-001')).toBeInTheDocument();
     });
 
     it('should display customer name in preview', async () => {
+      const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      await waitFor(() => {
-        // Check that the customer name appears somewhere in the document
-        expect(screen.getByText('Musterfirma GmbH')).toBeInTheDocument();
-      });
+      await triggerRecordingFlow(user);
+
+      // Check that the customer name appears somewhere in the document
+      expect(screen.getByText('Musterfirma GmbH')).toBeInTheDocument();
     });
 
     it('should display invoice items in preview', async () => {
+      const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      await waitFor(() => {
-        expect(screen.getByText(/beratung/i)).toBeInTheDocument();
-      });
+      await triggerRecordingFlow(user);
+
+      expect(screen.getByText(/beratung/i)).toBeInTheDocument();
     });
 
     it('should display totals in preview', async () => {
+      const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      await waitFor(() => {
-        expect(screen.getByTestId('invoice-total')).toBeInTheDocument();
-      });
+      await triggerRecordingFlow(user);
+
+      expect(screen.getByTestId('invoice-total')).toBeInTheDocument();
     });
 
     it('should display confidence score', async () => {
+      const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      await waitFor(() => {
-        expect(screen.getByText(/genauigkeit/i)).toBeInTheDocument();
-      });
+      await triggerRecordingFlow(user);
+
+      expect(screen.getByText(/genauigkeit/i)).toBeInTheDocument();
     });
   });
 
   describe('Edit and Save Workflow', () => {
     it('should have an edit button', async () => {
+      const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /anpassen|bearbeiten/i })).toBeInTheDocument();
-      });
+      await triggerRecordingFlow(user);
+
+      expect(screen.getByRole('button', { name: /manuell anpassen|anpassen|bearbeiten/i })).toBeInTheDocument();
     });
 
     it('should have save button', async () => {
+      const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /finalisieren|speichern/i })).toBeInTheDocument();
-      });
+      await triggerRecordingFlow(user);
+
+      expect(screen.getByRole('button', { name: /dokument finalisieren|finalisieren|speichern/i })).toBeInTheDocument();
     });
 
     it('should show success message when saving', async () => {
       const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /finalisieren|speichern/i })).toBeInTheDocument();
-      });
+      await triggerRecordingFlow(user);
 
-      const saveButton = screen.getByRole('button', { name: /finalisieren|speichern/i });
+      const saveButton = screen.getByRole('button', { name: /dokument finalisieren|finalisieren|speichern/i });
       await user.click(saveButton);
 
       await waitFor(() => {
@@ -160,26 +196,25 @@ describe('Invoice Creation Page', () => {
 
   describe('PDF Export', () => {
     it('should have PDF export button', async () => {
+      const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /pdf export/i })).toBeInTheDocument();
-      });
+      await triggerRecordingFlow(user);
+
+      expect(screen.getByRole('button', { name: /pdf export/i })).toBeInTheDocument();
     });
 
     it('should show success message after PDF export', async () => {
       const user = userEvent.setup();
       render(<NewInvoicePage />);
 
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /pdf export/i })).toBeInTheDocument();
-      });
+      await triggerRecordingFlow(user);
 
       const exportButton = screen.getByRole('button', { name: /pdf export/i });
       await user.click(exportButton);
 
       await waitFor(() => {
-        expect(screen.getByText(/export erfolgreich/i)).toBeInTheDocument();
+        expect(screen.getByText(/pdf-export erfolgreich|export erfolgreich/i)).toBeInTheDocument();
       }, { timeout: 3000 });
     });
   });
