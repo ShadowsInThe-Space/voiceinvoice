@@ -53,14 +53,36 @@ interface RecentInvoice {
 }
 
 /**
+ * Export data structure for JSON export.
+ */
+interface ExportInvoice {
+  number: string;
+  customerName: string;
+  date: string;
+  total: number;
+  status: string;
+}
+
+interface ExportData {
+  invoices: ExportInvoice[];
+  exportedAt: string;
+}
+
+/**
  * Status configuration for display.
  * Uses theme-aware utility classes for consistent branding.
  */
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  DRAFT: { label: 'Entwurf', className: 'bg-muted text-muted-foreground border-muted-foreground/20' },
+  DRAFT: {
+    label: 'Entwurf',
+    className: 'bg-muted text-muted-foreground border-muted-foreground/20',
+  },
   PENDING: { label: 'Offen', className: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' },
   PAID: { label: 'Bezahlt', className: 'bg-primary/10 text-primary border-primary/20' },
-  CANCELLED: { label: 'Storniert', className: 'bg-destructive/10 text-destructive border-destructive/20' },
+  CANCELLED: {
+    label: 'Storniert',
+    className: 'bg-destructive/10 text-destructive border-destructive/20',
+  },
   OVERDUE: { label: 'Überfällig', className: 'bg-red-500 text-white border-transparent shadow-sm' },
 };
 
@@ -136,8 +158,8 @@ function StatCard({
               trend === 'up'
                 ? 'bg-green-500/10 text-green-600'
                 : trend === 'down'
-                ? 'bg-red-500/10 text-red-600'
-                : 'bg-muted text-muted-foreground'
+                  ? 'bg-red-500/10 text-red-600'
+                  : 'bg-muted text-muted-foreground'
             }`}
           >
             {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '•'}
@@ -151,9 +173,7 @@ function StatCard({
         </p>
       </div>
       {subtitle && (
-        <p className="mt-2 text-xs font-medium text-muted-foreground italic">
-          {subtitle}
-        </p>
+        <p className="mt-2 text-xs font-medium text-muted-foreground italic">{subtitle}</p>
       )}
     </div>
   );
@@ -170,6 +190,8 @@ export default function DashboardPage(): React.ReactElement {
   const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const exportDropdownRef = React.useRef<HTMLDivElement>(null);
 
   /**
    * Load dashboard data.
@@ -245,12 +267,111 @@ export default function DashboardPage(): React.ReactElement {
   }, [router]);
 
   /**
-   * Export invoices (placeholder).
+   * Toggle export dropdown visibility.
    */
-  const handleExport = useCallback(() => {
-    // Placeholder for export functionality
-    console.log('Export clicked');
+  const handleExportClick = useCallback(() => {
+    setShowExportDropdown((prev) => !prev);
   }, []);
+
+  /**
+   * Convert invoices to CSV format.
+   *
+   * @param {RecentInvoice[]} invoices - Array of invoices to convert.
+   * @returns {string} CSV formatted string.
+   */
+  const convertToCSV = useCallback((invoices: RecentInvoice[]): string => {
+    const headers = ['Rechnungsnummer', 'Kunde', 'Datum', 'Betrag', 'Status'];
+    const csvRows = [headers.join(',')];
+
+    invoices.forEach((invoice) => {
+      const row = [
+        invoice.number,
+        `"${invoice.customer.name}"`,
+        formatDate(invoice.createdAt),
+        invoice.total.toString(),
+        STATUS_CONFIG[invoice.status]?.label ?? invoice.status,
+      ];
+      csvRows.push(row.join(','));
+    });
+
+    return csvRows.join('\n');
+  }, []);
+
+  /**
+   * Convert invoices to JSON export format.
+   *
+   * @param {RecentInvoice[]} invoices - Array of invoices to convert.
+   * @returns {ExportData} JSON export data structure.
+   */
+  const convertToJSON = useCallback((invoices: RecentInvoice[]): ExportData => {
+    return {
+      invoices: invoices.map((invoice) => ({
+        number: invoice.number,
+        customerName: invoice.customer.name,
+        date: formatDate(invoice.createdAt),
+        total: invoice.total,
+        status: STATUS_CONFIG[invoice.status]?.label ?? invoice.status,
+      })),
+      exportedAt: new Date().toISOString(),
+    };
+  }, []);
+
+  /**
+   * Trigger file download using browser API.
+   *
+   * @param {string} content - The file content.
+   * @param {string} filename - The filename for download.
+   * @param {string} mimeType - The MIME type of the file.
+   */
+  const downloadFile = useCallback((content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  /**
+   * Export invoices as CSV.
+   */
+  const handleExportCSV = useCallback(() => {
+    const csvContent = convertToCSV(recentInvoices);
+    const timestamp = new Date().toISOString().split('T')[0];
+    downloadFile(csvContent, `rechnungen-${timestamp}.csv`, 'text/csv;charset=utf-8;');
+    setShowExportDropdown(false);
+  }, [recentInvoices, convertToCSV, downloadFile]);
+
+  /**
+   * Export invoices as JSON.
+   */
+  const handleExportJSON = useCallback(() => {
+    const jsonData = convertToJSON(recentInvoices);
+    const jsonContent = JSON.stringify(jsonData, null, 2);
+    const timestamp = new Date().toISOString().split('T')[0];
+    downloadFile(jsonContent, `rechnungen-${timestamp}.json`, 'application/json');
+    setShowExportDropdown(false);
+  }, [recentInvoices, convertToJSON, downloadFile]);
+
+  /**
+   * Close export dropdown when clicking outside.
+   */
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setShowExportDropdown(false);
+      }
+    };
+
+    if (showExportDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportDropdown]);
 
   /**
    * Retry loading data.
@@ -278,9 +399,15 @@ export default function DashboardPage(): React.ReactElement {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
         <div className="max-w-md text-center p-8 bg-card rounded-2xl border border-destructive/20 shadow-xl">
-          <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mx-auto mb-6 text-2xl font-bold">!</div>
-          <h2 className="text-xl font-bold text-foreground mb-2">Daten-Synchronisation fehlgeschlagen</h2>
-          <p className="text-muted-foreground mb-8">Wir konnten Ihre Rechnungsdaten momentan nicht abrufen.</p>
+          <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mx-auto mb-6 text-2xl font-bold">
+            !
+          </div>
+          <h2 className="text-xl font-bold text-foreground mb-2">
+            Daten-Synchronisation fehlgeschlagen
+          </h2>
+          <p className="text-muted-foreground mb-8">
+            Wir konnten Ihre Rechnungsdaten momentan nicht abrufen.
+          </p>
           <button
             type="button"
             onClick={handleRetry}
@@ -306,17 +433,38 @@ export default function DashboardPage(): React.ReactElement {
             Dashboard
           </h1>
           <p className="text-muted-foreground text-lg max-w-xl">
-            Willkommen zurück. Hier ist die Übersicht über Ihre finanziellen Aktivitäten und offenen Posten.
+            Willkommen zurück. Hier ist die Übersicht über Ihre finanziellen Aktivitäten und offenen
+            Posten.
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={handleExport}
-            className="px-6 py-3 text-sm font-bold text-foreground bg-card border border-border rounded-xl hover:bg-muted transition-all shadow-sm"
-          >
-            Exportieren
-          </button>
+          <div ref={exportDropdownRef} className="relative">
+            <button
+              type="button"
+              onClick={handleExportClick}
+              className="px-6 py-3 text-sm font-bold text-foreground bg-card border border-border rounded-xl hover:bg-muted transition-all shadow-sm"
+            >
+              Exportieren
+            </button>
+            {showExportDropdown && (
+              <div className="absolute top-full right-0 mt-2 bg-card border border-border rounded-xl shadow-lg overflow-hidden z-10 min-w-[140px]">
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="w-full px-4 py-3 text-sm font-medium text-foreground hover:bg-muted transition-colors text-left"
+                >
+                  CSV exportieren
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportJSON}
+                  className="w-full px-4 py-3 text-sm font-medium text-foreground hover:bg-muted transition-colors text-left border-t border-border"
+                >
+                  JSON exportieren
+                </button>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={handleNewInvoice}
@@ -362,9 +510,7 @@ export default function DashboardPage(): React.ReactElement {
         {/* Recent Invoices Table - Professional Block */}
         <div className="lg:col-span-2 bg-card rounded-2xl border border-border/50 shadow-xl overflow-hidden">
           <div className="px-8 py-6 border-b border-border/50 flex items-center justify-between bg-muted/30">
-            <h2 className="text-xl font-bold text-foreground">
-              Letzte Transaktionen
-            </h2>
+            <h2 className="text-xl font-bold text-foreground">Letzte Transaktionen</h2>
             <button className="text-xs font-bold text-primary hover:underline uppercase tracking-widest">
               Alle anzeigen
             </button>
@@ -373,11 +519,36 @@ export default function DashboardPage(): React.ReactElement {
             <table className="min-w-full divide-y divide-border/50">
               <thead className="bg-muted/50">
                 <tr>
-                  <th scope="col" className="px-8 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Nummer</th>
-                  <th scope="col" className="px-8 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Kunde</th>
-                  <th scope="col" className="px-8 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Datum</th>
-                  <th scope="col" className="px-8 py-4 text-right text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Betrag</th>
-                  <th scope="col" className="px-8 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Status</th>
+                  <th
+                    scope="col"
+                    className="px-8 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]"
+                  >
+                    Nummer
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-8 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]"
+                  >
+                    Kunde
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-8 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]"
+                  >
+                    Datum
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-8 py-4 text-right text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]"
+                  >
+                    Betrag
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-8 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]"
+                  >
+                    Status
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-card divide-y divide-border/30">
@@ -402,7 +573,8 @@ export default function DashboardPage(): React.ReactElement {
                     <td className="px-8 py-5 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-full border ${
-                          STATUS_CONFIG[invoice.status]?.className ?? 'bg-muted text-muted-foreground'
+                          STATUS_CONFIG[invoice.status]?.className ??
+                          'bg-muted text-muted-foreground'
                         }`}
                       >
                         {STATUS_CONFIG[invoice.status]?.label ?? invoice.status}
@@ -425,7 +597,21 @@ export default function DashboardPage(): React.ReactElement {
         <div className="space-y-8">
           <div className="bg-primary/5 rounded-2xl border-2 border-primary/10 p-8 flex flex-col items-center text-center space-y-6">
             <div className="w-16 h-16 bg-primary text-white rounded-full flex items-center justify-center shadow-lg shadow-primary/20 transform group-hover:scale-110 transition-transform">
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" x2="12" y1="19" y2="22" />
+              </svg>
             </div>
             <div className="space-y-2">
               <h3 className="text-xl font-black text-foreground">Voice Command</h3>
@@ -460,4 +646,3 @@ export default function DashboardPage(): React.ReactElement {
     </div>
   );
 }
-
