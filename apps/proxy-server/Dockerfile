@@ -11,7 +11,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy root workspace files
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY turbo.json ./
+COPY turbo.json tsconfig.json ./
 
 # Copy package manifests for dependency resolution
 COPY packages/shared-types/package.json ./packages/shared-types/
@@ -48,8 +48,8 @@ COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.ya
 COPY --from=builder /app/packages/shared-types/package.json ./packages/shared-types/
 COPY --from=builder /app/apps/proxy-server/package.json ./apps/proxy-server/
 
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
+# Install production dependencies only (skip prepare scripts for husky)
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # Copy built files
 COPY --from=builder /app/packages/shared-types/dist ./packages/shared-types/dist
