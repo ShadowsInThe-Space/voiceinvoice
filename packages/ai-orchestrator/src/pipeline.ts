@@ -51,7 +51,7 @@ export interface PipelineError {
   message: string;
 
   /** Original error (if available) */
-  originalError?: Error;
+  originalError?: Error | undefined;
 }
 
 /**
@@ -76,16 +76,16 @@ export interface PipelineResult {
   success: boolean;
 
   /** Transcription result (if audio was processed) */
-  transcription?: TranscriptionResult;
+  transcription?: TranscriptionResult | undefined;
 
   /** Classification result */
-  classification?: IntentResult;
+  classification?: IntentResult | undefined;
 
   /** Routing decision */
-  routing?: RoutingDecision;
+  routing?: RoutingDecision | undefined;
 
   /** Error information (if pipeline failed) */
-  error?: PipelineError;
+  error?: PipelineError | undefined;
 
   /** Individual stage latencies */
   stageLatencies: StageLatencies;
@@ -134,7 +134,7 @@ export interface PipelineConfig {
   routingThresholds: RoutingThresholds;
 
   /** Custom transcription handler (for dependency injection) */
-  transcriptionHandler?: TranscriptionHandler;
+  transcriptionHandler?: TranscriptionHandler | undefined;
 
   /** Pipeline callbacks */
   callbacks: PipelineCallbacks;
@@ -382,15 +382,15 @@ export class PipelineOrchestrator {
       const pipelineError: PipelineError = {
         stage: 'unknown',
         message: error instanceof Error ? error.message : 'Pipeline failed',
-        originalError: error instanceof Error ? error : undefined,
+        ...(error instanceof Error && { originalError: error }),
       };
       this.config.callbacks.onError?.(pipelineError);
 
       const result: PipelineResult = {
         success: false,
-        transcription: transcriptionResult,
-        classification: classificationResult,
-        routing: routingDecision,
+        ...(transcriptionResult && { transcription: transcriptionResult }),
+        ...(classificationResult && { classification: classificationResult }),
+        ...(routingDecision && { routing: routingDecision }),
         error: pipelineError,
         stageLatencies,
         totalLatencyMs: Date.now() - startTime,

@@ -6,18 +6,18 @@ Dieses Dokument listet alle noch nicht implementierten Features und Platzhalter 
 
 - [x] **Proxy-Server Implementierung**: Fastify-Server mit CORS, Helmet, Rate-Limiting (18 Tests).
 - [x] **API-Endpunkte**: `/transcribe` (Gemini 2.0 Flash), `/enrich` (Gemini 2.5 Flash), `/health`.
-- [ ] **Hetzner Deployment**: Erstellung von Docker-Files und Deployment-Scripts für die Cloud-Infrastruktur in Frankfurt.
+- [x] **Hetzner Deployment**: Docker-Files, docker-compose.yml, deploy.sh erstellt und auf Server deployed (Port 3001).
 - [ ] **Lizenz-Validierung**: Implementierung der serverseitigen Prüfung von Lizenzschlüsseln.
 
 ## 🤖 KI & Orchestrierung (`ai-orchestrator`)
 
 - [x] **Intent Classification**: Regelbasierte Klassifikation für INVOICE/ANALYTICS mit Confidence-Score (49 Tests).
-- [ ] **Confidence-basiertes Routing**: Logik für automatischen Save (>= 0.85) vs. User-Preview implementieren.
+- [x] **Confidence-basiertes Routing**: Auto-Save (>=0.85), Preview (>=0.60), Manual (<0.60) mit PipelineOrchestrator (98 Tests).
 - [ ] **Entity Extraction**: Verknüpfung mit Gemini Function Calling zur strukturierten Datengewinnung.
 
 ## 🔒 Privacy & Compliance (`privacy-engine`)
 
-- [ ] **Anonymisierungs-Logik**: Vollständige Implementierung der Text-Maskierung und PII-Redaktion (Subagent #5).
+- [x] **Anonymisierungs-Logik**: PII-Erkennung (Email, Telefon, IBAN, Steuer-IDs) mit mask/redact/hash Strategien (48 Tests).
 - [ ] **Dual-Layer Ansatz**: Integration der server-seitigen Chirp-Redaktion mit der client-seitigen Maskierung.
 
 ## 💾 Datenbank-Layer
@@ -42,4 +42,4 @@ Dieses Dokument listet alle noch nicht implementierten Features und Platzhalter 
 
 ---
 
-_Status: Stand 24. Januar 2026 - MVP-Features implementiert (505 Tests bestanden)._
+_Status: Stand 24. Januar 2026 - Core-Features implementiert (551+ Tests bestanden)._
