@@ -21,6 +21,7 @@ import {
   updateSettingsHandler,
   type IpcHandlerContext,
 } from './ipc/handlers';
+import { saveRecording, listRecordings, deleteRecording } from './ipc/voice-handlers';
 
 /**
  * Main application window reference.
@@ -206,18 +207,31 @@ function registerIpcHandlers(context: IpcHandlerContext): void {
 
   // Voice handlers
   ipcMain.handle('voice:startRecording', async () => {
-    // Will be implemented in Subagent #3
+    // Recording is handled in renderer process
+    // Main process just acknowledges the start
     return { success: true };
   });
 
   ipcMain.handle('voice:stopRecording', async () => {
-    // Will be implemented in Subagent #3
+    // Recording result is sent separately via voice:saveRecording
     return { success: true, data: { transcription: '' } };
   });
 
+  ipcMain.handle(
+    'voice:saveRecording',
+    async (_event, audioData: ArrayBuffer, duration: number, mimeType: string) => {
+      return saveRecording(audioData, duration, mimeType);
+    }
+  );
+
   ipcMain.handle('voice:getRecordings', async () => {
-    // Will be implemented in Subagent #4
-    return { success: true, data: [] };
+    const recordings = await listRecordings();
+    return { success: true, data: recordings };
+  });
+
+  ipcMain.handle('voice:deleteRecording', async (_event, filePath: string) => {
+    const deleted = await deleteRecording(filePath);
+    return { success: deleted };
   });
 
   // App info handlers

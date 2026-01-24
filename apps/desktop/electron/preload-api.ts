@@ -51,7 +51,9 @@ export interface SettingsApi {
 export interface VoiceApi {
   startRecording: () => Promise<unknown>;
   stopRecording: () => Promise<unknown>;
+  saveRecording: (audioData: ArrayBuffer, duration: number, mimeType: string) => Promise<unknown>;
   getRecordings: () => Promise<unknown>;
+  deleteRecording: (filePath: string) => Promise<unknown>;
 }
 
 /**
@@ -121,7 +123,10 @@ export function createPreloadApi(invoke: IpcInvoker): PreloadApi {
     voice: {
       startRecording: () => invoke('voice:startRecording'),
       stopRecording: () => invoke('voice:stopRecording'),
+      saveRecording: (audioData: ArrayBuffer, duration: number, mimeType: string) =>
+        invoke('voice:saveRecording', audioData, duration, mimeType),
       getRecordings: () => invoke('voice:getRecordings'),
+      deleteRecording: (filePath: string) => invoke('voice:deleteRecording', filePath),
     },
 
     app: {
