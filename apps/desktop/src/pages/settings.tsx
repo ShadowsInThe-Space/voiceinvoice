@@ -1,13 +1,15 @@
 /**
  * Settings Page
  *
- * Configuration page for API keys, locale, TTS settings, and webhook integrations.
+ * Configuration page for API keys, locale, TTS settings, webhook integrations,
+ * and company branding (logo upload).
  *
  * @module pages/settings
  */
 
 import React, { useState, useEffect, useCallback, FormEvent } from 'react';
 import { isValidWebhookUrl, WEBHOOK_STORAGE_KEYS } from '../lib/webhook';
+import { LogoUpload, LOGO_STORAGE_KEY } from '../components/LogoUpload';
 
 /**
  * Available locale options.
@@ -195,6 +197,9 @@ export default function SettingsPage(): React.ReactElement {
     localStorage.removeItem(WEBHOOK_STORAGE_KEYS.url);
     localStorage.removeItem(WEBHOOK_STORAGE_KEYS.backupUrl);
 
+    // Remove company logo
+    localStorage.removeItem(LOGO_STORAGE_KEY);
+
     // Reset form to defaults
     setApiKey('');
     setLocale('de-DE');
@@ -207,6 +212,15 @@ export default function SettingsPage(): React.ReactElement {
     setShowResetDialog(false);
     setSaveStatus(null);
     setErrorMessage('');
+  }, []);
+
+  /**
+   * Handle logo change from LogoUpload component.
+   */
+  const handleLogoChange = useCallback((logoBase64: string | null) => {
+    // Logo is saved directly by LogoUpload component
+    // This callback can be used for additional side effects if needed
+    console.log('Logo updated:', logoBase64 ? 'Logo set' : 'Logo removed');
   }, []);
 
   return (
@@ -342,6 +356,27 @@ export default function SettingsPage(): React.ReactElement {
                 <span>Normal (1.0x)</span>
                 <span>Schnell (2.0x)</span>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Company Branding Section */}
+        <section role="group" aria-labelledby="branding-section">
+          <h2
+            id="branding-section"
+            className="text-lg font-medium text-gray-900 dark:text-white mb-4"
+          >
+            Firmenbranding
+          </h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Firmenlogo
+              </label>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Das Logo wird auf allen generierten PDF-Rechnungen angezeigt
+              </p>
+              <LogoUpload onLogoChange={handleLogoChange} />
             </div>
           </div>
         </section>

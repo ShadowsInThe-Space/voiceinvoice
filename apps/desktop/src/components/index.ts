@@ -15,3 +15,6 @@ export type { CustomerSelectProps } from './CustomerSelect';
 
 export { InvoiceList } from './InvoiceList';
 export type { InvoiceListProps } from './InvoiceList';
+
+export { LogoUpload, LOGO_STORAGE_KEY } from './LogoUpload';
+export type { LogoUploadProps } from './LogoUpload';
