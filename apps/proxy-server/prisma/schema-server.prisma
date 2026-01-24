@@ -1,0 +1,45 @@
+// Server-side PostgreSQL schema for VoiceInvoice Proxy
+// Multi-tenant with license tracking
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// License for API access tracking.
+/// Each desktop installation has one license.
+model License {
+  id              String   @id @default(uuid())
+
+  /// License key (unique identifier)
+  licenseKey      String   @unique
+
+  /// Company name for the license holder
+  companyName     String
+
+  /// License status
+  status          String   @default("ACTIVE")
+
+  /// Monthly API call quota
+  monthlyQuota    Int      @default(1000)
+
+  /// Current month usage count
+  currentUsage    Int      @default(0)
+
+  /// When the usage counter resets
+  usageResetDate  DateTime
+
+  /// License expiration date
+  expiresAt       DateTime
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([licenseKey])
+  @@index([status])
+}

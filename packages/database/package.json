@@ -1,0 +1,39 @@
+{
+  "name": "@voiceinvoice/database",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prisma database clients for VoiceInvoice (SQLite + PostgreSQL)",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./client": {
+      "import": "./generated/client/index.js",
+      "types": "./generated/client/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "prisma generate --schema=prisma/schema-client.prisma",
+    "db:migrate": "prisma migrate dev --schema=prisma/schema-client.prisma",
+    "db:push": "prisma db push --schema=prisma/schema-client.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.9.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.9.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  }
+}

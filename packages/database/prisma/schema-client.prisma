@@ -1,0 +1,49 @@
+// Client-side SQLite schema for VoiceInvoice Desktop
+// This is the offline-capable local database
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./voiceinvoice.db"
+}
+
+/// Customer or supplier entity for invoice management.
+/// Supports German accounting requirements with tax IDs and VAT numbers.
+model Customer {
+  id              String   @id @default(uuid())
+  /// Classification: CUSTOMER, SUPPLIER, or BOTH
+  type            String
+
+  /// Legal company name
+  companyName     String
+  contactPerson   String?
+  email           String?
+  phone           String?
+
+  /// German tax number (Steuernummer)
+  taxNumber       String?
+  /// EU VAT identification number
+  vatId           String?
+  /// Bank account IBAN
+  iban            String?
+  /// Bank identifier code
+  bic             String?
+
+  street          String?
+  zip             String?
+  city            String?
+  /// ISO 3166-1 alpha-2 country code
+  country         String   @default("DE")
+
+  /// Privacy token for anonymized references
+  anonymizedToken String?  @unique
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([companyName])
+}
