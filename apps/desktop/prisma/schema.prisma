@@ -1,0 +1,152 @@
+// Prisma schema for VoiceInvoice Enterprise
+// Local-first SQLite database with sync-ready design
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Customer entity - core business data
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  city      String?
+  zipCode   String?
+  country   String   @default("DE")
+  taxId     String?  // USt-IdNr for German businesses
+  notes     String?
+
+  // Sync-ready fields
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  syncVersion Int      @default(0)
+  deletedAt   DateTime?
+
+  // Relations
+  invoices  Invoice[]
+
+  @@index([email])
+  @@index([name])
+  @@index([deletedAt])
+}
+
+// Invoice entity - core business data
+model Invoice {
+  id            String        @id @default(cuid())
+  number        String        @unique
+  customerId    String
+  customer      Customer      @relation(fields: [customerId], references: [id])
+
+  // Financial data
+  subtotal      Float
+  taxRate       Float         @default(19.0)  // German standard VAT
+  taxAmount     Float
+  total         Float
+  currency      String        @default("EUR")
+
+  // Status tracking (DRAFT, SENT, PAID, OVERDUE, CANCELLED)
+  status        String        @default("DRAFT")
+  issuedAt      DateTime?
+  dueAt         DateTime?
+  paidAt        DateTime?
+
+  // Voice input metadata
+  voiceRecordingId String?
+  transcription    String?
+
+  // Additional fields
+  notes         String?
+  paymentTerms  String?
+
+  // Sync-ready fields
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  syncVersion Int      @default(0)
+  deletedAt   DateTime?
+
+  // Relations
+  items       InvoiceItem[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([number])
+  @@index([deletedAt])
+}
+
+// Invoice line items
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  description String
+  quantity    Float   @default(1)
+  unitPrice   Float
+  total       Float
+
+  // Optional categorization
+  category    String?
+
+  // Sync-ready fields
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  syncVersion Int      @default(0)
+
+  @@index([invoiceId])
+}
+
+// Application settings (key-value store)
+model Setting {
+  key       String   @id
+  value     String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Voice recording metadata (file stored on disk)
+model VoiceRecording {
+  id          String   @id @default(cuid())
+  filePath    String
+  duration    Int      // milliseconds
+  mimeType    String
+  fileSize    Int      // bytes
+
+  // Processing status
+  transcribed Boolean  @default(false)
+  processed   Boolean  @default(false)
+
+  // Sync-ready fields
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([deletedAt])
+}
+
+// Privacy consent records (GDPR compliance)
+model ConsentRecord {
+  id          String   @id @default(cuid())
+  consentType String   // e.g., "data_processing", "voice_storage"
+  granted     Boolean
+  grantedAt   DateTime?
+  revokedAt   DateTime?
+
+  // Audit fields
+  ipAddress   String?
+  userAgent   String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([consentType])
+}
+
+// Invoice status values: DRAFT, SENT, PAID, OVERDUE, CANCELLED
