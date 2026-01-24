@@ -13,7 +13,7 @@ Dieses Dokument listet alle noch nicht implementierten Features und Platzhalter 
 
 - [x] **Intent Classification**: Regelbasierte Klassifikation für INVOICE/ANALYTICS mit Confidence-Score (49 Tests).
 - [x] **Confidence-basiertes Routing**: Auto-Save (>=0.85), Preview (>=0.60), Manual (<0.60) mit PipelineOrchestrator (98 Tests).
-- [ ] **Entity Extraction**: Verknüpfung mit Gemini Function Calling zur strukturierten Datengewinnung.
+- [x] **Entity Extraction**: Regelbasierte Extraktion von Kundennamen, Beträgen, Datum, MwSt, Zahlungsbedingungen (69 Tests).
 
 ## 🔒 Privacy & Compliance (`privacy-engine`)
 
@@ -22,14 +22,12 @@ Dieses Dokument listet alle noch nicht implementierten Features und Platzhalter 
 
 ## 💾 Datenbank-Layer
 
-- [ ] **Zentrale Initialisierung**: Prisma Client Setup und Verbindungsmanagement in `packages/database` finalisieren (Subagent #4).
+- [x] **Zentrale Initialisierung**: Prisma Client Singleton mit Connection Management, Retry-Logik, Health Check (41 Tests).
 - [ ] **Multi-Tenant Schema**: Anpassung des PostgreSQL-Schemas für den Server-Betrieb.
 
 ## 🔗 Integrationen & Automatisierung
 
-- [ ] **n8n Integration**:
-  - [ ] UI-Felder für Webhook-URLs in `settings.tsx` hinzufügen.
-  - [ ] Logik zum Senden von Rechnungsdaten an n8n bei Statusänderungen.
+- [x] **n8n Integration**: Webhook-URLs in Settings, Retry-Logik mit exponential backoff, Backup-URL Support (28 Tests).
 - [ ] **Bank-Synchronisation**:
   - [ ] Import-Funktion für Kontoauszüge (CSV/MT940).
   - [ ] Matching-Algorithmus zum Abgleich von Zahlungen mit offenen Rechnungen.
@@ -37,9 +35,9 @@ Dieses Dokument listet alle noch nicht implementierten Features und Platzhalter 
 ## 🖥️ Desktop-App Verfeinerungen
 
 - [x] **Export-Funktion**: CSV/JSON Export mit Dropdown-UI, Click-Outside-Handling (7 Tests).
-- [ ] **PDF-Branding**: Unterstützung für den Upload und die Einbindung von echten Firmenlogos im PDF-Header.
+- [x] **PDF-Branding**: Logo-Upload mit Drag&Drop, Base64-Speicherung, Integration in PDF-Export (27 Tests).
 - [ ] **Offline-Sync**: Logik zur Synchronisation der lokalen SQLite-Daten mit dem PostgreSQL-Backend, sobald eine Verbindung besteht.
 
 ---
 
-_Status: Stand 24. Januar 2026 - Core-Features implementiert (551+ Tests bestanden)._
+_Status: Stand 24. Januar 2026 - Core-Features implementiert (560 Tests bestanden)._
