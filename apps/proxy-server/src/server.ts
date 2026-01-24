@@ -64,9 +64,10 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
     }
   }
 
-  // Create Fastify instance
+  // Create Fastify instance with body size limit for audio uploads
   const server = Fastify({
     logger: loggerOptions,
+    bodyLimit: 10 * 1024 * 1024, // 10MB for audio files
   });
 
   // Register security middleware
@@ -76,8 +77,14 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   });
 
   // Register CORS for Electron app requests
+  // In production, restrict to known origins; in dev, allow all
+  const corsOrigin =
+    process.env.CORS_ORIGIN || process.env.NODE_ENV === 'production'
+      ? (process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000', 'http://localhost:3002'])
+      : true;
+
   await server.register(cors, {
-    origin: true, // Allow all origins (Electron file:// and localhost)
+    origin: corsOrigin,
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
