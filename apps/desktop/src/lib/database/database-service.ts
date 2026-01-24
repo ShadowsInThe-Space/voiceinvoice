@@ -264,6 +264,7 @@ export class DatabaseService {
 
   /**
    * Creates a new invoice with items.
+   * Uses a transaction to ensure Invoice is committed before InvoiceItems are created.
    * @param input
    */
   async createInvoice(input: CreateInvoiceInput): Promise<InvoiceWithRelations> {
@@ -280,47 +281,50 @@ export class DatabaseService {
     const taxAmount = subtotal * (taxRate / 100);
     const total = subtotal + taxAmount;
 
-    // Create invoice
-    await this.prisma.$executeRawUnsafe(
-      `INSERT INTO Invoice (
-        id, number, customerId, subtotal, taxRate, taxAmount, total, currency,
-        status, voiceRecordingId, transcription, notes, paymentTerms,
-        createdAt, updatedAt, syncVersion
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'EUR', 'DRAFT', ?, ?, ?, ?, ?, ?, 0)`,
-      id,
-      number,
-      input.customerId,
-      subtotal,
-      taxRate,
-      taxAmount,
-      total,
-      input.voiceRecordingId ?? null,
-      input.transcription ?? null,
-      input.notes ?? null,
-      input.paymentTerms ?? null,
-      now,
-      now
-    );
-
-    // Create items
-    for (const item of input.items) {
-      const itemId = this.generateId();
-      const itemTotal = item.quantity * item.unitPrice;
-
-      await this.prisma.$executeRawUnsafe(
-        `INSERT INTO InvoiceItem (id, invoiceId, description, quantity, unitPrice, total, category, createdAt, updatedAt, syncVersion)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-        itemId,
+    // Use transaction to ensure Invoice exists before InvoiceItems reference it
+    await this.prisma.$transaction(async (tx) => {
+      // Create invoice first
+      await tx.$executeRawUnsafe(
+        `INSERT INTO Invoice (
+          id, number, customerId, subtotal, taxRate, taxAmount, total, currency,
+          status, voiceRecordingId, transcription, notes, paymentTerms,
+          createdAt, updatedAt, syncVersion
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'EUR', 'DRAFT', ?, ?, ?, ?, ?, ?, 0)`,
         id,
-        item.description,
-        item.quantity,
-        item.unitPrice,
-        itemTotal,
-        item.category ?? null,
+        number,
+        input.customerId,
+        subtotal,
+        taxRate,
+        taxAmount,
+        total,
+        input.voiceRecordingId ?? null,
+        input.transcription ?? null,
+        input.notes ?? null,
+        input.paymentTerms ?? null,
         now,
         now
       );
-    }
+
+      // Then create items within the same transaction
+      for (const item of input.items) {
+        const itemId = this.generateId();
+        const itemTotal = item.quantity * item.unitPrice;
+
+        await tx.$executeRawUnsafe(
+          `INSERT INTO InvoiceItem (id, invoiceId, description, quantity, unitPrice, total, category, createdAt, updatedAt, syncVersion)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+          itemId,
+          id,
+          item.description,
+          item.quantity,
+          item.unitPrice,
+          itemTotal,
+          item.category ?? null,
+          now,
+          now
+        );
+      }
+    });
 
     return this.getInvoiceById(id) as Promise<InvoiceWithRelations>;
   }
