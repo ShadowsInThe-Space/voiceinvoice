@@ -1,0 +1,32 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs (will be rebuilt in Docker)
+dist
+*.tsbuildinfo
+
+# Development files
+*.log
+.env.local
+.env.development
+
+# Tests
+tests
+coverage
+*.test.ts
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Documentation
+docs
+*.md
+!README.md
