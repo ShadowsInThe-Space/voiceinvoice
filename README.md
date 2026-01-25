@@ -6,6 +6,39 @@ Voice-First Buchhaltungsanwendung mit AI-Powered Features für den 72h-Contest.
 
 VoiceInvoice Enterprise ermöglicht die Erstellung von Rechnungen durch Spracheingabe. Die Anwendung nutzt modernste KI-Technologie (Google Gemini 2.5 Flash + Chirp 3) für Transkription und intelligente Datenextraktion.
 
+## 🚀 Production-Ready SaaS-Infrastruktur
+
+**Wichtig:** Dies ist eine Demo-Version, die jedoch **vollständig für Production-SaaS vorbereitet** ist.
+
+### Vorhandene Infrastruktur
+
+✅ **Hetzner Server (Frankfurt):** api.shadowsinthe.space
+✅ **Stripe-Integration:** Kompletter Checkout-Flow + Webhook-Verarbeitung
+✅ **Lizenzserver:** JWT-Auth + Quota-Tracking + PostgreSQL Multi-Tenant
+✅ **n8n Workflows:** RAG Chat, Document Ingestion, Email Automation
+✅ **Supabase Vector DB:** Für RAG-basierte Dokumentensuche
+
+### Demo vs. Production
+
+| Aspekt            | Demo (aktuell)          | Production-Ready                              |
+| ----------------- | ----------------------- | --------------------------------------------- |
+| **API-Key**       | User bereitgestellt     | Zentral am Server (bereits implementiert)     |
+| **Transkription** | Desktop → Google direkt | Desktop → Proxy → Google (Endpoint vorhanden) |
+| **Quota-System**  | ✅ Implementiert        | ✅ Middleware vorhanden                       |
+| **Lizenzierung**  | ✅ Stripe + Webhooks    | ✅ Vollständig funktional                     |
+| **Multi-Tenant**  | ✅ PostgreSQL           | ✅ Ready                                      |
+
+**Für Production-Migration:** Siehe [`docs/LICENSE_AND_API_KEY_FLOW.md`](docs/LICENSE_AND_API_KEY_FLOW.md)
+→ Detaillierte Anleitung, wie das System in 3 Phasen zu echtem SaaS wird (1-4 Tage Aufwand)
+
+**Server-Endpoints (bereits implementiert):**
+
+- `POST /api/license/validate` - Lizenz validieren
+- `POST /api/stripe/checkout` - Stripe Checkout Session erstellen
+- `POST /api/stripe/webhook` - Payments verarbeiten
+- `POST /transcribe` - Audio transkribieren (Chirp 3, zentral)
+- `GET /health` - Health Check
+
 ## Tech-Stack
 
 - **Monorepo:** Turborepo + pnpm Workspaces
@@ -186,8 +219,23 @@ Dual-Layer Ansatz für DSGVO-Konformität:
 
 Proprietär - VoiceInvoice Enterprise
 
-## Links
+## Dokumentation
+
+### Interne Dokumentation
+
+- [`CLAUDE.md`](CLAUDE.md) - Entwicklungs-Guidelines für Claude Code
+- [`docs/LICENSE_AND_API_KEY_FLOW.md`](docs/LICENSE_AND_API_KEY_FLOW.md) - Vollständige Lizenz- und SaaS-Dokumentation
+- [`docs/BUGFIX_VERIFICATION_REPORT.md`](docs/BUGFIX_VERIFICATION_REPORT.md) - E2E-Testing Ergebnisse
+
+### Notion Links
 
 - [Notion Documentation Hub](https://www.notion.so/2f2463490002816594abedf1f117d1d4)
 - [Architektur-Spezifikation](https://www.notion.so/2f2463490002819f90aee95c866005ff)
 - [Development Log](https://www.notion.so/66175b5cb8504cf8811fe9805cda7f39)
+
+### Hetzner Server
+
+- **API:** https://api.shadowsinthe.space
+- **n8n:** https://n8n.shadowsinthe.space
+- **Supabase Studio:** https://supabase-studio.shadowsinthe.space
+- **IP:** 138.199.166.219
