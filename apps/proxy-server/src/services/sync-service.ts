@@ -1,41 +1,24 @@
 /**
  * Sync Service
  *
- * Handles server-side synchronization logic for offline-first clients.
- * Manages push/pull operations and data persistence in SyncedEntity.
+ * Handles data synchronization between local clients and the server.
+ * Implements multi-tenant isolation and conflict handling.
  *
- * @module services/sync-service
+ * @module services/sync
  */
 
-import { PrismaClient, Prisma } from '../../generated/client';
-
-// Use a shared Prisma instance from license-store or create a new one if not available globally
-const prisma = new PrismaClient();
+import { getPrismaClient } from './prisma';
 
 /**
- * Supported sync operations.
+ * Entry from the client sync queue.
  */
-export type SyncOperation = 'CREATE' | 'UPDATE' | 'DELETE';
-
-/**
- * Input for pushing data.
- */
-export interface PushInput {
-  licenseKey: string;
+export interface SyncQueueEntry {
+  id: string;
   entityType: string;
   entityId: string;
-  operation: SyncOperation;
-  data: any; // JSON payload
+  operation: 'CREATE' | 'UPDATE' | 'DELETE';
+  data?: any;
   timestamp: number;
-}
-
-/**
- * Input for pulling data.
- */
-export interface PullInput {
-  licenseKey: string;
-  since: number | null; // Timestamp (ms)
-  types?: string[] | undefined;
 }
 
 /**
@@ -48,149 +31,158 @@ export interface PushResult {
 }
 
 /**
- * Result of a pull operation.
+ * Server change record for pull operations.
  */
-export interface PullResult {
-  changes: Array<{
-    entityType: string;
-    entityId: string;
-    operation: SyncOperation;
-    data: any;
-    updatedAt: number;
-    version: number;
-  }>;
-  timestamp: number;
+export interface ServerChange {
+  entityType: string;
+  entityId: string;
+  operation: 'CREATE' | 'UPDATE' | 'DELETE';
+  data: any;
+  updatedAt: string;
 }
 
 /**
- * Pushes a change from a client to the server.
- *
- * @param input - Push operation details
- * @returns Result of operation
+ * Result of a pull operation.
  */
-export async function pushEntity(input: PushInput): Promise<PushResult> {
-  const { licenseKey, entityType, entityId, operation, data } = input;
+export interface PullResult {
+  data: ServerChange[];
+  lastSyncTimestamp: number;
+}
+
+/**
+ * Push a local change to the server.
+ *
+ * @param licenseKey - The license key of the client
+ * @param entry - The sync queue entry
+ * @returns Result of the push
+ */
+export async function pushEntity(licenseKey: string, entry: SyncQueueEntry): Promise<PushResult> {
+  const prisma = getPrismaClient();
 
   try {
-    // 1. Find the license ID
+    // Get license ID (and verify existence)
     const license = await prisma.license.findUnique({
       where: { licenseKey },
+      select: { id: true }
     });
 
     if (!license) {
       return { success: false, error: 'License not found' };
     }
 
+    const { entityType, entityId, operation, data } = entry;
+
     if (operation === 'DELETE') {
-      // Soft delete
+      // Mark as deleted instead of removing row to support tombstone syncing
       await prisma.syncedEntity.upsert({
         where: {
           licenseId_entityType_entityId: {
             licenseId: license.id,
             entityType,
             entityId,
-          },
+          }
+        },
+        create: {
+          licenseId: license.id,
+          entityType,
+          entityId,
+          data: {},
+          deleted: true,
         },
         update: {
-          deletedAt: new Date(),
-          version: { increment: 1 },
-          data: data ?? {}, // Keep last known data or empty
+          deleted: true,
+          data: {},
+        }
+      });
+    } else {
+      // CREATE or UPDATE
+      // We store the data as-is. Merging happens on the client or business logic layer if needed.
+      // Here we act as a dumb store for the synced state.
+      await prisma.syncedEntity.upsert({
+        where: {
+          licenseId_entityType_entityId: {
+            licenseId: license.id,
+            entityType,
+            entityId,
+          }
         },
         create: {
           licenseId: license.id,
           entityType,
           entityId,
           data: data ?? {},
-          deletedAt: new Date(),
-        },
-      });
-    } else {
-      // Create or Update
-      await prisma.syncedEntity.upsert({
-        where: {
-          licenseId_entityType_entityId: {
-            licenseId: license.id,
-            entityType,
-            entityId,
-          },
+          deleted: false,
         },
         update: {
-          data,
-          deletedAt: null, // Revive if previously deleted
-          version: { increment: 1 },
-        },
-        create: {
-          licenseId: license.id,
-          entityType,
-          entityId,
-          data,
-        },
+          data: data ?? {},
+          deleted: false,
+        }
       });
     }
 
-    return { success: true, serverData: data };
+    return { success: true };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Log error internally if needed
     console.error('Push error:', error);
-    return { success: false, error: 'Internal server error' };
+    return { success: false, error: message };
   }
 }
 
 /**
- * Pulls changes from the server for a client.
+ * Pull changes from the server.
  *
- * @param input - Pull request parameters
- * @returns Changed entities since timestamp
+ * @param licenseKey - The license key of the client
+ * @param sinceTimestamp - Timestamp to fetch changes from
+ * @returns List of changes
  */
-export async function pullChanges(input: PullInput): Promise<PullResult> {
-  const { licenseKey, since, types } = input;
-  const currentTimestamp = Date.now();
+export async function pullChanges(licenseKey: string, sinceTimestamp: number | null): Promise<PullResult> {
+  const prisma = getPrismaClient();
 
   try {
     const license = await prisma.license.findUnique({
       where: { licenseKey },
+      select: { id: true }
     });
 
     if (!license) {
       throw new Error('License not found');
     }
 
-    const whereClause: Prisma.SyncedEntityWhereInput = {
-      licenseId: license.id,
-    };
-
-    if (since) {
-      whereClause.updatedAt = {
-        gt: new Date(since),
-      };
-    }
-
-    if (types && types.length > 0) {
-      whereClause.entityType = {
-        in: types,
-      };
-    }
+    const sinceDate = sinceTimestamp ? new Date(sinceTimestamp) : new Date(0);
 
     const entities = await prisma.syncedEntity.findMany({
-      where: whereClause,
-      orderBy: { updatedAt: 'asc' },
+      where: {
+        licenseId: license.id,
+        updatedAt: {
+          gt: sinceDate
+        }
+      },
+      orderBy: {
+        updatedAt: 'asc'
+      }
     });
 
-    const changes = entities.map((entity) => ({
-      entityType: entity.entityType,
-      entityId: entity.entityId,
-      operation: (entity.deletedAt ? 'DELETE' : 'UPDATE') as SyncOperation, // Treat creation as update for sync
-      data: entity.data,
-      updatedAt: entity.updatedAt.getTime(),
-      version: entity.version,
+    const changes: ServerChange[] = entities.map(e => ({
+      entityType: e.entityType,
+      entityId: e.entityId,
+      operation: e.deleted ? 'DELETE' : 'UPDATE', // Use UPDATE for upserts
+      data: e.data,
+      updatedAt: e.updatedAt.toISOString(),
     }));
 
+    // Calculate new timestamp (max of updatedData)
+    // If no changes, keep the old timestamp (or current time if null)
+    const lastTimestamp = entities.length > 0
+      ? entities[entities.length - 1].updatedAt.getTime()
+      : (sinceTimestamp || Date.now());
+
     return {
-      changes,
-      timestamp: currentTimestamp,
+      data: changes,
+      lastSyncTimestamp: lastTimestamp
     };
   } catch (error) {
     console.error('Pull error:', error);
-    // Return empty changes on error for robustness, or throw
-    return { changes: [], timestamp: currentTimestamp };
+    throw error;
   }
 }

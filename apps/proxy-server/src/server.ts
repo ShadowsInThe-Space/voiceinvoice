@@ -17,6 +17,9 @@ import { registerHealthRoutes } from './routes/health';
 import { registerTranscribeRoutes } from './routes/transcribe';
 import { registerEnrichRoutes } from './routes/enrich';
 import { registerLicenseRoutes } from './routes/license';
+import { registerSyncRoutes } from './routes/sync';
+import { createPrismaLicenseStore, setLicenseStore } from './services/license-store';
+import { getPrismaClient } from './services/prisma';
 
 /**
  * Server build options.
@@ -102,11 +105,24 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
     }),
   });
 
+  // Initialize License Store if Database URL is present
+  if (process.env.DATABASE_URL) {
+    try {
+      const prisma = getPrismaClient();
+      const licenseStore = createPrismaLicenseStore(prisma);
+      setLicenseStore(licenseStore);
+      server.log.info('Using Prisma License Store');
+    } catch (error) {
+      server.log.warn({ err: error }, 'Failed to initialize Prisma License Store, falling back to mock');
+    }
+  }
+
   // Register routes
   await registerHealthRoutes(server);
   await registerTranscribeRoutes(server);
   await registerEnrichRoutes(server);
   await registerLicenseRoutes(server);
+  await registerSyncRoutes(server);
 
   // Global error handler
   server.setErrorHandler((error: FastifyError, _request, reply) => {
