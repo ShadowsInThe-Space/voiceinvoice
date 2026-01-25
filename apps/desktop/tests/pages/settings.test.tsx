@@ -42,6 +42,26 @@ Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
 });
 
+// Mock window.voiceinvoice API for backend settings
+// Note: Set up a proper mock that works in test environment
+const settingsGetMock = vi.fn();
+const settingsUpdateMock = vi.fn();
+
+settingsGetMock.mockReturnValue(Promise.resolve({}));
+settingsUpdateMock.mockReturnValue(Promise.resolve(undefined));
+
+const voiceinvoiceMock = {
+  settings: {
+    get: settingsGetMock,
+    update: settingsUpdateMock,
+  },
+};
+
+// Set on window before component import
+(global as any).window = Object.assign(global.window || {}, {
+  voiceinvoice: voiceinvoiceMock,
+});
+
 // Import after mocks
 import SettingsPage from '../../src/pages/settings';
 
@@ -49,6 +69,9 @@ describe('Settings Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorageMock.clear();
+    // Reset mocks
+    settingsGetMock.mockReturnValue(Promise.resolve({}));
+    settingsUpdateMock.mockReturnValue(Promise.resolve(undefined));
   });
 
   afterEach(() => {
@@ -423,9 +446,12 @@ describe('Settings Page', () => {
       const confirmButton = screen.getByRole('button', { name: /ja, zuruecksetzen/i });
       await user.click(confirmButton);
 
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('voiceinvoice_webhook_enabled');
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('voiceinvoice_webhook_url');
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('voiceinvoice_webhook_backup_url');
+      // Backend settings are now updated via window.voiceinvoice.settings.update()
+      expect(settingsUpdateMock).toHaveBeenCalledWith({
+        n8nWebhookUrl: '',
+        voiceinvoice_workflow_enabled: 'false',
+        voiceinvoice_workflow_base_url: 'http://localhost:5678',
+      });
     });
   });
 });

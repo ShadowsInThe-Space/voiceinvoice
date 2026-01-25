@@ -12,7 +12,8 @@ import { MessageBubble, MessageBubbleProps } from './MessageBubble';
 import { DocumentUpload } from './DocumentUpload';
 import { VoiceRecorderButton } from '../VoiceRecorderButton';
 import { GeminiClient } from '../../lib/ai/gemini-client';
-import { Send, Loader2 } from 'lucide-react';
+import { useSpeechSynthesis } from '../../hooks/useSpeechSynthesis';
+import { Send, Loader2, Volume2, VolumeX } from 'lucide-react';
 
 /**
  * RAG-based chat interface component with voice support.
@@ -27,8 +28,19 @@ export function ChatInterface(): React.ReactElement {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [geminiClient, setGeminiClient] = useState<GeminiClient | null>(null);
+  const [autoSpeak, setAutoSpeak] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // TTS Hook
+  const {
+    speak,
+    stop: stopSpeaking,
+    speaking,
+    setUseGoogleTTS,
+    setSpeakingRate,
+  } = useSpeechSynthesis();
+
+  // Load Gemini client
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
     if (apiKey) {
@@ -37,6 +49,19 @@ export function ChatInterface(): React.ReactElement {
       console.error('Missing NEXT_PUBLIC_GOOGLE_API_KEY');
     }
   }, []);
+
+  // Load TTS settings from localStorage
+  useEffect(() => {
+    const savedProvider = localStorage.getItem('voiceinvoice_tts_provider');
+    const savedRate = localStorage.getItem('voiceinvoice_tts_rate');
+
+    if (savedProvider) {
+      setUseGoogleTTS(savedProvider === 'google');
+    }
+    if (savedRate) {
+      setSpeakingRate(parseFloat(savedRate));
+    }
+  }, [setUseGoogleTTS, setSpeakingRate]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -50,13 +75,8 @@ export function ChatInterface(): React.ReactElement {
     setIsLoading(true);
 
     try {
-      const webhookUrl = process.env.NEXT_PUBLIC_N8N_CHAT_WEBHOOK;
-      if (!webhookUrl) {
-        throw new Error('Chat webhook URL not configured');
-      }
-
-      // Call n8n webhook
-      const response = await fetch(webhookUrl, {
+      // Call our Mock RAG API (uses local SQLite invoices)
+      const response = await fetch('/api/chat/rag-mock', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -65,23 +85,28 @@ export function ChatInterface(): React.ReactElement {
       });
 
       if (!response.ok) {
-        throw new Error(`Chat failed: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Chat failed: ${response.statusText}`);
       }
 
       const data = await response.json();
-
-      // Assuming n8n returns { output: "answer" } or similar.
-      // Adjust based on actual n8n workflow response.
-      // If it returns a string directly or { text: ... }
-      const answer = data.output || data.text || data.answer || JSON.stringify(data);
+      const answer = data.answer || 'Keine Antwort erhalten.';
 
       setMessages((prev) => [...prev, { role: 'assistant', content: answer }]);
+
+      // Auto-speak assistant response if enabled
+      if (autoSpeak && answer) {
+        await speak(answer);
+      }
     } catch (error) {
       console.error('Chat error:', error);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'Entschuldigung, es ist ein Fehler aufgetreten.' },
-      ]);
+      const errorMsg = 'Entschuldigung, es ist ein Fehler aufgetreten.';
+      setMessages((prev) => [...prev, { role: 'assistant', content: errorMsg }]);
+
+      // Also speak error message if auto-speak enabled
+      if (autoSpeak) {
+        await speak(errorMsg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -126,7 +151,27 @@ export function ChatInterface(): React.ReactElement {
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col gap-4 p-4 md:p-8 max-w-5xl mx-auto w-full">
       <div className="flex items-center justify-between border-b pb-4">
-        <h1 className="text-2xl font-bold">Finanz-Assistent</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Finanz-Assistent</h1>
+
+          {/* Auto-Speak Toggle */}
+          <button
+            onClick={() => {
+              if (speaking) stopSpeaking();
+              setAutoSpeak((prev) => !prev);
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              autoSpeak
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            }`}
+            title={autoSpeak ? 'Voice Output: Ein' : 'Voice Output: Aus'}
+          >
+            {autoSpeak ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            <span className="hidden sm:inline">{autoSpeak ? 'Voice On' : 'Voice Off'}</span>
+          </button>
+        </div>
+
         <DocumentUpload />
       </div>
 

@@ -735,6 +735,7 @@ export {
   PipelineOrchestrator,
   PipelineStage,
   type TranscriptionResult,
+  type CleaningResult,
   type PipelineError,
   type StageLatencies,
   type PipelineResult,
@@ -742,6 +743,9 @@ export {
   type TranscriptionHandler,
   type PipelineConfig,
 } from './pipeline';
+
+// Re-export cleaner module
+export { cleanTranscript, type CleanerInput, type CleanerOutput } from './cleaner';
 
 // Re-export entity extraction module
 export {
