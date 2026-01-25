@@ -8,7 +8,6 @@
  */
 
 import React, { useState, useEffect, useCallback, FormEvent } from 'react';
-import { isValidWebhookUrl, WEBHOOK_STORAGE_KEYS } from '../lib/webhook';
 import { LogoUpload, LOGO_STORAGE_KEY } from '../components/LogoUpload';
 import Link from 'next/link';
 
@@ -51,13 +50,8 @@ export default function SettingsPage(): React.ReactElement {
   const [locale, setLocale] = useState('de-DE');
   const [ttsVoice, setTtsVoice] = useState('de-DE-Wavenet-C');
   const [ttsRate, setTtsRate] = useState(1.0);
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
-
-  // Webhook state
-  const [webhookEnabled, setWebhookEnabled] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState('');
-  const [webhookBackupUrl, setWebhookBackupUrl] = useState('');
-  const [webhookUrlError, setWebhookUrlError] = useState('');
 
   // UI state
   const [isSaving, setIsSaving] = useState(false);
@@ -77,14 +71,18 @@ export default function SettingsPage(): React.ReactElement {
     if (savedVoice) setTtsVoice(savedVoice);
     if (savedRate) setTtsRate(parseFloat(savedRate));
 
-    // Load webhook settings
-    const savedWebhookEnabled = localStorage.getItem(WEBHOOK_STORAGE_KEYS.enabled);
-    const savedWebhookUrl = localStorage.getItem(WEBHOOK_STORAGE_KEYS.url);
-    const savedWebhookBackupUrl = localStorage.getItem(WEBHOOK_STORAGE_KEYS.backupUrl);
-
-    if (savedWebhookEnabled) setWebhookEnabled(savedWebhookEnabled === 'true');
-    if (savedWebhookUrl) setWebhookUrl(savedWebhookUrl);
-    if (savedWebhookBackupUrl) setWebhookBackupUrl(savedWebhookBackupUrl);
+    // Load backend settings
+    if (typeof window !== 'undefined' && window.voiceinvoice) {
+      window.voiceinvoice.settings
+        .get()
+        .then((settings: unknown) => {
+          const typedSettings = settings as { n8nWebhookUrl?: string };
+          if (typedSettings && typedSettings.n8nWebhookUrl) {
+            setN8nWebhookUrl(typedSettings.n8nWebhookUrl);
+          }
+        })
+        .catch((err) => console.error('Failed to load backend settings:', err));
+    }
   }, []);
 
   /**
@@ -93,29 +91,6 @@ export default function SettingsPage(): React.ReactElement {
   const toggleApiKeyVisibility = useCallback(() => {
     setShowApiKey((prev) => !prev);
   }, []);
-
-  /**
-   * Validate webhook URL on blur.
-   */
-  const validateWebhookUrl = useCallback((url: string): boolean => {
-    if (!url) {
-      setWebhookUrlError('');
-      return true;
-    }
-    if (!isValidWebhookUrl(url)) {
-      setWebhookUrlError('Ungueltige Webhook URL');
-      return false;
-    }
-    setWebhookUrlError('');
-    return true;
-  }, []);
-
-  /**
-   * Handle webhook URL blur.
-   */
-  const handleWebhookUrlBlur = useCallback(() => {
-    validateWebhookUrl(webhookUrl);
-  }, [webhookUrl, validateWebhookUrl]);
 
   /**
    * Validate form.
@@ -149,10 +124,12 @@ export default function SettingsPage(): React.ReactElement {
         localStorage.setItem(STORAGE_KEYS.ttsVoice, ttsVoice);
         localStorage.setItem(STORAGE_KEYS.ttsRate, ttsRate.toString());
 
-        // Save webhook settings
-        localStorage.setItem(WEBHOOK_STORAGE_KEYS.enabled, String(webhookEnabled));
-        localStorage.setItem(WEBHOOK_STORAGE_KEYS.url, webhookUrl);
-        localStorage.setItem(WEBHOOK_STORAGE_KEYS.backupUrl, webhookBackupUrl);
+        // Save to backend
+        if (typeof window !== 'undefined' && window.voiceinvoice) {
+          await window.voiceinvoice.settings.update({
+            n8nWebhookUrl,
+          });
+        }
 
         setSaveStatus('success');
 
@@ -161,13 +138,14 @@ export default function SettingsPage(): React.ReactElement {
           setSaveStatus(null);
         }, 3000);
       } catch (err) {
+        console.error(err);
         setSaveStatus('error');
         setErrorMessage('Fehler beim Speichern der Einstellungen');
       } finally {
         setIsSaving(false);
       }
     },
-    [apiKey, locale, ttsVoice, ttsRate, webhookEnabled, webhookUrl, webhookBackupUrl, validateForm]
+    [apiKey, locale, ttsVoice, ttsRate, n8nWebhookUrl, validateForm]
   );
 
   /**
@@ -193,11 +171,6 @@ export default function SettingsPage(): React.ReactElement {
     localStorage.removeItem(STORAGE_KEYS.ttsVoice);
     localStorage.removeItem(STORAGE_KEYS.ttsRate);
 
-    // Remove webhook settings
-    localStorage.removeItem(WEBHOOK_STORAGE_KEYS.enabled);
-    localStorage.removeItem(WEBHOOK_STORAGE_KEYS.url);
-    localStorage.removeItem(WEBHOOK_STORAGE_KEYS.backupUrl);
-
     // Remove company logo
     localStorage.removeItem(LOGO_STORAGE_KEY);
 
@@ -206,10 +179,12 @@ export default function SettingsPage(): React.ReactElement {
     setLocale('de-DE');
     setTtsVoice('de-DE-Wavenet-C');
     setTtsRate(1.0);
-    setWebhookEnabled(false);
-    setWebhookUrl('');
-    setWebhookBackupUrl('');
-    setWebhookUrlError('');
+    setN8nWebhookUrl('');
+
+    if (typeof window !== 'undefined' && window.voiceinvoice) {
+      window.voiceinvoice.settings.update({ n8nWebhookUrl: '' }).catch(console.error);
+    }
+
     setShowResetDialog(false);
     setSaveStatus(null);
     setErrorMessage('');
@@ -229,6 +204,37 @@ export default function SettingsPage(): React.ReactElement {
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Einstellungen</h1>
 
       <form role="form" onSubmit={handleSave} className="space-y-8">
+        {/* Integration Section */}
+        <section role="group" aria-labelledby="integration-section">
+          <h2
+            id="integration-section"
+            className="text-lg font-medium text-gray-900 dark:text-white mb-4"
+          >
+            Integrationen
+          </h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+            <div>
+              <label
+                htmlFor="n8nWebhook"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                n8n Webhook URL
+              </label>
+              <input
+                type="url"
+                id="n8nWebhook"
+                value={n8nWebhookUrl}
+                onChange={(e) => setN8nWebhookUrl(e.target.value)}
+                placeholder="https://n8n.example.com/webhook/..."
+                className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                URL fuer Webhook-Trigger bei Statusaenderungen
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* API Configuration Section */}
         <section role="group" aria-labelledby="api-section">
           <h2 id="api-section" className="text-lg font-medium text-gray-900 dark:text-white mb-4">
@@ -384,89 +390,6 @@ export default function SettingsPage(): React.ReactElement {
                 Das Logo wird auf allen generierten PDF-Rechnungen angezeigt
               </p>
               <LogoUpload onLogoChange={handleLogoChange} />
-            </div>
-          </div>
-        </section>
-
-        {/* Webhook Section */}
-        <section role="group" aria-labelledby="webhook-section">
-          <h2
-            id="webhook-section"
-            className="text-lg font-medium text-gray-900 dark:text-white mb-4"
-          >
-            Automatisierung & Webhooks
-          </h2>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <label
-                  htmlFor="webhookEnabled"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Webhooks aktivieren
-                </label>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Sende Benachrichtigungen bei Rechnungs-Statusaenderungen
-                </p>
-              </div>
-              <input
-                type="checkbox"
-                id="webhookEnabled"
-                checked={webhookEnabled}
-                onChange={(e) => setWebhookEnabled(e.target.checked)}
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                aria-label="Webhooks aktivieren"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="webhookUrl"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                n8n Webhook URL
-              </label>
-              <input
-                type="url"
-                id="webhookUrl"
-                value={webhookUrl}
-                onChange={(e) => setWebhookUrl(e.target.value)}
-                onBlur={handleWebhookUrlBlur}
-                placeholder="https://n8n.example.com/webhook/..."
-                disabled={!webhookEnabled}
-                className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-invalid={!!webhookUrlError}
-                aria-describedby={webhookUrlError ? 'webhookUrl-error' : 'webhookUrl-hint'}
-              />
-              {webhookUrlError && (
-                <p id="webhookUrl-error" className="mt-1 text-sm text-red-600">
-                  {webhookUrlError}
-                </p>
-              )}
-              <p id="webhookUrl-hint" className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Wird bei jeder Rechnungs-Statusaenderung aufgerufen
-              </p>
-            </div>
-
-            <div>
-              <label
-                htmlFor="webhookBackupUrl"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                Backup Webhook URL
-              </label>
-              <input
-                type="url"
-                id="webhookBackupUrl"
-                value={webhookBackupUrl}
-                onChange={(e) => setWebhookBackupUrl(e.target.value)}
-                placeholder="https://backup.example.com/webhook/..."
-                disabled={!webhookEnabled}
-                className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Optional: Fallback URL bei Verbindungsproblemen
-              </p>
             </div>
           </div>
         </section>
