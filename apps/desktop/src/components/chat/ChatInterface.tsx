@@ -43,8 +43,19 @@ export function ChatInterface(): React.ReactElement {
   // Load Gemini client
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT;
+    const location = process.env.GOOGLE_CLOUD_LOCATION;
+    const recognizer = process.env.CHIRP3_RECOGNIZER;
+
     if (apiKey) {
-      setGeminiClient(new GeminiClient({ apiKey }));
+      setGeminiClient(
+        new GeminiClient({
+          apiKey,
+          projectId,
+          location,
+          recognizer,
+        })
+      );
     } else {
       console.error('Missing NEXT_PUBLIC_GOOGLE_API_KEY');
     }
