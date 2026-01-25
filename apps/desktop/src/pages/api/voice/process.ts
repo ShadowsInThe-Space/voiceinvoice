@@ -13,7 +13,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleChirpClient } from '@voiceinvoice/privacy-engine';
-import { generateExtractionPrompt } from '../../lib/ai/invoice-keywords';
+import { generateExtractionPrompt } from '../../../lib/ai/invoice-keywords';
 import formidable from 'formidable';
 import fs from 'fs';
 
