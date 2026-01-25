@@ -9,6 +9,12 @@ create table if not exists documents (
   embedding vector(768) -- 768 is the dimension for Gemini embeddings (text-embedding-004)
 );
 
+-- Create an index on the embedding column for efficient vector similarity search
+create index if not exists documents_embedding_ivfflat_idx
+on documents
+using ivfflat (embedding vector_cosine_ops)
+with (lists = 100);
+
 -- Create a function to search for documents
 create or replace function match_documents (
   query_embedding vector(768),

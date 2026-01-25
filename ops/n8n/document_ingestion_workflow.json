@@ -88,7 +88,7 @@
       "main": [
         [
           {
-            "node": "Supabase Vector Store",
+            "node": "Default File Loader",
             "type": "main",
             "index": 0
           }

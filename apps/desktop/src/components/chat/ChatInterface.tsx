@@ -70,7 +70,7 @@ export function ChatInterface() {
     }
   };
 
-  const handleVoiceRecordingComplete = async (blob: Blob) => {
+  const handleVoiceRecordingComplete = async (blob: Blob, duration: number) => {
     if (!geminiClient) {
         setMessages((prev) => [
             ...prev,
@@ -85,23 +85,36 @@ export function ChatInterface() {
       const reader = new FileReader();
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
-        const base64Data = reader.result as string;
-        const base64 = base64Data.split(',')[1]; // Remove data URL prefix
+        try {
+          const base64Data = reader.result as string;
+          const base64 = base64Data.split(',')[1]; // Remove data URL prefix
 
-        const transcription = await geminiClient.transcribe(base64, blob.type);
+          const transcription = await geminiClient.transcribe(base64, blob.type);
 
-        if (transcription.success && transcription.text) {
-          handleSendMessage(transcription.text);
-        } else {
+          if (transcription.success && transcription.text) {
+            handleSendMessage(transcription.text);
+          } else {
             setMessages((prev) => [
                 ...prev,
                 { role: 'assistant', content: 'Konnte Audio nicht verstehen.' },
             ]);
-            setIsLoading(false);
+          }
+        } catch (error) {
+          console.error('Transcription error:', error);
+          setMessages((prev) => [
+            ...prev,
+            { role: 'assistant', content: 'Fehler bei der Transkription des Audios.' },
+          ]);
+        } finally {
+          setIsLoading(false);
         }
       };
     } catch (error) {
-      console.error('Transcription error:', error);
+      console.error('Transcription setup error:', error);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Fehler bei der Transkription des Audios.' },
+      ]);
       setIsLoading(false);
     }
   };
