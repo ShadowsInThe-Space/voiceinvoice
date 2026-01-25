@@ -91,6 +91,12 @@ describe('Settings Page', () => {
       expect(screen.getByText(/api-konfiguration/i)).toBeInTheDocument();
     });
 
+    it('should display integration section', () => {
+      render(<SettingsPage />);
+
+      expect(screen.getByText(/integration/i)).toBeInTheDocument();
+    });
+
     it('should display language settings section', () => {
       render(<SettingsPage />);
 
@@ -153,6 +159,48 @@ describe('Settings Page', () => {
       await user.click(toggleButton);
 
       expect(apiKeyInput).toHaveAttribute('type', 'text');
+    });
+  });
+
+  describe('Integration Settings', () => {
+    it('should have an input field for n8n Webhook URL', () => {
+      render(<SettingsPage />);
+
+      const webhookInput = screen.getByLabelText(/n8n webhook url/i);
+      expect(webhookInput).toBeInTheDocument();
+      expect(webhookInput).toHaveAttribute('type', 'url');
+    });
+
+    it('should load saved webhook URL from localStorage', () => {
+      localStorageMock.getItem.mockImplementation((key: string) => {
+        if (key === 'voiceinvoice_n8n_webhook_url') return 'https://test.com/webhook';
+        return null;
+      });
+
+      render(<SettingsPage />);
+
+      const webhookInput = screen.getByLabelText(/n8n webhook url/i) as HTMLInputElement;
+      expect(webhookInput.value).toBe('https://test.com/webhook');
+    });
+
+    it('should save webhook URL to localStorage on submit', async () => {
+      const user = userEvent.setup();
+      render(<SettingsPage />);
+
+      // First add an API key so validation passes
+      const apiKeyInput = screen.getByLabelText(/google ai api key/i);
+      await user.type(apiKeyInput, 'test-key');
+
+      const webhookInput = screen.getByLabelText(/n8n webhook url/i);
+      await user.type(webhookInput, 'https://new-webhook.com');
+
+      const saveButton = screen.getByRole('button', { name: /speichern/i });
+      await user.click(saveButton);
+
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(
+        'voiceinvoice_n8n_webhook_url',
+        'https://new-webhook.com'
+      );
     });
   });
 
