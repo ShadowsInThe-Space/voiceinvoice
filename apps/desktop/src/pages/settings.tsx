@@ -47,6 +47,7 @@ export default function SettingsPage(): React.ReactElement {
   const [locale, setLocale] = useState('de-DE');
   const [ttsVoice, setTtsVoice] = useState('de-DE-Wavenet-C');
   const [ttsRate, setTtsRate] = useState(1.0);
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
 
   // UI state
@@ -66,6 +67,19 @@ export default function SettingsPage(): React.ReactElement {
     if (savedLocale) setLocale(savedLocale);
     if (savedVoice) setTtsVoice(savedVoice);
     if (savedRate) setTtsRate(parseFloat(savedRate));
+
+    // Load backend settings
+    if (typeof window !== 'undefined' && window.voiceinvoice) {
+      window.voiceinvoice.settings
+        .get()
+        .then((settings: unknown) => {
+          const typedSettings = settings as { n8nWebhookUrl?: string };
+          if (typedSettings && typedSettings.n8nWebhookUrl) {
+            setN8nWebhookUrl(typedSettings.n8nWebhookUrl);
+          }
+        })
+        .catch((err) => console.error('Failed to load backend settings:', err));
+    }
   }, []);
 
   /**
@@ -107,6 +121,13 @@ export default function SettingsPage(): React.ReactElement {
         localStorage.setItem(STORAGE_KEYS.ttsVoice, ttsVoice);
         localStorage.setItem(STORAGE_KEYS.ttsRate, ttsRate.toString());
 
+        // Save to backend
+        if (typeof window !== 'undefined' && window.voiceinvoice) {
+          await window.voiceinvoice.settings.update({
+            n8nWebhookUrl,
+          });
+        }
+
         setSaveStatus('success');
 
         // Clear success message after 3 seconds
@@ -114,13 +135,14 @@ export default function SettingsPage(): React.ReactElement {
           setSaveStatus(null);
         }, 3000);
       } catch (err) {
+        console.error(err);
         setSaveStatus('error');
         setErrorMessage('Fehler beim Speichern der Einstellungen');
       } finally {
         setIsSaving(false);
       }
     },
-    [apiKey, locale, ttsVoice, ttsRate, validateForm]
+    [apiKey, locale, ttsVoice, ttsRate, n8nWebhookUrl, validateForm]
   );
 
   /**
@@ -151,6 +173,12 @@ export default function SettingsPage(): React.ReactElement {
     setLocale('de-DE');
     setTtsVoice('de-DE-Wavenet-C');
     setTtsRate(1.0);
+    setN8nWebhookUrl('');
+
+    if (typeof window !== 'undefined' && window.voiceinvoice) {
+      window.voiceinvoice.settings.update({ n8nWebhookUrl: '' }).catch(console.error);
+    }
+
     setShowResetDialog(false);
     setSaveStatus(null);
     setErrorMessage('');
@@ -163,6 +191,37 @@ export default function SettingsPage(): React.ReactElement {
       </h1>
 
       <form role="form" onSubmit={handleSave} className="space-y-8">
+        {/* Integration Section */}
+        <section role="group" aria-labelledby="integration-section">
+          <h2
+            id="integration-section"
+            className="text-lg font-medium text-gray-900 dark:text-white mb-4"
+          >
+            Integrationen
+          </h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+            <div>
+              <label
+                htmlFor="n8nWebhook"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                n8n Webhook URL
+              </label>
+              <input
+                type="url"
+                id="n8nWebhook"
+                value={n8nWebhookUrl}
+                onChange={(e) => setN8nWebhookUrl(e.target.value)}
+                placeholder="https://n8n.example.com/webhook/..."
+                className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                URL fuer Webhook-Trigger bei Statusaenderungen
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* API Configuration Section */}
         <section role="group" aria-labelledby="api-section">
           <h2 id="api-section" className="text-lg font-medium text-gray-900 dark:text-white mb-4">
