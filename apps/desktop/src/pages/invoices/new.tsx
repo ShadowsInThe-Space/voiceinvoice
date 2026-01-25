@@ -9,6 +9,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { VoiceRecorderButton } from '../../components/VoiceRecorderButton';
+import { KeywordHelp } from '../../components/KeywordHelp';
 import {
   ChevronLeft,
   FileText,
@@ -296,21 +297,24 @@ export default function NewInvoicePage(): React.ReactElement {
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-10 bg-background min-h-screen">
       {/* Page Header */}
-      <div className="flex items-center gap-6">
-        <button
-          type="button"
-          onClick={handleBack}
-          className="p-3 rounded-xl bg-card border border-border shadow-sm text-muted-foreground hover:text-primary hover:border-primary/30 transition-all group"
-          aria-label="Zurück"
-        >
-          <ChevronLeft className="w-6 h-6 group-hover:-translate-x-1 transition-transform" />
-        </button>
-        <div>
-          <h1 className="text-4xl font-black text-foreground tracking-tight">Neue Rechnung</h1>
-          <p className="text-muted-foreground font-medium">
-            Erstellen Sie Dokumente in Sekundenschnelle per Stimme.
-          </p>
+      <div className="flex items-center justify-between gap-6">
+        <div className="flex items-center gap-6">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-3 rounded-xl bg-card border border-border shadow-sm text-muted-foreground hover:text-primary hover:border-primary/30 transition-all group"
+            aria-label="Zurück"
+          >
+            <ChevronLeft className="w-6 h-6 group-hover:-translate-x-1 transition-transform" />
+          </button>
+          <div>
+            <h1 className="text-4xl font-black text-foreground tracking-tight">Neue Rechnung</h1>
+            <p className="text-muted-foreground font-medium">
+              Erstellen Sie Dokumente in Sekundenschnelle per Stimme.
+            </p>
+          </div>
         </div>
+        <KeywordHelp />
       </div>
 
       {/* Status Messages - Floating Alerts */}
