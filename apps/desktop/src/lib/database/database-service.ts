@@ -584,43 +584,57 @@ export class DatabaseService {
    * Gets invoice statistics.
    */
   async getInvoiceStatistics(): Promise<InvoiceStatistics> {
-    const invoices = await this.prisma.$queryRawUnsafe<Invoice[]>(
-      'SELECT * FROM Invoice WHERE deletedAt IS NULL'
+    const results = await this.prisma.$queryRawUnsafe<
+      Array<{ status: string; count: bigint; totalSum: number | null }>
+    >(
+      `SELECT
+         status,
+         COUNT(*) as count,
+         SUM(total) as totalSum
+       FROM Invoice
+       WHERE deletedAt IS NULL
+       GROUP BY status`
     );
 
-    let totalRevenue = 0;
-    let totalOutstanding = 0;
+    let totalInvoices = 0;
     let draftInvoices = 0;
     let sentInvoices = 0;
     let paidInvoices = 0;
     let overdueInvoices = 0;
     let cancelledInvoices = 0;
+    let totalRevenue = 0;
+    let totalOutstanding = 0;
 
-    for (const invoice of invoices) {
-      switch (invoice.status) {
+    for (const row of results) {
+      const count = Number(row.count);
+      const totalSum = row.totalSum ?? 0;
+
+      totalInvoices += count;
+
+      switch (row.status) {
         case 'DRAFT':
-          draftInvoices++;
+          draftInvoices = count;
           break;
         case 'SENT':
-          sentInvoices++;
-          totalOutstanding += invoice.total;
+          sentInvoices = count;
+          totalOutstanding += totalSum;
           break;
         case 'PAID':
-          paidInvoices++;
-          totalRevenue += invoice.total;
+          paidInvoices = count;
+          totalRevenue += totalSum;
           break;
         case 'OVERDUE':
-          overdueInvoices++;
-          totalOutstanding += invoice.total;
+          overdueInvoices = count;
+          totalOutstanding += totalSum;
           break;
         case 'CANCELLED':
-          cancelledInvoices++;
+          cancelledInvoices = count;
           break;
       }
     }
 
     return {
-      totalInvoices: invoices.length,
+      totalInvoices,
       draftInvoices,
       sentInvoices,
       paidInvoices,
