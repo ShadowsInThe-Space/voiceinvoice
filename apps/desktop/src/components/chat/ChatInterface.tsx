@@ -4,7 +4,6 @@ import { DocumentUpload } from './DocumentUpload';
 import { VoiceRecorderButton } from '../VoiceRecorderButton';
 import { GeminiClient } from '../../lib/ai/gemini-client';
 import { Send, Loader2 } from 'lucide-react';
-import { cn } from '../../lib/utils';
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<MessageBubbleProps[]>([]);
