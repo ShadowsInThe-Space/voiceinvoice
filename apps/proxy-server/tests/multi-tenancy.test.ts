@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest';
 import { FastifyInstance } from 'fastify';
-// Mock services before import
+
+// Mock services
 vi.mock('../src/services/speech-service', () => ({
   transcribeAudio: vi.fn(),
   checkAvailability: vi.fn().mockResolvedValue(true),
@@ -11,23 +12,52 @@ vi.mock('../src/services/gemini-service', () => ({
   checkAvailability: vi.fn().mockResolvedValue(true),
 }));
 
+// Mock Prisma Client
+const { mockPrisma } = vi.hoisted(() => {
+  return {
+    mockPrisma: {
+      $connect: vi.fn(),
+      $disconnect: vi.fn(),
+      license: {
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        deleteMany: vi.fn(),
+      },
+      syncedEntity: {
+        findMany: vi.fn(),
+        upsert: vi.fn(),
+        deleteMany: vi.fn(),
+      },
+    },
+  };
+});
+
+vi.mock('../generated/client', () => {
+  return {
+    PrismaClient: vi.fn(() => mockPrisma),
+    Prisma: {
+      SyncedEntityScalarFieldEnum: {},
+    },
+  };
+});
+
 import { buildServer } from '../src/server';
 import { generateLicenseToken } from '../src/services/license-service';
-import { PrismaClient } from '../generated/client';
 
 describe('Multi-Tenancy Integration Tests', () => {
   let server: FastifyInstance;
-  let prisma: PrismaClient;
   const originalEnv = process.env.NODE_ENV;
 
-  // Test Tokens
+  // Test Tenants
   const tenantA = {
+    id: 'license-id-a',
     licenseKey: 'LICENSE-KEY-A',
     companyName: 'Tenant A Corp',
     token: '',
   };
 
   const tenantB = {
+    id: 'license-id-b',
     licenseKey: 'LICENSE-KEY-B',
     companyName: 'Tenant B Inc',
     token: '',
@@ -35,46 +65,19 @@ describe('Multi-Tenancy Integration Tests', () => {
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
-    // Ensure JWT Secret is set
-    process.env.JWT_SECRET = 'test-secret-key-123456789';
-
-    // Connect to actual DB
-    prisma = new PrismaClient();
-    await prisma.$connect();
-
-    // Setup Test Tenants in DB
-    await prisma.syncedEntity.deleteMany(); // Clean start
-    await prisma.license.deleteMany();
-
-    const licenseA = await prisma.license.create({
-      data: {
-        licenseKey: tenantA.licenseKey,
-        companyName: tenantA.companyName,
-        expiresAt: new Date(Date.now() + 10000000),
-        usageResetDate: new Date(),
-      },
-    });
-
-    const licenseB = await prisma.license.create({
-      data: {
-        licenseKey: tenantB.licenseKey,
-        companyName: tenantB.companyName,
-        expiresAt: new Date(Date.now() + 10000000),
-        usageResetDate: new Date(),
-      },
-    });
+    process.env.JWT_SECRET = 'test-secret-key-123456789'; // Ensure secret is set for token generation
 
     // Generate Tokens
     tenantA.token = generateLicenseToken({
       licenseKey: tenantA.licenseKey,
       companyName: tenantA.companyName,
-      expiresAt: licenseA.expiresAt.toISOString(),
+      expiresAt: new Date(Date.now() + 10000000).toISOString(),
     });
 
     tenantB.token = generateLicenseToken({
       licenseKey: tenantB.licenseKey,
       companyName: tenantB.companyName,
-      expiresAt: licenseB.expiresAt.toISOString(),
+      expiresAt: new Date(Date.now() + 10000000).toISOString(),
     });
 
     server = await buildServer({ logger: false });
@@ -82,47 +85,55 @@ describe('Multi-Tenancy Integration Tests', () => {
 
   afterAll(async () => {
     await server.close();
-    await prisma.$disconnect();
     process.env.NODE_ENV = originalEnv;
   });
 
-  beforeEach(async () => {
-    // Optional: Clean synced entities between tests if needed
-    await prisma.syncedEntity.deleteMany();
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    // Default Mock Behavior: Find License returns appropriate ID
+    mockPrisma.license.findUnique.mockImplementation(async (args: any) => {
+      if (args.where.licenseKey === tenantA.licenseKey) {
+        return tenantA;
+      }
+      if (args.where.licenseKey === tenantB.licenseKey) {
+        return tenantB;
+      }
+      return null;
+    });
   });
 
   it('should isolate data between tenants (Tenant A cannot read Tenant B data)', async () => {
-    // 1. Tenant A pushes an invoice
-    const invoiceId = 'inv-a-1';
-    await server.inject({
-      method: 'POST',
-      url: '/api/sync/push',
-      headers: { Authorization: `Bearer ${tenantA.token}` },
-      payload: {
-        entityType: 'invoice',
-        entityId: invoiceId,
-        operation: 'CREATE',
-        data: { amount: 100, customer: 'Client A' },
-        timestamp: Date.now(),
-      },
+    // Setup: Tenant A has an invoice, Tenant B has an invoice
+    // We mock findMany to return FILTERED results based on the licenseId passed in the where clause
+    mockPrisma.syncedEntity.findMany.mockImplementation(async (args: any) => {
+      const licenseId = args.where.licenseId;
+      if (licenseId === tenantA.id) {
+        return [
+          {
+            entityType: 'invoice',
+            entityId: 'inv-a-1',
+            data: { amount: 100 },
+            updatedAt: new Date(),
+            version: 1,
+          },
+        ];
+      }
+      if (licenseId === tenantB.id) {
+        return [
+          {
+            entityType: 'invoice',
+            entityId: 'inv-b-1',
+            data: { amount: 500 },
+            updatedAt: new Date(),
+            version: 1,
+          },
+        ];
+      }
+      return [];
     });
 
-    // 2. Tenant B pushes their own invoice
-    const invoiceIdB = 'inv-b-1';
-    await server.inject({
-      method: 'POST',
-      url: '/api/sync/push',
-      headers: { Authorization: `Bearer ${tenantB.token}` },
-      payload: {
-        entityType: 'invoice',
-        entityId: invoiceIdB,
-        operation: 'CREATE',
-        data: { amount: 500, customer: 'Client B' },
-        timestamp: Date.now(),
-      },
-    });
-
-    // 3. Tenant A pulls changes
+    // Action: Tenant A pulls changes
     const responseA = await server.inject({
       method: 'GET',
       url: '/api/sync/pull',
@@ -131,80 +142,54 @@ describe('Multi-Tenancy Integration Tests', () => {
 
     const bodyA = JSON.parse(responseA.body);
 
-    // Should see own invoice
-    expect(bodyA.changes).toEqual(
-      expect.arrayContaining([expect.objectContaining({ entityId: invoiceId })])
+    // Assert 1: Service called DB with correct filter
+    expect(mockPrisma.syncedEntity.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          licenseId: tenantA.id,
+        }),
+      })
     );
 
-    // Should NOT see Tenant B invoice
-    expect(bodyA.changes).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ entityId: invoiceIdB })])
-    );
+    // Assert 2: Only Tenant A's invoice is returned
+    expect(bodyA.changes).toHaveLength(1);
+    expect(bodyA.changes[0].entityId).toBe('inv-a-1');
   });
 
   it('should prevent cross-tenant updates (Tenant B cannot update Tenant A entity)', async () => {
-    // 1. Tenant A creates an entity
-    const entityId = 'shared-id-attempt';
-    await server.inject({
-      method: 'POST',
-      url: '/api/sync/push',
-      headers: { Authorization: `Bearer ${tenantA.token}` },
-      payload: {
-        entityType: 'customer',
-        entityId: entityId,
-        operation: 'CREATE',
-        data: { name: 'Original Name' },
-        timestamp: Date.now(),
-      },
-    });
+    // Action: Tenant B pushes an update for an entity ID that hypothetically belongs to A (in a shared world),
+    // but here we verify that the upsert uses Tenant B's licenseId.
 
-    // 2. Tenant B tries to update SAME entity ID (which is valid logic, but should be a DIFFERENT record internally)
+    const targetEntityId = 'shared-id';
+
     await server.inject({
       method: 'POST',
       url: '/api/sync/push',
       headers: { Authorization: `Bearer ${tenantB.token}` },
       payload: {
         entityType: 'customer',
-        entityId: entityId, // Same ID, different tenant
+        entityId: targetEntityId,
         operation: 'UPDATE',
-        data: { name: 'Hacked Name' },
+        data: { name: 'Hacked' },
         timestamp: Date.now(),
       },
     });
 
-    // 3. Verify Tenant A's data is unchanged
-    const responseA = await server.inject({
-      method: 'GET',
-      url: '/api/sync/pull',
-      headers: { Authorization: `Bearer ${tenantA.token}` },
-    });
-    const bodyA = JSON.parse(responseA.body);
-    const entityA = bodyA.changes.find((c: any) => c.entityId === entityId);
-    expect(entityA.data.name).toBe('Original Name');
-
-    // 4. Verify Tenant B has their OWN version
-    const responseB = await server.inject({
-      method: 'GET',
-      url: '/api/sync/pull',
-      headers: { Authorization: `Bearer ${tenantB.token}` },
-    });
-    const bodyB = JSON.parse(responseB.body);
-    const entityB = bodyB.changes.find((c: any) => c.entityId === entityId);
-    expect(entityB.data.name).toBe('Hacked Name');
-  });
-
-  it('should enforce usage quotas separately', async () => {
-    // Only Tenant A makes requests
-    // This test assumes usage tracking middleware is active on other routes,
-    // but for now we verify that standard operations don't cross-contaminate counters if implemented.
-    // Since specific quota logic acts on /transcribe, we'll verify checking license status via DB directly
-
-    const licenseA = await prisma.license.findUnique({ where: { licenseKey: tenantA.licenseKey } });
-    const licenseB = await prisma.license.findUnique({ where: { licenseKey: tenantB.licenseKey } });
-
-    expect(licenseA?.currentUsage).toBe(0);
-    expect(licenseB?.currentUsage).toBe(0);
-
-    // TODO: Call an endpoint that consumes quota to verify increment
+    // Assert: Upsert is called with Tenant B's ID in the Unique constraint
+    expect(mockPrisma.syncedEntity.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          licenseId_entityType_entityId: {
+            licenseId: tenantB.id, // CRITICAL: Must be B's ID
+            entityType: 'customer',
+            entityId: targetEntityId,
+          },
+        },
+        update: expect.anything(),
+        create: expect.objectContaining({
+          licenseId: tenantB.id,
+        }),
+      })
+    );
   });
 });

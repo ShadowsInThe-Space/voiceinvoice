@@ -206,6 +206,22 @@ app.whenReady().then(() => {
       mainWindow = createMainWindow();
     }
   });
+
+  // Check for updates in production
+  if (!isDev) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { autoUpdater } = require('electron-updater');
+    console.log('Checking for updates...');
+
+    // Allow prereleases (e.g. beta)
+    autoUpdater.allowPrerelease = true;
+
+    // Check and notify
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    autoUpdater.checkForUpdatesAndNotify().catch((err: any) => {
+      console.error('Failed to check for updates:', err);
+    });
+  }
 });
 
 app.on('window-all-closed', () => {

@@ -6,7 +6,7 @@
   "main": "dist/electron/main.js",
   "scripts": {
     "dev": "next dev -p 3002",
-    "dev:electron": "tsc electron/main.ts --outDir dist/electron --esModuleInterop --skipLibCheck && concurrently \"npm run dev\" \"wait-on http://localhost:3002 && electron . --no-sandbox\"",
+    "dev:electron": "tsc electron/main.ts --outDir dist/electron --esModuleInterop --skipLibCheck && concurrently \"npm run dev\" \"wait-on http://localhost:3002 && NODE_ENV=development ELECTRON_DEV_URL=http://localhost:3002 electron . --no-sandbox\"",
     "build": "next build",
     "build:electron": "tsc electron/main.ts --outDir dist/electron --esModuleInterop --skipLibCheck && next build && electron-builder",
     "start": "next start",
@@ -50,6 +50,7 @@
     "concurrently": "^8.2.0",
     "electron": "^35.2.0",
     "electron-builder": "^25.1.8",
+    "electron-updater": "^6.1.7",
     "esbuild": ">=0.25.0",
     "eslint-config-next": "^14.1.0",
     "jsdom": "^24.0.0",
@@ -67,11 +68,32 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Shadows-In-The-Space",
+        "repo": "invoice_finance_app"
+      }
+    ],
     "files": [
       "electron/**/*",
       "dist/electron/**/*",
       ".next/**/*",
-      "public/**/*"
+      "public/**/*",
+      "node_modules/.prisma/**/*",
+      "node_modules/@prisma/**/*",
+      "node_modules/@prisma/client/.prisma/**/*",
+      "!**/.turbo/**",
+      "!**/coverage/**"
+    ],
+    "asarUnpack": [
+      "node_modules/.prisma/**"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/.prisma",
+        "to": "app/node_modules/.prisma"
+      }
     ],
     "linux": {
       "target": [
