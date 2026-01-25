@@ -10,7 +10,6 @@
  * This module ensures GDPR compliance by processing all
  * personal data before transmission to external services.
  *
- * @packageDocumentation
  * @module @voiceinvoice/privacy-engine
  */
 
@@ -413,3 +412,30 @@ export function deanonymize(anonymizedText: string, tokenMap: TokenMap): string 
  * Privacy Engine version for compatibility checking.
  */
 export const PRIVACY_ENGINE_VERSION = '0.1.0';
+
+// ============================================
+// Dual-Layer Privacy Exports
+// ============================================
+
+export {
+  // Classes
+  ServerPrivacyLayer,
+  ClientPrivacyLayer,
+  DualLayerPrivacy,
+  PrivacyTokenManager,
+  // Types
+  type ChirpRedactionConfig,
+  type FuzzyMatchConfig,
+  type PrivacyToken,
+  type ChirpRedaction,
+  type ChirpTranscriptionResult,
+  type ChirpClient,
+  type ServerPrivacyLayerConfig,
+  type ClientPrivacyLayerConfig,
+  type ServerPrivacyResult,
+  type CustomerMatch,
+  type ClientPrivacyResult,
+  type DualLayerResult,
+  type TextProcessingResult,
+  type DualLayerConfig,
+} from './dual-layer-privacy';
