@@ -10,6 +10,7 @@ import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { VoiceRecorderButton } from '../../components/VoiceRecorderButton';
 import { ChevronLeft, FileText, Send, Download, Sparkles, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { PDFExporter, type PDFExportOptions, type Invoice as ExportInvoice, type Customer as ExportCustomer } from '../../lib/export/pdf-exporter';
 
 /**
  * Invoice item type.
@@ -50,6 +51,24 @@ function formatCurrency(amount: number): string {
     style: 'currency',
     currency: 'EUR',
   }).format(amount);
+}
+
+/**
+ * Helper to get company info from localStorage.
+ */
+function getCompanyInfo() {
+  if (typeof window === 'undefined') return undefined;
+
+  return {
+    name: localStorage.getItem('voiceinvoice_company_name') || 'Meine Firma',
+    address: localStorage.getItem('voiceinvoice_company_address') || '',
+    taxId: localStorage.getItem('voiceinvoice_company_tax_id') || undefined,
+    bankInfo: localStorage.getItem('voiceinvoice_company_bank_info') || undefined,
+    phone: localStorage.getItem('voiceinvoice_company_phone') || undefined,
+    email: localStorage.getItem('voiceinvoice_company_email') || undefined,
+    website: localStorage.getItem('voiceinvoice_company_website') || undefined,
+    logoBase64: localStorage.getItem('voiceinvoice_company_logo') || undefined,
+  };
 }
 
 /**
@@ -138,16 +157,83 @@ export default function NewInvoicePage(): React.ReactElement {
     setIsExporting(true);
     setExportSuccess(false);
     setError(null);
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const companyInfo = getCompanyInfo();
+      const exporter = new PDFExporter();
+
+      // Map invoice to export format
+      const exportInvoice: ExportInvoice = {
+        id: invoice.id,
+        number: invoice.number,
+        customerId: invoice.customerId,
+        subtotal: invoice.subtotal,
+        taxRate: invoice.taxRate,
+        taxAmount: invoice.taxAmount,
+        total: invoice.total,
+        currency: 'EUR',
+        status: invoice.status,
+        issuedAt: invoice.createdAt,
+        dueAt: new Date(invoice.createdAt.getTime() + 14 * 24 * 60 * 60 * 1000), // 14 days due
+        paidAt: null,
+        voiceRecordingId: null,
+        transcription: transcription,
+        notes: null,
+        paymentTerms: 'Zahlbar innerhalb von 14 Tagen',
+        createdAt: invoice.createdAt,
+        updatedAt: invoice.createdAt,
+        deletedAt: null,
+        syncVersion: 0,
+        items: invoice.items.map(item => ({
+          id: item.id,
+          invoiceId: invoice.id,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total,
+          category: null,
+          createdAt: invoice.createdAt,
+          updatedAt: invoice.createdAt,
+          syncVersion: 0
+        }))
+      };
+
+      const customer: ExportCustomer = {
+        id: invoice.customerId,
+        name: invoice.customer.name,
+        email: null,
+        phone: null,
+        address: null,
+        city: null,
+        zipCode: null,
+        country: null,
+        taxId: null,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        syncVersion: 0
+      };
+
+      const options: PDFExportOptions = {
+        invoice: exportInvoice,
+        customer: customer,
+        companyInfo: companyInfo,
+        language: 'de'
+      };
+
+      const blob = await exporter.generateInvoicePDF(options);
+      await exporter.saveToFile(blob, `Rechnung-${invoice.number}.pdf`);
+
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);
     } catch (err) {
+      console.error(err);
       setError(err instanceof Error ? err.message : 'PDF Fehler');
     } finally {
       setIsExporting(false);
     }
-  }, [invoice]);
+  }, [invoice, transcription]);
 
   const handleBack = useCallback(() => router.back(), [router]);
 
@@ -369,4 +455,3 @@ export default function NewInvoicePage(): React.ReactElement {
     </div>
   );
 }
-

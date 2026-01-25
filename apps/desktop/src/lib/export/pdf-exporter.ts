@@ -83,6 +83,7 @@ export interface CompanyInfo {
   phone?: string;
   email?: string;
   website?: string;
+  logoBase64?: string;
 }
 
 /**
@@ -322,21 +323,33 @@ export class PDFExporter {
   }
 
   /**
-   * Renders the header with company logo placeholder.
+   * Renders the header with company logo.
    */
   private renderHeader(doc: jsPDF, companyInfo?: CompanyInfo, _labels?: InvoiceLabels): void {
     const { marginLeft, logoAreaTop, logoAreaHeight, contentWidth } = LAYOUT;
 
-    // Logo placeholder area (dashed rectangle)
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineDashPattern([2, 2], 0);
-    doc.rect(marginLeft, logoAreaTop, 50, logoAreaHeight);
-    doc.setLineDashPattern([], 0);
+    if (companyInfo?.logoBase64) {
+      // Render actual logo if available
+      try {
+        // Keep aspect ratio
+        const logoWidth = 50;
+        const logoHeight = logoAreaHeight;
 
-    // Placeholder text
-    doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    doc.text('Logo', marginLeft + 25, logoAreaTop + logoAreaHeight / 2, { align: 'center' });
+        let format = 'PNG';
+        if (companyInfo.logoBase64.startsWith('data:image/jpeg') || companyInfo.logoBase64.startsWith('data:image/jpg')) {
+          format = 'JPEG';
+        }
+
+        doc.addImage(companyInfo.logoBase64, format, marginLeft, logoAreaTop, logoWidth, logoHeight, undefined, 'FAST');
+      } catch (e) {
+        console.warn('Failed to render logo:', e);
+        // Fallback to placeholder on error
+        this.renderLogoPlaceholder(doc, marginLeft, logoAreaTop, logoAreaHeight);
+      }
+    } else {
+      // Render placeholder
+      this.renderLogoPlaceholder(doc, marginLeft, logoAreaTop, logoAreaHeight);
+    }
 
     // Company info on the right
     if (companyInfo) {
@@ -367,6 +380,22 @@ export class PDFExporter {
         doc.text(companyInfo.website, marginLeft + contentWidth, y, { align: 'right' });
       }
     }
+  }
+
+  /**
+   * Renders logo placeholder.
+   */
+  private renderLogoPlaceholder(doc: jsPDF, x: number, y: number, h: number): void {
+    // Logo placeholder area (dashed rectangle)
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineDashPattern([2, 2], 0);
+    doc.rect(x, y, 50, h);
+    doc.setLineDashPattern([], 0);
+
+    // Placeholder text
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text('Logo', x + 25, y + h / 2, { align: 'center' });
   }
 
   /**
