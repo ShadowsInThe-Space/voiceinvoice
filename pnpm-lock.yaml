@@ -64,18 +64,6 @@ importers:
       '@prisma/client':
         specifier: ^5.9.0
         version: 5.22.0(prisma@5.22.0)
-      '@voiceinvoice/ai-orchestrator':
-        specifier: workspace:*
-        version: link:../../packages/ai-orchestrator
-      '@voiceinvoice/database':
-        specifier: workspace:*
-        version: link:../../packages/database
-      '@voiceinvoice/privacy-engine':
-        specifier: workspace:*
-        version: link:../../packages/privacy-engine
-      '@voiceinvoice/shared-types':
-        specifier: workspace:*
-        version: link:../../packages/shared-types
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -128,6 +116,18 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^4.2.0
         version: 4.7.0(vite@7.3.1)
+      '@voiceinvoice/ai-orchestrator':
+        specifier: workspace:*
+        version: link:../../packages/ai-orchestrator
+      '@voiceinvoice/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@voiceinvoice/privacy-engine':
+        specifier: workspace:*
+        version: link:../../packages/privacy-engine
+      '@voiceinvoice/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       autoprefixer:
         specifier: ^10.4.0
         version: 10.4.23(postcss@8.5.6)
@@ -228,6 +228,9 @@ importers:
 
   packages/ai-orchestrator:
     dependencies:
+      '@google/generative-ai':
+        specifier: ^0.21.0
+        version: 0.21.0
       '@voiceinvoice/privacy-engine':
         specifier: workspace:*
         version: link:../privacy-engine
@@ -235,6 +238,9 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
     devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.30
       tsup:
         specifier: ^8.0.0
         version: 8.5.1(typescript@5.9.3)
@@ -243,7 +249,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.2.0
-        version: 1.6.1
+        version: 1.6.1(@types/node@20.19.30)(jsdom@24.1.3)
 
   packages/database:
     dependencies:
