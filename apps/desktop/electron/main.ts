@@ -45,6 +45,7 @@ import {
   BankingIpcContext,
 } from './ipc/banking-handlers';
 import { BankingService } from '../src/lib/banking/banking-service';
+import { registerSyncHandlers, initSyncService, cleanupSyncService } from './ipc/sync-handlers';
 
 /**
  * Main application window reference.
@@ -246,6 +247,11 @@ function setupHandlers(): void {
       }
     }
   );
+
+  // Sync handlers (offline-first synchronization)
+  registerSyncHandlers();
+  // Initialize sync service with default tenant ID (will be updated on login)
+  initSyncService('default-tenant');
 }
 
 // App lifecycle
@@ -261,6 +267,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  cleanupSyncService();
   if (process.platform !== 'darwin') {
     app.quit();
   }

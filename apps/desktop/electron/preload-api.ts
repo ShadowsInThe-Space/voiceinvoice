@@ -105,6 +105,23 @@ export interface BankingApi {
 }
 
 /**
+ * Sync API for offline-first synchronization.
+ */
+export interface SyncApi {
+  getStatus: () => Promise<unknown>;
+  trigger: () => Promise<{ success: boolean; error?: string }>;
+  start: () => Promise<{ success: boolean }>;
+  stop: () => Promise<{ success: boolean }>;
+  getPendingCount: () => Promise<number>;
+  queueChange: (params: {
+    entityType: 'customer' | 'invoice' | 'category' | 'recording';
+    entityId: string;
+    operation: 'CREATE' | 'UPDATE' | 'DELETE';
+    data: Record<string, unknown>;
+  }) => Promise<{ success: boolean; entryId?: string }>;
+}
+
+/**
  * Complete Preload API interface.
  *
  * This is the full API exposed to the renderer process
@@ -119,6 +136,7 @@ export interface PreloadApi {
   file: FileApi;
   analytics: AnalyticsApi;
   banking: BankingApi;
+  sync: SyncApi;
 }
 
 /**
@@ -207,6 +225,20 @@ export function createPreloadApi(invoke: IpcInvoker): PreloadApi {
       findMatches: (transactionId: string) => invoke('banking:findMatches', transactionId),
       confirmMatch: (transactionId: string, invoiceId: string, confidence: number) =>
         invoke('banking:confirmMatch', transactionId, invoiceId, confidence),
+    },
+
+    sync: {
+      getStatus: () => invoke('sync:getStatus'),
+      trigger: () => invoke('sync:trigger') as Promise<{ success: boolean; error?: string }>,
+      start: () => invoke('sync:start') as Promise<{ success: boolean }>,
+      stop: () => invoke('sync:stop') as Promise<{ success: boolean }>,
+      getPendingCount: () => invoke('sync:getPendingCount') as Promise<number>,
+      queueChange: (params: {
+        entityType: 'customer' | 'invoice' | 'category' | 'recording';
+        entityId: string;
+        operation: 'CREATE' | 'UPDATE' | 'DELETE';
+        data: Record<string, unknown>;
+      }) => invoke('sync:queueChange', params) as Promise<{ success: boolean; entryId?: string }>,
     },
   };
 }
