@@ -4,11 +4,13 @@
  * Provides data for the payment timeline visualization,
  * overdue invoices, and top customers by revenue.
  *
+ * Uses Electron IPC to communicate with the main process
+ * for database operations.
+ *
  * @module hooks/use-invoice-timeline
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { PrismaClient, Invoice } from '@prisma/client';
 
 /**
  * Invoice with due date information for timeline.
@@ -19,7 +21,7 @@ export interface TimelineInvoice {
   customerId: string;
   customerName: string;
   total: number;
-  dueAt: Date | null;
+  dueAt: string | null;
   daysUntilDue: number;
   isOverdue: boolean;
   status: string;
@@ -73,41 +75,27 @@ export interface InvoiceTimelineOptions {
 }
 
 /**
- * Global Prisma client instance (singleton pattern for browser).
+ * IPC result type.
  */
-let prismaInstance: PrismaClient | null = null;
-
-/**
- * Gets or creates the Prisma client instance.
- */
-function getPrismaClient(): PrismaClient {
-  if (!prismaInstance) {
-    prismaInstance = new PrismaClient();
-  }
-  return prismaInstance;
-}
-
-/**
- * Calculates days until due date.
- */
-function calculateDaysUntilDue(dueAt: Date | null): number {
-  if (!dueAt) return Infinity;
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const due = new Date(dueAt);
-  due.setHours(0, 0, 0, 0);
-  return Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+interface IpcResult<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    message: string;
+  };
 }
 
 /**
  * Hook for accessing invoice timeline and customer data.
+ *
+ * Uses Electron IPC to fetch data from the main process.
  *
  * @param options - Configuration options
  * @returns Timeline state and refresh function
  *
  * @example
  * ```tsx
- * const { timelineInvoices, topCustomers, loading } = useInvoiceTimeline({ daysAhead: 30 });
+ * const { state, refresh } = useInvoiceTimeline({ daysAhead: 30 });
  * ```
  */
 export function useInvoiceTimeline(options: InvoiceTimelineOptions = {}): {
@@ -126,84 +114,45 @@ export function useInvoiceTimeline(options: InvoiceTimelineOptions = {}): {
   const [timelineInvoices, setTimelineInvoices] = useState<TimelineInvoice[]>([]);
   const [topCustomers, setTopCustomers] = useState<TopCustomer[]>([]);
 
-  const prisma = useMemo(() => getPrismaClient(), []);
-
   /**
-   * Fetches all timeline data.
+   * Fetches all timeline data via IPC.
    */
   const fetchData = useCallback(async () => {
+    // Check if we're in Electron context
+    if (typeof window === 'undefined' || !window.voiceinvoice?.analytics) {
+      setError('Analytics API nicht verfügbar (nur in Electron)');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      // Fetch invoices with open status (SENT or OVERDUE)
-      const invoices = await prisma.$queryRawUnsafe<
-        Array<Invoice & { customerName: string }>
-      >(`
-        SELECT i.*, c.name as customerName
-        FROM Invoice i
-        LEFT JOIN Customer c ON i.customerId = c.id
-        WHERE i.deletedAt IS NULL
-          AND i.status IN ('SENT', 'OVERDUE', 'DRAFT')
-        ORDER BY i.dueAt ASC
-      `);
+      // Fetch data in parallel via IPC
+      const [invoicesResult, customersResult] = await Promise.all([
+        window.voiceinvoice.analytics.getTimelineInvoices() as Promise<
+          IpcResult<TimelineInvoice[]>
+        >,
+        window.voiceinvoice.analytics.getTopCustomers(topCustomerLimit) as Promise<
+          IpcResult<TopCustomer[]>
+        >,
+      ]);
 
-      // Transform to timeline format
-      const timeline: TimelineInvoice[] = invoices.map((inv) => {
-        const dueAt = inv.dueAt ? new Date(inv.dueAt) : null;
-        const daysUntilDue = calculateDaysUntilDue(dueAt);
+      if (invoicesResult.success && invoicesResult.data) {
+        setTimelineInvoices(invoicesResult.data);
+      }
 
-        return {
-          id: inv.id,
-          number: inv.number,
-          customerId: inv.customerId,
-          customerName: inv.customerName ?? 'Unbekannt',
-          total: inv.total,
-          dueAt,
-          daysUntilDue,
-          isOverdue: daysUntilDue < 0 && inv.status !== 'PAID',
-          status: inv.status,
-        };
-      });
+      if (customersResult.success && customersResult.data) {
+        setTopCustomers(customersResult.data);
+      }
 
-      setTimelineInvoices(timeline);
-
-      // Fetch top customers by revenue
-      const customers = await prisma.$queryRawUnsafe<
-        Array<{
-          id: string;
-          name: string;
-          totalRevenue: number;
-          invoiceCount: number;
-          paidCount: number;
-        }>
-      >(
-        `
-        SELECT
-          c.id,
-          c.name,
-          COALESCE(SUM(CASE WHEN i.status = 'PAID' THEN i.total ELSE 0 END), 0) as totalRevenue,
-          COUNT(i.id) as invoiceCount,
-          SUM(CASE WHEN i.status = 'PAID' THEN 1 ELSE 0 END) as paidCount
-        FROM Customer c
-        LEFT JOIN Invoice i ON c.id = i.customerId AND i.deletedAt IS NULL
-        WHERE c.deletedAt IS NULL
-        GROUP BY c.id, c.name
-        ORDER BY totalRevenue DESC
-        LIMIT ?
-      `,
-        topCustomerLimit
-      );
-
-      setTopCustomers(
-        customers.map((c) => ({
-          id: c.id,
-          name: c.name,
-          totalRevenue: Number(c.totalRevenue) || 0,
-          invoiceCount: Number(c.invoiceCount) || 0,
-          paidCount: Number(c.paidCount) || 0,
-        }))
-      );
+      // Check for errors
+      if (!invoicesResult.success && invoicesResult.error) {
+        setError(invoicesResult.error.message);
+      } else if (!customersResult.success && customersResult.error) {
+        setError(customersResult.error.message);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Fehler beim Laden der Timeline-Daten';
       setError(message);
@@ -211,7 +160,7 @@ export function useInvoiceTimeline(options: InvoiceTimelineOptions = {}): {
     } finally {
       setLoading(false);
     }
-  }, [prisma, topCustomerLimit]);
+  }, [topCustomerLimit]);
 
   // Initial load
   useEffect(() => {

@@ -7,14 +7,30 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import type { WorkflowExecutionRecord } from '@/lib/database';
+
+/**
+ * Workflow execution record for display.
+ * Accepts both Date and string for triggeredAt to support IPC serialization.
+ */
+export interface WorkflowExecutionDisplay {
+  id: string;
+  workflowIntent: string;
+  workflowName: string;
+  triggeredAt: Date | string;
+  executionTimeMs: number;
+  success: boolean;
+  errorType: string | null;
+  errorMessage: string | null;
+  params?: string | null;
+  responseData?: string | null;
+}
 
 /**
  * Props for WorkflowHistory component.
  */
 export interface WorkflowHistoryProps {
   /** List of executions to display */
-  executions: WorkflowExecutionRecord[];
+  executions: WorkflowExecutionDisplay[];
   /** Whether data is loading */
   loading?: boolean;
   /** Items per page (default: 10) */
@@ -23,6 +39,7 @@ export interface WorkflowHistoryProps {
 
 /**
  * Formats a date for display.
+ * @param date
  */
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('de-DE', {
@@ -36,6 +53,7 @@ function formatDate(date: Date): string {
 
 /**
  * Formats execution time.
+ * @param ms
  */
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -44,6 +62,8 @@ function formatDuration(ms: number): string {
 
 /**
  * Status badge component.
+ * @param root0
+ * @param root0.success
  */
 function StatusBadge({ success }: { success: boolean }) {
   return (
@@ -59,6 +79,8 @@ function StatusBadge({ success }: { success: boolean }) {
 
 /**
  * Error type badge component.
+ * @param root0
+ * @param root0.errorType
  */
 function ErrorTypeBadge({ errorType }: { errorType: string }) {
   const colors: Record<string, string> = {
@@ -84,6 +106,9 @@ function ErrorTypeBadge({ errorType }: { errorType: string }) {
  * Workflow execution history table.
  *
  * @param props - Component props
+ * @param props.executions
+ * @param props.loading
+ * @param props.itemsPerPage
  * @returns History table
  *
  * @example

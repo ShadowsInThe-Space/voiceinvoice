@@ -4,20 +4,79 @@
  * Provides access to workflow execution statistics, KPIs,
  * and historical data for the analytics dashboard.
  *
+ * Uses Electron IPC to communicate with the main process
+ * for database operations.
+ *
  * @module hooks/use-workflow-analytics
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { PrismaClient } from '@prisma/client';
-import {
-  WorkflowAnalyticsService,
-  type LatestKPIs,
-  type ExecutionStats,
-  type DailyExecutionCount,
-  type WorkflowSuccessRate,
-  type ErrorTypeBreakdown,
-  type WorkflowExecutionRecord,
-} from '@/lib/database';
+import { useState, useEffect, useCallback } from 'react';
+
+/**
+ * Latest KPI values.
+ */
+export interface LatestKPIs {
+  offeneMahnungenEuro: number;
+  verarbeiteteRechnungen: number;
+  gematchteZahlungen: number;
+  ueberfaelligeVertraege: number;
+}
+
+/**
+ * Execution statistics.
+ */
+export interface ExecutionStats {
+  totalExecutions: number;
+  successfulExecutions: number;
+  failedExecutions: number;
+  avgExecutionTimeMs: number;
+  successRate: number;
+}
+
+/**
+ * Daily execution count.
+ */
+export interface DailyExecutionCount {
+  date: string;
+  count: number;
+  successCount: number;
+  failureCount: number;
+}
+
+/**
+ * Workflow success rate.
+ */
+export interface WorkflowSuccessRate {
+  workflowName: string;
+  workflowIntent: string;
+  successRate: number;
+  totalExecutions: number;
+}
+
+/**
+ * Error type breakdown.
+ */
+export interface ErrorTypeBreakdown {
+  errorType: string;
+  count: number;
+  percentage: number;
+}
+
+/**
+ * Workflow execution record.
+ */
+export interface WorkflowExecutionRecord {
+  id: string;
+  workflowIntent: string;
+  workflowName: string;
+  triggeredAt: string;
+  executionTimeMs: number;
+  success: boolean;
+  errorType: string | null;
+  errorMessage: string | null;
+  params: string | null;
+  responseData: string | null;
+}
 
 /**
  * State returned by useWorkflowAnalytics hook.
@@ -77,29 +136,27 @@ const EMPTY_STATS: ExecutionStats = {
 };
 
 /**
- * Global Prisma client instance (singleton pattern for browser).
+ * IPC result type.
  */
-let prismaInstance: PrismaClient | null = null;
-
-/**
- * Gets or creates the Prisma client instance.
- */
-function getPrismaClient(): PrismaClient {
-  if (!prismaInstance) {
-    prismaInstance = new PrismaClient();
-  }
-  return prismaInstance;
+interface IpcResult<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    message: string;
+  };
 }
 
 /**
  * Hook for accessing workflow analytics data.
+ *
+ * Uses Electron IPC to fetch data from the main process.
  *
  * @param options - Configuration options
  * @returns Analytics state and refresh function
  *
  * @example
  * ```tsx
- * const { kpis, stats, loading, refresh } = useWorkflowAnalytics({ days: 30 });
+ * const { state, refresh } = useWorkflowAnalytics({ days: 30 });
  * ```
  */
 export function useWorkflowAnalytics(options: WorkflowAnalyticsOptions = {}): {
@@ -118,16 +175,17 @@ export function useWorkflowAnalytics(options: WorkflowAnalyticsOptions = {}): {
   const [errorBreakdown, setErrorBreakdown] = useState<ErrorTypeBreakdown[]>([]);
   const [recentExecutions, setRecentExecutions] = useState<WorkflowExecutionRecord[]>([]);
 
-  // Create service instance
-  const service = useMemo(() => {
-    const prisma = getPrismaClient();
-    return new WorkflowAnalyticsService(prisma);
-  }, []);
-
   /**
-   * Fetches all analytics data.
+   * Fetches all analytics data via IPC.
    */
   const fetchData = useCallback(async () => {
+    // Check if we're in Electron context
+    if (typeof window === 'undefined' || !window.voiceinvoice?.analytics) {
+      setError('Analytics API nicht verfügbar (nur in Electron)');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -136,29 +194,68 @@ export function useWorkflowAnalytics(options: WorkflowAnalyticsOptions = {}): {
       startDate.setDate(startDate.getDate() - days);
       const endDate = new Date();
 
-      // Fetch all data in parallel
+      // Fetch all data in parallel via IPC
       const [
-        fetchedKpis,
-        fetchedStats,
-        fetchedDailyCounts,
-        fetchedSuccessRates,
-        fetchedErrorBreakdown,
-        fetchedExecutions,
+        kpisResult,
+        statsResult,
+        dailyCountsResult,
+        successRatesResult,
+        errorBreakdownResult,
+        executionsResult,
       ] = await Promise.all([
-        service.getLatestKPIs(),
-        service.getExecutionStats(startDate, endDate, workflowIntent),
-        service.getDailyExecutionCounts(days),
-        service.getWorkflowSuccessRates(),
-        service.getErrorTypeBreakdown(),
-        service.getRecentExecutions(20, workflowIntent),
+        window.voiceinvoice.analytics.getKPIs() as Promise<IpcResult<LatestKPIs>>,
+        window.voiceinvoice.analytics.getStats(
+          startDate.toISOString(),
+          endDate.toISOString(),
+          workflowIntent
+        ) as Promise<IpcResult<ExecutionStats>>,
+        window.voiceinvoice.analytics.getDailyCounts(days) as Promise<
+          IpcResult<DailyExecutionCount[]>
+        >,
+        window.voiceinvoice.analytics.getSuccessRates() as Promise<
+          IpcResult<WorkflowSuccessRate[]>
+        >,
+        window.voiceinvoice.analytics.getErrorBreakdown() as Promise<
+          IpcResult<ErrorTypeBreakdown[]>
+        >,
+        window.voiceinvoice.analytics.getRecentExecutions(20, workflowIntent) as Promise<
+          IpcResult<WorkflowExecutionRecord[]>
+        >,
       ]);
 
-      setKpis(fetchedKpis);
-      setStats(fetchedStats);
-      setDailyCounts(fetchedDailyCounts);
-      setSuccessRates(fetchedSuccessRates);
-      setErrorBreakdown(fetchedErrorBreakdown);
-      setRecentExecutions(fetchedExecutions);
+      // Process results
+      if (kpisResult.success && kpisResult.data) {
+        setKpis(kpisResult.data);
+      }
+      if (statsResult.success && statsResult.data) {
+        setStats(statsResult.data);
+      }
+      if (dailyCountsResult.success && dailyCountsResult.data) {
+        setDailyCounts(dailyCountsResult.data);
+      }
+      if (successRatesResult.success && successRatesResult.data) {
+        setSuccessRates(successRatesResult.data);
+      }
+      if (errorBreakdownResult.success && errorBreakdownResult.data) {
+        setErrorBreakdown(errorBreakdownResult.data);
+      }
+      if (executionsResult.success && executionsResult.data) {
+        setRecentExecutions(executionsResult.data);
+      }
+
+      // Check for any errors
+      const firstError = [
+        kpisResult,
+        statsResult,
+        dailyCountsResult,
+        successRatesResult,
+        errorBreakdownResult,
+        executionsResult,
+      ].find((r) => !r.success);
+
+      if (firstError && firstError.error) {
+        setError(firstError.error.message);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Fehler beim Laden der Analytics-Daten';
       setError(message);
@@ -166,22 +263,15 @@ export function useWorkflowAnalytics(options: WorkflowAnalyticsOptions = {}): {
     } finally {
       setLoading(false);
     }
-  }, [service, days, workflowIntent]);
+  }, [days, workflowIntent]);
 
   /**
-   * Triggers aggregation update.
+   * Triggers aggregation update (placeholder).
    */
   const triggerAggregation = useCallback(async () => {
-    try {
-      await Promise.all([
-        service.updateAggregations('daily'),
-        service.updateAggregations('weekly'),
-        service.updateAggregations('monthly'),
-      ]);
-    } catch (err) {
-      console.error('[useWorkflowAnalytics] Aggregation error:', err);
-    }
-  }, [service]);
+    // TODO: Implement aggregation trigger via IPC
+    console.log('[useWorkflowAnalytics] Aggregation triggered');
+  }, []);
 
   // Initial load
   useEffect(() => {
