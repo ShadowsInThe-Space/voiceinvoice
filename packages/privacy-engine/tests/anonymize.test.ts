@@ -2,87 +2,84 @@ import { describe, it, expect } from 'vitest';
 import { anonymize, deanonymize, type TokenMap } from '../src/index';
 
 describe('anonymize', () => {
-  it('should mask emails', () => {
-    const text = 'Contact me at test@example.com regarding the invoice.';
+  it('should return the text unchanged if no known entities are provided', () => {
+    const text = 'Send invoice to Müller GmbH';
     const result = anonymize(text);
 
-    expect(result.anonymizedText).toContain('[EMAIL_1]');
-    expect(result.anonymizedText).not.toContain('test@example.com');
-    expect(result.tokenMap['EMAIL_1']).toBe('test@example.com');
+    expect(result.anonymizedText).toBe(text);
+    expect(result.entityCount).toBe(0);
+    expect(result.tokenMap).toEqual({});
   });
 
-  it('should mask phone numbers', () => {
-    const text = 'Call +49 123 456789 or 030 1234567';
-    const result = anonymize(text);
-
-    expect(result.anonymizedText).toMatch(/Call \[PHONE_\d\] or \[PHONE_\d\]/);
-    expect(Object.values(result.tokenMap)).toContain('+49 123 456789');
-    expect(Object.values(result.tokenMap)).toContain('030 1234567');
-  });
-
-  it('should mask IBANs', () => {
-    const iban = 'DE12 3456 7890 1234 5678 90';
-    const text = `Please pay to ${iban} immediately.`;
-    const result = anonymize(text);
-
-    expect(result.anonymizedText).toContain('[IBAN_1]');
-    expect(result.anonymizedText).not.toContain(iban);
-    expect(result.tokenMap['IBAN_1']).toBe(iban);
-  });
-
-  it('should mask amounts', () => {
-    const text = 'The total is 100.50 EUR or $50.';
-    const result = anonymize(text);
-
-    expect(result.anonymizedText).toContain('[AMOUNT_1]');
-    expect(result.anonymizedText).toContain('[AMOUNT_2]');
-    expect(Object.values(result.tokenMap)).toContain('100.50 EUR');
-    expect(Object.values(result.tokenMap)).toContain('$50');
-  });
-
-  it('should mask known entities (exact match)', () => {
-    const text = 'Invoice for Acme Corp.';
+  it('should mask exact matches of known entities', () => {
+    const text = 'Invoice for Acme Corp';
     const result = anonymize(text, ['Acme Corp']);
 
-    expect(result.anonymizedText).toContain('[CUSTOMER_1]');
-    expect(result.anonymizedText).not.toContain('Acme Corp');
+    expect(result.anonymizedText).toBe('Invoice for [CUSTOMER_1]');
+    expect(result.entityCount).toBe(1);
     expect(result.tokenMap['CUSTOMER_1']).toBe('Acme Corp');
   });
 
-  it('should mask known entities (fuzzy match)', () => {
-    // "Muller GmbH" vs "Müller GmbH"
-    const text = 'Send to Muller GmbH please.';
+  it('should mask fuzzy matches of known entities', () => {
+    const text = 'Invoice for Acme Copr please'; // Typo: Copr
+    const result = anonymize(text, ['Acme Corp']);
+
+    expect(result.anonymizedText).toBe('Invoice for [CUSTOMER_1] please');
+    expect(result.entityCount).toBe(1);
+    expect(result.tokenMap['CUSTOMER_1']).toBe('Acme Corp');
+  });
+
+  it('should mask multiple different entities', () => {
+    const text = 'Send from Alpha Inc to Beta LLC';
+    const result = anonymize(text, ['Alpha Inc', 'Beta LLC']);
+
+    expect(result.entityCount).toBe(2);
+    // Since order depends on implementation (sorted by length, then found order), we check contents
+    expect(result.anonymizedText).toMatch(/Send from \[CUSTOMER_\d\] to \[CUSTOMER_\d\]/);
+
+    // Check if tokens map to correct entities
+    const tokens = Object.keys(result.tokenMap);
+    expect(tokens.length).toBe(2);
+    const values = Object.values(result.tokenMap);
+    expect(values).toContain('Alpha Inc');
+    expect(values).toContain('Beta LLC');
+  });
+
+  it('should prioritize longer matches', () => {
+    // "Super Corp International" vs "Super Corp"
+    // Ideally it should match "Super Corp International"
+    const text = 'Invoice for Super Corp International today';
+    const result = anonymize(text, ['Super Corp', 'Super Corp International']);
+
+    expect(result.entityCount).toBe(1); // Should match the longer one and consume the text
+    expect(result.tokenMap['CUSTOMER_1']).toBe('Super Corp International');
+    expect(result.anonymizedText).toBe('Invoice for [CUSTOMER_1] today');
+  });
+
+  it('should handle fuzzy matching with Levenshtein distance', () => {
+    // "Müller GmbH" vs "Mueler GmbH"
+    const text = 'Rechnung an Mueler GmbH senden';
     const result = anonymize(text, ['Müller GmbH']);
 
-    expect(result.anonymizedText).toContain('[CUSTOMER_1]');
-    expect(result.anonymizedText).not.toContain('Muller GmbH');
-    // Note: The token value maps to the *found* text ("Muller GmbH") or the *known* entity?
-    // My implementation replaces the range with token, and maps token -> found text in original string.
-    // In `Anonymizer.ts`: `this.tokenMap[token] = value` where value is `match.entity` (from Fuse) or the text found?
-    // Let's check `Anonymizer.ts`.
-    // In `maskKnownEntities`: `matches.push({..., entity: result[0].item})`.
-    // Then `this.getToken('CUSTOMER', m.entity)`.
-    // So the token maps to the *Canonical Entity Name* ("Müller GmbH").
-    // Wait, if I use `getToken`, and pass `m.entity` (Müller GmbH), then `tokenMap['CUSTOMER_1']` will be `Müller GmbH`.
-    // And when I deanonymize, `[CUSTOMER_1]` becomes `Müller GmbH`.
-    // So "Muller GmbH" becomes "Müller GmbH". This is actually a feature (correction).
-
+    expect(result.anonymizedText).toBe('Rechnung an [CUSTOMER_1] senden');
     expect(result.tokenMap['CUSTOMER_1']).toBe('Müller GmbH');
   });
 
-  it('should handle multiple known entities', () => {
-    const text = 'Acme Corp and Beta Ltd are partners.';
-    const result = anonymize(text, ['Acme Corp', 'Beta Ltd']);
+  it('should not mask if fuzzy match is too far', () => {
+      const text = 'Rechnung an Something Else';
+      const result = anonymize(text, ['Müller GmbH']);
 
-    expect(result.anonymizedText).toContain('[CUSTOMER_1]');
-    expect(result.anonymizedText).toContain('[CUSTOMER_2]');
+      expect(result.anonymizedText).toBe(text);
+      expect(result.entityCount).toBe(0);
   });
 
-  it('should reuse tokens for same values', () => {
-      const text = 'Email bob@example.com or bob@example.com';
-      const result = anonymize(text);
+  it('should handle null or undefined entities in array', () => {
+    const text = 'Invoice for Acme Corp';
+    // Test null-safety: null entries should be skipped
+    const result = anonymize(text, ['Acme Corp', null as unknown as string, undefined as unknown as string]);
 
-      expect(result.anonymizedText).toBe('Email [EMAIL_1] or [EMAIL_1]');
+    expect(result.anonymizedText).toBe('Invoice for [CUSTOMER_1]');
+    expect(result.entityCount).toBe(1);
   });
 });
 
@@ -107,5 +104,19 @@ describe('deanonymize', () => {
     const result = deanonymize(anonymizedText, tokenMap);
 
     expect(result).toBe('Buyer Inc owes 1000 EUR to Seller GmbH');
+  });
+
+  it('should handle empty token map', () => {
+    const text = 'Plain text without tokens';
+    const result = deanonymize(text, {});
+
+    expect(result).toBe(text);
+  });
+
+  it('should handle tokens not present in map gracefully', () => {
+     const text = 'Hello [CUSTOMER_999]';
+     const result = deanonymize(text, { CUSTOMER_1: 'Foo' });
+     // Should remain unchanged if not in map
+     expect(result).toBe('Hello [CUSTOMER_999]');
   });
 });
