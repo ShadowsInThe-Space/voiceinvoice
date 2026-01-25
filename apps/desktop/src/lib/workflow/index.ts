@@ -6,6 +6,8 @@
 
 export {
   triggerWorkflow,
+  triggerWorkflowWithRecording,
+  setWorkflowRecordCallback,
   getWorkflowConfig,
   saveWorkflowConfig,
   getWebhookUrl,
@@ -19,4 +21,5 @@ export {
   type WorkflowParams,
   type WorkflowResult,
   type WorkflowErrorType,
+  type WorkflowRecordCallback,
 } from './workflow-trigger';
