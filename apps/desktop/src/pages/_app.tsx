@@ -26,6 +26,7 @@ import {
   Bell,
   User,
   Mic,
+  MessageSquare,
 } from 'lucide-react';
 
 /**
@@ -33,6 +34,7 @@ import {
  */
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/chat', label: 'Assistent', icon: MessageSquare },
   { href: '/invoices/new', label: 'Neue Rechnung', icon: FilePlus },
   { href: '/invoices', label: 'Rechnungen', icon: FileText },
   { href: '/settings', label: 'Einstellungen', icon: Settings },
