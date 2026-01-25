@@ -317,40 +317,64 @@ export default function DashboardPage(): React.ReactElement {
   }, []);
 
   /**
-   * Trigger file download using browser API.
+   * Trigger file download using Electron IPC or fallback to browser API.
    *
    * @param {string} content - The file content.
    * @param {string} filename - The filename for download.
    * @param {string} mimeType - The MIME type of the file.
+   * @param {string} extension - The file extension without dot.
    */
-  const downloadFile = useCallback((content: string, filename: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-  }, []);
+  const downloadFile = useCallback(
+    async (content: string, filename: string, mimeType: string, extension: string) => {
+      // Try Electron IPC method first
+      if (typeof window !== 'undefined' && window.voiceinvoice?.file?.saveFile) {
+        try {
+          const filters = [{ name: extension.toUpperCase(), extensions: [extension] }];
+          const saved = await window.voiceinvoice.file.saveFile(content, filename, filters);
+          if (saved) return;
+        } catch (error) {
+          console.warn('Electron save failed, falling back to browser download:', error);
+        }
+      }
+
+      // Fallback to browser download (data URL approach)
+      const base64Content = btoa(unescape(encodeURIComponent(content)));
+      const dataUrl = `data:${mimeType};base64,${base64Content}`;
+
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+
+      setTimeout(() => {
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+        }, 100);
+      }, 0);
+    },
+    []
+  );
 
   /**
    * Export invoices as CSV.
    */
-  const handleExportCSV = useCallback(() => {
+  const handleExportCSV = useCallback(async () => {
     const csvContent = convertToCSV(recentInvoices);
     const timestamp = new Date().toISOString().split('T')[0];
-    downloadFile(csvContent, `rechnungen-${timestamp}.csv`, 'text/csv;charset=utf-8;');
+    await downloadFile(csvContent, `rechnungen-${timestamp}.csv`, 'text/csv;charset=utf-8;', 'csv');
     setShowExportDropdown(false);
   }, [recentInvoices, convertToCSV, downloadFile]);
 
   /**
    * Export invoices as JSON.
    */
-  const handleExportJSON = useCallback(() => {
+  const handleExportJSON = useCallback(async () => {
     const jsonData = convertToJSON(recentInvoices);
     const jsonContent = JSON.stringify(jsonData, null, 2);
     const timestamp = new Date().toISOString().split('T')[0];
-    downloadFile(jsonContent, `rechnungen-${timestamp}.json`, 'application/json');
+    await downloadFile(jsonContent, `rechnungen-${timestamp}.json`, 'application/json', 'json');
     setShowExportDropdown(false);
   }, [recentInvoices, convertToJSON, downloadFile]);
 
