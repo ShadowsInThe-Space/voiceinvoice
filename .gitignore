@@ -63,3 +63,5 @@ yarn-error.log*
 credentials.json
 service-account.json
 squashfs-root/
+
+*.venv
