@@ -447,6 +447,7 @@ export class DatabaseService {
   /**
    * Helper to populate relations for a list of invoices efficiently.
    * Avoids N+1 query problem by fetching related data in batches.
+   * @param invoices
    */
   private async populateRelations(invoices: Invoice[]): Promise<InvoiceWithRelations[]> {
     if (invoices.length === 0) {

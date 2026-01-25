@@ -65,6 +65,31 @@ export interface AppApi {
 }
 
 /**
+ * Analytics API exposed to renderer.
+ */
+export interface AnalyticsApi {
+  getKPIs: () => Promise<unknown>;
+  getStats: (startDate?: string, endDate?: string, workflowIntent?: string) => Promise<unknown>;
+  getDailyCounts: (days?: number) => Promise<unknown>;
+  getSuccessRates: () => Promise<unknown>;
+  getErrorBreakdown: () => Promise<unknown>;
+  getRecentExecutions: (limit?: number, workflowIntent?: string) => Promise<unknown>;
+  getTimelineInvoices: () => Promise<unknown>;
+  getTopCustomers: (limit?: number) => Promise<unknown>;
+}
+
+/**
+ * File API for saving files via Electron dialog.
+ */
+export interface FileApi {
+  saveFile: (
+    content: string,
+    defaultFilename: string,
+    filters: { name: string; extensions: string[] }[]
+  ) => Promise<boolean>;
+}
+
+/**
  * Complete Preload API interface.
  *
  * This is the full API exposed to the renderer process
@@ -76,6 +101,8 @@ export interface PreloadApi {
   settings: SettingsApi;
   voice: VoiceApi;
   app: AppApi;
+  file: FileApi;
+  analytics: AnalyticsApi;
 }
 
 /**
@@ -132,6 +159,27 @@ export function createPreloadApi(invoke: IpcInvoker): PreloadApi {
     app: {
       getVersion: () => invoke('app:getVersion') as Promise<string>,
       getPlatform: () => invoke('app:getPlatform') as Promise<string>,
+    },
+
+    file: {
+      saveFile: (
+        content: string,
+        defaultFilename: string,
+        filters: { name: string; extensions: string[] }[]
+      ) => invoke('file:saveFile', content, defaultFilename, filters) as Promise<boolean>,
+    },
+
+    analytics: {
+      getKPIs: () => invoke('analytics:getKPIs'),
+      getStats: (startDate?: string, endDate?: string, workflowIntent?: string) =>
+        invoke('analytics:getStats', startDate, endDate, workflowIntent),
+      getDailyCounts: (days?: number) => invoke('analytics:getDailyCounts', days),
+      getSuccessRates: () => invoke('analytics:getSuccessRates'),
+      getErrorBreakdown: () => invoke('analytics:getErrorBreakdown'),
+      getRecentExecutions: (limit?: number, workflowIntent?: string) =>
+        invoke('analytics:getRecentExecutions', limit, workflowIntent),
+      getTimelineInvoices: () => invoke('analytics:getTimelineInvoices'),
+      getTopCustomers: (limit?: number) => invoke('analytics:getTopCustomers', limit),
     },
   };
 }

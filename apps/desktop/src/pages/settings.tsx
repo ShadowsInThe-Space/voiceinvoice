@@ -1,12 +1,15 @@
 /**
  * Settings Page
  *
- * Configuration page for API keys, locale, and TTS settings.
+ * Configuration page for API keys, locale, TTS settings, webhook integrations,
+ * and company branding (logo upload).
  *
  * @module pages/settings
  */
 
 import React, { useState, useEffect, useCallback, FormEvent } from 'react';
+import { isValidWebhookUrl, WEBHOOK_STORAGE_KEYS } from '../lib/webhook';
+import { LogoUpload, LOGO_STORAGE_KEY } from '../components/LogoUpload';
 
 /**
  * Available locale options.
@@ -36,14 +39,6 @@ const STORAGE_KEYS = {
   locale: 'voiceinvoice_locale',
   ttsVoice: 'voiceinvoice_tts_voice',
   ttsRate: 'voiceinvoice_tts_rate',
-  companyName: 'voiceinvoice_company_name',
-  companyAddress: 'voiceinvoice_company_address',
-  companyTaxId: 'voiceinvoice_company_tax_id',
-  companyBankInfo: 'voiceinvoice_company_bank_info',
-  companyPhone: 'voiceinvoice_company_phone',
-  companyEmail: 'voiceinvoice_company_email',
-  companyWebsite: 'voiceinvoice_company_website',
-  companyLogo: 'voiceinvoice_company_logo',
 };
 
 /**
@@ -57,15 +52,11 @@ export default function SettingsPage(): React.ReactElement {
   const [ttsRate, setTtsRate] = useState(1.0);
   const [showApiKey, setShowApiKey] = useState(false);
 
-  // Company Info State
-  const [companyName, setCompanyName] = useState('');
-  const [companyAddress, setCompanyAddress] = useState('');
-  const [companyTaxId, setCompanyTaxId] = useState('');
-  const [companyBankInfo, setCompanyBankInfo] = useState('');
-  const [companyPhone, setCompanyPhone] = useState('');
-  const [companyEmail, setCompanyEmail] = useState('');
-  const [companyWebsite, setCompanyWebsite] = useState('');
-  const [companyLogo, setCompanyLogo] = useState('');
+  // Webhook state
+  const [webhookEnabled, setWebhookEnabled] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookBackupUrl, setWebhookBackupUrl] = useState('');
+  const [webhookUrlError, setWebhookUrlError] = useState('');
 
   // UI state
   const [isSaving, setIsSaving] = useState(false);
@@ -80,29 +71,19 @@ export default function SettingsPage(): React.ReactElement {
     const savedVoice = localStorage.getItem(STORAGE_KEYS.ttsVoice);
     const savedRate = localStorage.getItem(STORAGE_KEYS.ttsRate);
 
-    // Load company info
-    const savedCompanyName = localStorage.getItem(STORAGE_KEYS.companyName);
-    const savedCompanyAddress = localStorage.getItem(STORAGE_KEYS.companyAddress);
-    const savedCompanyTaxId = localStorage.getItem(STORAGE_KEYS.companyTaxId);
-    const savedCompanyBankInfo = localStorage.getItem(STORAGE_KEYS.companyBankInfo);
-    const savedCompanyPhone = localStorage.getItem(STORAGE_KEYS.companyPhone);
-    const savedCompanyEmail = localStorage.getItem(STORAGE_KEYS.companyEmail);
-    const savedCompanyWebsite = localStorage.getItem(STORAGE_KEYS.companyWebsite);
-    const savedCompanyLogo = localStorage.getItem(STORAGE_KEYS.companyLogo);
-
     if (savedApiKey) setApiKey(savedApiKey);
     if (savedLocale) setLocale(savedLocale);
     if (savedVoice) setTtsVoice(savedVoice);
     if (savedRate) setTtsRate(parseFloat(savedRate));
 
-    if (savedCompanyName) setCompanyName(savedCompanyName);
-    if (savedCompanyAddress) setCompanyAddress(savedCompanyAddress);
-    if (savedCompanyTaxId) setCompanyTaxId(savedCompanyTaxId);
-    if (savedCompanyBankInfo) setCompanyBankInfo(savedCompanyBankInfo);
-    if (savedCompanyPhone) setCompanyPhone(savedCompanyPhone);
-    if (savedCompanyEmail) setCompanyEmail(savedCompanyEmail);
-    if (savedCompanyWebsite) setCompanyWebsite(savedCompanyWebsite);
-    if (savedCompanyLogo) setCompanyLogo(savedCompanyLogo);
+    // Load webhook settings
+    const savedWebhookEnabled = localStorage.getItem(WEBHOOK_STORAGE_KEYS.enabled);
+    const savedWebhookUrl = localStorage.getItem(WEBHOOK_STORAGE_KEYS.url);
+    const savedWebhookBackupUrl = localStorage.getItem(WEBHOOK_STORAGE_KEYS.backupUrl);
+
+    if (savedWebhookEnabled) setWebhookEnabled(savedWebhookEnabled === 'true');
+    if (savedWebhookUrl) setWebhookUrl(savedWebhookUrl);
+    if (savedWebhookBackupUrl) setWebhookBackupUrl(savedWebhookBackupUrl);
   }, []);
 
   /**
@@ -113,34 +94,27 @@ export default function SettingsPage(): React.ReactElement {
   }, []);
 
   /**
-   * Handle logo upload
+   * Validate webhook URL on blur.
    */
-  const handleLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) { // 2MB limit
-        setErrorMessage('Logo-Datei darf maximal 2MB groß sein');
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCompanyLogo(reader.result as string);
-        setErrorMessage('');
-      };
-      reader.onerror = () => {
-        setErrorMessage('Fehler beim Laden der Bilddatei');
-      };
-      reader.readAsDataURL(file);
+  const validateWebhookUrl = useCallback((url: string): boolean => {
+    if (!url) {
+      setWebhookUrlError('');
+      return true;
     }
+    if (!isValidWebhookUrl(url)) {
+      setWebhookUrlError('Ungueltige Webhook URL');
+      return false;
+    }
+    setWebhookUrlError('');
+    return true;
   }, []);
 
   /**
-   * Remove logo
+   * Handle webhook URL blur.
    */
-  const handleRemoveLogo = useCallback(() => {
-    setCompanyLogo('');
-  }, []);
+  const handleWebhookUrlBlur = useCallback(() => {
+    validateWebhookUrl(webhookUrl);
+  }, [webhookUrl, validateWebhookUrl]);
 
   /**
    * Validate form.
@@ -174,14 +148,10 @@ export default function SettingsPage(): React.ReactElement {
         localStorage.setItem(STORAGE_KEYS.ttsVoice, ttsVoice);
         localStorage.setItem(STORAGE_KEYS.ttsRate, ttsRate.toString());
 
-        localStorage.setItem(STORAGE_KEYS.companyName, companyName);
-        localStorage.setItem(STORAGE_KEYS.companyAddress, companyAddress);
-        localStorage.setItem(STORAGE_KEYS.companyTaxId, companyTaxId);
-        localStorage.setItem(STORAGE_KEYS.companyBankInfo, companyBankInfo);
-        localStorage.setItem(STORAGE_KEYS.companyPhone, companyPhone);
-        localStorage.setItem(STORAGE_KEYS.companyEmail, companyEmail);
-        localStorage.setItem(STORAGE_KEYS.companyWebsite, companyWebsite);
-        localStorage.setItem(STORAGE_KEYS.companyLogo, companyLogo);
+        // Save webhook settings
+        localStorage.setItem(WEBHOOK_STORAGE_KEYS.enabled, String(webhookEnabled));
+        localStorage.setItem(WEBHOOK_STORAGE_KEYS.url, webhookUrl);
+        localStorage.setItem(WEBHOOK_STORAGE_KEYS.backupUrl, webhookBackupUrl);
 
         setSaveStatus('success');
 
@@ -196,11 +166,7 @@ export default function SettingsPage(): React.ReactElement {
         setIsSaving(false);
       }
     },
-    [
-      apiKey, locale, ttsVoice, ttsRate, validateForm,
-      companyName, companyAddress, companyTaxId, companyBankInfo,
-      companyPhone, companyEmail, companyWebsite, companyLogo
-    ]
+    [apiKey, locale, ttsVoice, ttsRate, webhookEnabled, webhookUrl, webhookBackupUrl, validateForm]
   );
 
   /**
@@ -226,193 +192,42 @@ export default function SettingsPage(): React.ReactElement {
     localStorage.removeItem(STORAGE_KEYS.ttsVoice);
     localStorage.removeItem(STORAGE_KEYS.ttsRate);
 
-    localStorage.removeItem(STORAGE_KEYS.companyName);
-    localStorage.removeItem(STORAGE_KEYS.companyAddress);
-    localStorage.removeItem(STORAGE_KEYS.companyTaxId);
-    localStorage.removeItem(STORAGE_KEYS.companyBankInfo);
-    localStorage.removeItem(STORAGE_KEYS.companyPhone);
-    localStorage.removeItem(STORAGE_KEYS.companyEmail);
-    localStorage.removeItem(STORAGE_KEYS.companyWebsite);
-    localStorage.removeItem(STORAGE_KEYS.companyLogo);
+    // Remove webhook settings
+    localStorage.removeItem(WEBHOOK_STORAGE_KEYS.enabled);
+    localStorage.removeItem(WEBHOOK_STORAGE_KEYS.url);
+    localStorage.removeItem(WEBHOOK_STORAGE_KEYS.backupUrl);
+
+    // Remove company logo
+    localStorage.removeItem(LOGO_STORAGE_KEY);
 
     // Reset form to defaults
     setApiKey('');
     setLocale('de-DE');
     setTtsVoice('de-DE-Wavenet-C');
     setTtsRate(1.0);
-
-    setCompanyName('');
-    setCompanyAddress('');
-    setCompanyTaxId('');
-    setCompanyBankInfo('');
-    setCompanyPhone('');
-    setCompanyEmail('');
-    setCompanyWebsite('');
-    setCompanyLogo('');
-
+    setWebhookEnabled(false);
+    setWebhookUrl('');
+    setWebhookBackupUrl('');
+    setWebhookUrlError('');
     setShowResetDialog(false);
     setSaveStatus(null);
     setErrorMessage('');
   }, []);
 
+  /**
+   * Handle logo change from LogoUpload component.
+   */
+  const handleLogoChange = useCallback((logoBase64: string | null) => {
+    // Logo is saved directly by LogoUpload component
+    // This callback can be used for additional side effects if needed
+    console.log('Logo updated:', logoBase64 ? 'Logo set' : 'Logo removed');
+  }, []);
+
   return (
-    <div className="max-w-4xl mx-auto pb-10">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-        Einstellungen
-      </h1>
+    <div className="max-w-2xl">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Einstellungen</h1>
 
       <form role="form" onSubmit={handleSave} className="space-y-8">
-
-        {/* Company Info Section */}
-        <section role="group" aria-labelledby="company-section">
-          <h2 id="company-section" className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Firmendaten
-          </h2>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Firmenlogo
-                </label>
-                <div className="flex items-center space-x-6">
-                  <div className="shrink-0">
-                    {companyLogo ? (
-                      <img
-                        src={companyLogo}
-                        alt="Firmenlogo"
-                        className="h-20 w-auto object-contain border rounded p-1 bg-white"
-                      />
-                    ) : (
-                      <div className="h-20 w-32 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
-                        Kein Logo
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block">
-                      <span className="sr-only">Logo wählen</span>
-                      <input
-                        type="file"
-                        accept="image/png, image/jpeg"
-                        onChange={handleLogoUpload}
-                        className="block w-full text-sm text-slate-500
-                          file:mr-4 file:py-2 file:px-4
-                          file:rounded-full file:border-0
-                          file:text-sm file:font-semibold
-                          file:bg-blue-50 file:text-blue-700
-                          hover:file:bg-blue-100
-                        "
-                      />
-                    </label>
-                    <p className="mt-1 text-xs text-gray-500">PNG oder JPG, max 2MB</p>
-                    {companyLogo && (
-                      <button
-                        type="button"
-                        onClick={handleRemoveLogo}
-                        className="mt-2 text-xs text-red-600 hover:text-red-800"
-                      >
-                        Logo entfernen
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="md:col-span-2">
-                <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Firmenname
-                </label>
-                <input
-                  type="text"
-                  id="companyName"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label htmlFor="companyAddress" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Adresse (mit Zeilenumbrüchen)
-                </label>
-                <textarea
-                  id="companyAddress"
-                  value={companyAddress}
-                  onChange={(e) => setCompanyAddress(e.target.value)}
-                  rows={3}
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="companyPhone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Telefon
-                </label>
-                <input
-                  type="text"
-                  id="companyPhone"
-                  value={companyPhone}
-                  onChange={(e) => setCompanyPhone(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="companyEmail" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  E-Mail
-                </label>
-                <input
-                  type="email"
-                  id="companyEmail"
-                  value={companyEmail}
-                  onChange={(e) => setCompanyEmail(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="companyWebsite" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Webseite
-                </label>
-                <input
-                  type="text"
-                  id="companyWebsite"
-                  value={companyWebsite}
-                  onChange={(e) => setCompanyWebsite(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="companyTaxId" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  USt-IdNr. / Steuernummer
-                </label>
-                <input
-                  type="text"
-                  id="companyTaxId"
-                  value={companyTaxId}
-                  onChange={(e) => setCompanyTaxId(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label htmlFor="companyBankInfo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Bankverbindung (mit Zeilenumbrüchen)
-                </label>
-                <textarea
-                  id="companyBankInfo"
-                  value={companyBankInfo}
-                  onChange={(e) => setCompanyBankInfo(e.target.value)}
-                  rows={2}
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  placeholder="Bankname&#10;IBAN: DE..."
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* API Configuration Section */}
         <section role="group" aria-labelledby="api-section">
           <h2 id="api-section" className="text-lg font-medium text-gray-900 dark:text-white mb-4">
@@ -459,7 +274,10 @@ export default function SettingsPage(): React.ReactElement {
 
         {/* Language Section */}
         <section role="group" aria-labelledby="language-section">
-          <h2 id="language-section" className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+          <h2
+            id="language-section"
+            className="text-lg font-medium text-gray-900 dark:text-white mb-4"
+          >
             Sprache
           </h2>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
@@ -542,6 +360,110 @@ export default function SettingsPage(): React.ReactElement {
           </div>
         </section>
 
+        {/* Company Branding Section */}
+        <section role="group" aria-labelledby="branding-section">
+          <h2
+            id="branding-section"
+            className="text-lg font-medium text-gray-900 dark:text-white mb-4"
+          >
+            Firmenbranding
+          </h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Firmenlogo
+              </label>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Das Logo wird auf allen generierten PDF-Rechnungen angezeigt
+              </p>
+              <LogoUpload onLogoChange={handleLogoChange} />
+            </div>
+          </div>
+        </section>
+
+        {/* Webhook Section */}
+        <section role="group" aria-labelledby="webhook-section">
+          <h2
+            id="webhook-section"
+            className="text-lg font-medium text-gray-900 dark:text-white mb-4"
+          >
+            Automatisierung & Webhooks
+          </h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <label
+                  htmlFor="webhookEnabled"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  Webhooks aktivieren
+                </label>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Sende Benachrichtigungen bei Rechnungs-Statusaenderungen
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                id="webhookEnabled"
+                checked={webhookEnabled}
+                onChange={(e) => setWebhookEnabled(e.target.checked)}
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                aria-label="Webhooks aktivieren"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="webhookUrl"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                n8n Webhook URL
+              </label>
+              <input
+                type="url"
+                id="webhookUrl"
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                onBlur={handleWebhookUrlBlur}
+                placeholder="https://n8n.example.com/webhook/..."
+                disabled={!webhookEnabled}
+                className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-invalid={!!webhookUrlError}
+                aria-describedby={webhookUrlError ? 'webhookUrl-error' : 'webhookUrl-hint'}
+              />
+              {webhookUrlError && (
+                <p id="webhookUrl-error" className="mt-1 text-sm text-red-600">
+                  {webhookUrlError}
+                </p>
+              )}
+              <p id="webhookUrl-hint" className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Wird bei jeder Rechnungs-Statusaenderung aufgerufen
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="webhookBackupUrl"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                Backup Webhook URL
+              </label>
+              <input
+                type="url"
+                id="webhookBackupUrl"
+                value={webhookBackupUrl}
+                onChange={(e) => setWebhookBackupUrl(e.target.value)}
+                placeholder="https://backup.example.com/webhook/..."
+                disabled={!webhookEnabled}
+                className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Optional: Fallback URL bei Verbindungsproblemen
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* Save Status */}
         {saveStatus && (
           <div
@@ -552,9 +474,7 @@ export default function SettingsPage(): React.ReactElement {
                 : 'bg-red-50 text-red-800 dark:bg-red-900/50 dark:text-red-300'
             }`}
           >
-            {saveStatus === 'success'
-              ? 'Einstellungen gespeichert!'
-              : 'Fehler beim Speichern'}
+            {saveStatus === 'success' ? 'Einstellungen gespeichert!' : 'Fehler beim Speichern'}
           </div>
         )}
 
@@ -593,8 +513,8 @@ export default function SettingsPage(): React.ReactElement {
               Zuruecksetzen bestaetigen
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-              Moechten Sie alle Einstellungen auf die Standardwerte zuruecksetzen?
-              Diese Aktion kann nicht rueckgaengig gemacht werden.
+              Moechten Sie alle Einstellungen auf die Standardwerte zuruecksetzen? Diese Aktion kann
+              nicht rueckgaengig gemacht werden.
             </p>
             <div className="flex justify-end gap-3">
               <button

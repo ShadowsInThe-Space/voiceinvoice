@@ -421,7 +421,8 @@ describe('PDFExporter', () => {
         invoice: createTestInvoice(),
         customer: createTestCustomer(),
         companyInfo: createTestCompanyInfo({
-          logoBase64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+          logoBase64:
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
         }),
       };
 
@@ -576,6 +577,183 @@ describe('PDFExporter', () => {
       const options: PDFExportOptions = {
         invoice: createTestInvoice(),
         customer,
+      };
+
+      const result = await exporter.generateInvoicePDF(options);
+      expect(result).toBeInstanceOf(Blob);
+    });
+  });
+
+  describe('Logo Integration', () => {
+    it('should render logo when logoBase64 is provided in companyInfo', async () => {
+      const { jsPDF } = await import('jspdf');
+      const mockAddImage = vi.fn();
+
+      // Get the mock instance and add addImage mock
+      vi.mocked(jsPDF).mockImplementation(
+        () =>
+          ({
+            setFontSize: vi.fn().mockReturnThis(),
+            setFont: vi.fn().mockReturnThis(),
+            text: vi.fn().mockReturnThis(),
+            line: vi.fn().mockReturnThis(),
+            rect: vi.fn().mockReturnThis(),
+            setDrawColor: vi.fn().mockReturnThis(),
+            setFillColor: vi.fn().mockReturnThis(),
+            setTextColor: vi.fn().mockReturnThis(),
+            setLineDashPattern: vi.fn().mockReturnThis(),
+            splitTextToSize: vi.fn().mockImplementation((text: string) => [text]),
+            addPage: vi.fn().mockReturnThis(),
+            getTextWidth: vi.fn().mockReturnValue(50),
+            addImage: mockAddImage,
+            internal: {
+              pageSize: {
+                getWidth: () => 210,
+                getHeight: () => 297,
+              },
+            },
+            output: vi.fn().mockReturnValue(new ArrayBuffer(100)),
+          }) as unknown as ReturnType<typeof jsPDF>
+      );
+
+      const companyInfoWithLogo = createTestCompanyInfo({
+        logoBase64:
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      });
+
+      const options: PDFExportOptions = {
+        invoice: createTestInvoice(),
+        customer: createTestCustomer(),
+        companyInfo: companyInfoWithLogo,
+      };
+
+      await exporter.generateInvoicePDF(options);
+
+      expect(mockAddImage).toHaveBeenCalled();
+    });
+
+    it('should not render logo when logoBase64 is not provided', async () => {
+      const { jsPDF } = await import('jspdf');
+      const mockAddImage = vi.fn();
+
+      vi.mocked(jsPDF).mockImplementation(
+        () =>
+          ({
+            setFontSize: vi.fn().mockReturnThis(),
+            setFont: vi.fn().mockReturnThis(),
+            text: vi.fn().mockReturnThis(),
+            line: vi.fn().mockReturnThis(),
+            rect: vi.fn().mockReturnThis(),
+            setDrawColor: vi.fn().mockReturnThis(),
+            setFillColor: vi.fn().mockReturnThis(),
+            setTextColor: vi.fn().mockReturnThis(),
+            setLineDashPattern: vi.fn().mockReturnThis(),
+            splitTextToSize: vi.fn().mockImplementation((text: string) => [text]),
+            addPage: vi.fn().mockReturnThis(),
+            getTextWidth: vi.fn().mockReturnValue(50),
+            addImage: mockAddImage,
+            internal: {
+              pageSize: {
+                getWidth: () => 210,
+                getHeight: () => 297,
+              },
+            },
+            output: vi.fn().mockReturnValue(new ArrayBuffer(100)),
+          }) as unknown as ReturnType<typeof jsPDF>
+      );
+
+      const options: PDFExportOptions = {
+        invoice: createTestInvoice(),
+        customer: createTestCustomer(),
+        companyInfo: createTestCompanyInfo(),
+      };
+
+      await exporter.generateInvoicePDF(options);
+
+      // Should show placeholder (rect call) instead of addImage
+      expect(mockAddImage).not.toHaveBeenCalled();
+    });
+
+    it('should scale logo proportionally to max 50x30mm', async () => {
+      const { jsPDF } = await import('jspdf');
+      const mockAddImage = vi.fn();
+
+      vi.mocked(jsPDF).mockImplementation(
+        () =>
+          ({
+            setFontSize: vi.fn().mockReturnThis(),
+            setFont: vi.fn().mockReturnThis(),
+            text: vi.fn().mockReturnThis(),
+            line: vi.fn().mockReturnThis(),
+            rect: vi.fn().mockReturnThis(),
+            setDrawColor: vi.fn().mockReturnThis(),
+            setFillColor: vi.fn().mockReturnThis(),
+            setTextColor: vi.fn().mockReturnThis(),
+            setLineDashPattern: vi.fn().mockReturnThis(),
+            splitTextToSize: vi.fn().mockImplementation((text: string) => [text]),
+            addPage: vi.fn().mockReturnThis(),
+            getTextWidth: vi.fn().mockReturnValue(50),
+            addImage: mockAddImage,
+            internal: {
+              pageSize: {
+                getWidth: () => 210,
+                getHeight: () => 297,
+              },
+            },
+            output: vi.fn().mockReturnValue(new ArrayBuffer(100)),
+          }) as unknown as ReturnType<typeof jsPDF>
+      );
+
+      const companyInfoWithLogo = createTestCompanyInfo({
+        logoBase64:
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      });
+
+      const options: PDFExportOptions = {
+        invoice: createTestInvoice(),
+        customer: createTestCustomer(),
+        companyInfo: companyInfoWithLogo,
+      };
+
+      await exporter.generateInvoicePDF(options);
+
+      expect(mockAddImage).toHaveBeenCalled();
+      // The logo dimensions should be within the max bounds (50x30mm)
+      // addImage signature: addImage(imageData, format, x, y, width, height)
+      const callArgs = mockAddImage.mock.calls[0];
+      if (callArgs) {
+        const width = callArgs[4]; // 5th argument (index 4) is width
+        const height = callArgs[5]; // 6th argument (index 5) is height
+        expect(width).toBeLessThanOrEqual(50);
+        expect(height).toBeLessThanOrEqual(30);
+      }
+    });
+
+    it('should handle PNG logos', async () => {
+      const companyInfoWithLogo = createTestCompanyInfo({
+        logoBase64:
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      });
+
+      const options: PDFExportOptions = {
+        invoice: createTestInvoice(),
+        customer: createTestCustomer(),
+        companyInfo: companyInfoWithLogo,
+      };
+
+      const result = await exporter.generateInvoicePDF(options);
+      expect(result).toBeInstanceOf(Blob);
+    });
+
+    it('should handle JPEG logos', async () => {
+      const companyInfoWithLogo = createTestCompanyInfo({
+        logoBase64: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAA==',
+      });
+
+      const options: PDFExportOptions = {
+        invoice: createTestInvoice(),
+        customer: createTestCustomer(),
+        companyInfo: companyInfoWithLogo,
       };
 
       const result = await exporter.generateInvoicePDF(options);
