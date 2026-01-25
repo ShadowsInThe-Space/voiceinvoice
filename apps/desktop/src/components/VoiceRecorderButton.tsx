@@ -64,10 +64,10 @@ export function VoiceRecorderButton({
     }
   }, [isRecording, startRecording, stopRecording]);
 
-  // Register Alt + Space hotkey for voice recording
+  // Register Ctrl + R hotkey for voice recording
   useHotkey({
-    key: ' ',
-    modifiers: { alt: true },
+    key: 'r',
+    modifiers: { ctrl: true },
     callback: handleClick,
     enabled: !disabled,
     description: 'Toggle voice recording',
@@ -134,7 +134,7 @@ export function VoiceRecorderButton({
         {!isRecording && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground/70 transition-opacity duration-300">
             <Keyboard className="w-3.5 h-3.5" />
-            <span>Alt + Leertaste zum Starten</span>
+            <span>Strg + R zum Starten</span>
           </div>
         )}
 
