@@ -1,8 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { Shield, Key, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import {
+  Shield,
+  Key,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  ShoppingCart,
+  Star,
+  Zap,
+  Crown,
+} from 'lucide-react';
 import { licenseApi, License } from '../../lib/api/license-api';
+
+const PLANS = [
+  {
+    id: 'STARTER',
+    name: 'Starter',
+    price: '29€',
+    description: 'Für Einzelunternehmer',
+    quota: '100 Transkriptionen / Monat',
+    icon: Zap,
+    color: 'text-blue-500',
+    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+  },
+  {
+    id: 'PROFESSIONAL',
+    name: 'Professional',
+    price: '79€',
+    description: 'Für kleine Teams',
+    quota: '500 Transkriptionen / Monat',
+    icon: Star,
+    color: 'text-purple-500',
+    bgColor: 'bg-purple-50 dark:bg-purple-900/20',
+    popular: true,
+  },
+  {
+    id: 'ENTERPRISE',
+    name: 'Enterprise',
+    price: '199€',
+    description: 'Für große Organisationen',
+    quota: '10.000 Transkriptionen / Monat',
+    icon: Crown,
+    color: 'text-amber-500',
+    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+  },
+];
 
 /**
  *
@@ -14,6 +58,7 @@ export default function LicenseSettings() {
   const [error, setError] = useState<string | null>(null);
   const [inputKey, setInputKey] = useState('');
   const [validating, setValidating] = useState(false);
+  const [purchasing, setPurchasing] = useState<string | null>(null);
 
   useEffect(() => {
     loadStatus();
@@ -54,6 +99,35 @@ export default function LicenseSettings() {
     }
   };
 
+  const handlePurchase = async (planId: string) => {
+    setPurchasing(planId);
+    setError(null);
+
+    // Get company name and email from existing license or settings
+    // For now, prompt for demo purposes if not available, or use defaults
+    const companyName = license?.companyName || 'My Company';
+    const email = 'customer@example.com';
+
+    try {
+      const response = await licenseApi.createCheckoutSession({
+        planId,
+        companyName,
+        email,
+        successUrl: `${window.location.origin}/settings/license?success=true`,
+        cancelUrl: `${window.location.origin}/settings/license?canceled=true`,
+      });
+
+      // Redirect to Stripe checkout
+      window.location.href = response.url;
+    } catch (err) {
+      console.error('Failed to initiate purchase:', err);
+      setError(
+        'Zahlungsvorgang konnte nicht gestartet werden. Bitte versuchen Sie es später erneut.'
+      );
+      setPurchasing(null);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'ACTIVE':
@@ -68,14 +142,14 @@ export default function LicenseSettings() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-6xl mx-auto px-4 py-8">
       <Head>
         <title>Lizenzverwaltung - VoiceInvoice</title>
       </Head>
 
       <div className="mb-8 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          <Shield className="h-6 w-6 text-primary" />
+          <Shield className="h-6 w-6 text-blue-600" />
           Lizenzverwaltung
         </h1>
         <button
@@ -86,11 +160,11 @@ export default function LicenseSettings() {
         </button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 mb-12">
         {/* Status Card */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 h-full">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <CheckCircle className="h-5 w-5 text-gray-500" />
+            <CheckCircle className="h-5 w-5 text-green-500" />
             Aktueller Status
           </h2>
 
@@ -137,12 +211,6 @@ export default function LicenseSettings() {
                     }}
                   ></div>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  Resettet am{' '}
-                  {license.usageResetDate
-                    ? new Date(license.usageResetDate).toLocaleDateString()
-                    : '-'}
-                </p>
               </div>
             </div>
           ) : (
@@ -155,10 +223,10 @@ export default function LicenseSettings() {
         </div>
 
         {/* Update Card */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 h-full">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Key className="h-5 w-5 text-gray-500" />
-            Lizenzschlüssel aktualisieren
+            <Key className="h-5 w-5 text-blue-500" />
+            Lizenzschlüssel aktivieren
           </h2>
 
           <form onSubmit={handleUpdateLicense} className="space-y-4">
@@ -167,7 +235,7 @@ export default function LicenseSettings() {
                 htmlFor="licenseKey"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
               >
-                Neuer Lizenzschlüssel
+                Lizenzschlüssel
               </label>
               <input
                 id="licenseKey"
@@ -192,11 +260,74 @@ export default function LicenseSettings() {
             <p className="flex items-start gap-2">
               <Clock className="h-4 w-4 mt-0.5 shrink-0" />
               <span>
-                Bei Problemen mit Ihrer Lizenz wenden Sie sich bitte an den Support. Der Enterprise
-                Status schaltet erweiterte Sync-Features und Chirp-Erkennung frei.
+                Nach dem Kauf erhalten Sie Ihren Lizenzschlüssel per E-Mail. Nutzen Sie diesen hier,
+                um Ihren Enterprise-Status zu aktivieren.
               </span>
             </p>
           </div>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+          <ShoppingCart className="h-6 w-6 text-blue-600" />
+          Pläne & Upgrades
+        </h2>
+
+        <div className="grid gap-6 md:grid-cols-3">
+          {PLANS.map((plan) => (
+            <div
+              key={plan.id}
+              className={`relative bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-6 flex flex-col ${
+                plan.popular
+                  ? 'border-blue-500 ring-1 ring-blue-500'
+                  : 'border-gray-200 dark:border-gray-700'
+              }`}
+            >
+              {plan.popular && (
+                <div className="absolute top-0 right-6 transform -translate-y-1/2 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                  Beliebt
+                </div>
+              )}
+
+              <div className={`p-3 rounded-lg w-fit mb-4 ${plan.bgColor}`}>
+                <plan.icon className={`h-6 w-6 ${plan.color}`} />
+              </div>
+
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{plan.name}</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{plan.description}</p>
+
+              <div className="mb-6">
+                <span className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {plan.price}
+                </span>
+                <span className="text-gray-500 dark:text-gray-400">/Jahr</span>
+              </div>
+
+              <ul className="space-y-3 mb-8 flex-grow">
+                <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  {plan.quota}
+                </li>
+                <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  Voice-to-Invoice Support
+                </li>
+              </ul>
+
+              <button
+                onClick={() => handlePurchase(plan.id)}
+                disabled={purchasing !== null}
+                className={`w-full py-2 px-4 rounded-md font-medium transition-colors ${
+                  plan.popular
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {purchasing === plan.id ? 'Lädt...' : 'Jetzt auswählen'}
+              </button>
+            </div>
+          ))}
         </div>
       </div>
     </div>

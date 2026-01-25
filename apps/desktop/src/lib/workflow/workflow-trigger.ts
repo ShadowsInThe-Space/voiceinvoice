@@ -206,39 +206,101 @@ export function isValidBaseUrl(url: string): boolean {
 }
 
 /**
- * Retrieves the workflow configuration from localStorage.
+ * Retrieves the workflow configuration.
+ * Prefers backend settings if available (Electron context), falls back to localStorage.
  */
-export function getWorkflowConfig(): WorkflowConfig {
-  const enabled = localStorage.getItem(WORKFLOW_STORAGE_KEYS.enabled) === 'true';
-  const baseUrl = localStorage.getItem(WORKFLOW_STORAGE_KEYS.baseUrl) ?? 'http://localhost:5678';
+export async function getWorkflowConfig(): Promise<WorkflowConfig> {
+  let enabled = false;
+  let baseUrl = 'http://localhost:5678';
+  let webhooks: WorkflowWebhookConfig[] = [...DEFAULT_WORKFLOW_WEBHOOKS];
 
-  let webhooks: WorkflowWebhookConfig[];
-  try {
-    const stored = localStorage.getItem(WORKFLOW_STORAGE_KEYS.webhooks);
-    webhooks = stored ? JSON.parse(stored) : DEFAULT_WORKFLOW_WEBHOOKS;
-  } catch {
-    webhooks = DEFAULT_WORKFLOW_WEBHOOKS;
+  // Try to load from backend if in Electron
+  if (typeof window !== 'undefined' && window.voiceinvoice?.settings) {
+    try {
+      const settings = (await window.voiceinvoice.settings.get()) as Record<string, string>;
+
+      if (settings[WORKFLOW_STORAGE_KEYS.enabled] !== undefined) {
+        enabled = settings[WORKFLOW_STORAGE_KEYS.enabled] === 'true';
+      } else {
+        enabled = localStorage.getItem(WORKFLOW_STORAGE_KEYS.enabled) === 'true';
+      }
+
+      if (settings[WORKFLOW_STORAGE_KEYS.baseUrl]) {
+        baseUrl = settings[WORKFLOW_STORAGE_KEYS.baseUrl];
+      } else {
+        baseUrl = localStorage.getItem(WORKFLOW_STORAGE_KEYS.baseUrl) ?? baseUrl;
+      }
+
+      if (settings[WORKFLOW_STORAGE_KEYS.webhooks]) {
+        try {
+          webhooks = JSON.parse(settings[WORKFLOW_STORAGE_KEYS.webhooks]);
+        } catch (e) {
+          console.error('[Workflow] Failed to parse webhooks from backend:', e);
+        }
+      } else {
+        const stored = localStorage.getItem(WORKFLOW_STORAGE_KEYS.webhooks);
+        if (stored) {
+          try {
+            webhooks = JSON.parse(stored);
+          } catch (e) {
+            console.error('[Workflow] Failed to parse webhooks from localStorage:', e);
+          }
+        }
+      }
+
+      return { enabled, baseUrl, webhooks };
+    } catch (err) {
+      console.error('[Workflow] Failed to load settings from backend:', err);
+    }
+  }
+
+  // Fallback to localStorage only
+  enabled = localStorage.getItem(WORKFLOW_STORAGE_KEYS.enabled) === 'true';
+  baseUrl = localStorage.getItem(WORKFLOW_STORAGE_KEYS.baseUrl) ?? baseUrl;
+
+  const stored = localStorage.getItem(WORKFLOW_STORAGE_KEYS.webhooks);
+  if (stored) {
+    try {
+      webhooks = JSON.parse(stored);
+    } catch {
+      webhooks = DEFAULT_WORKFLOW_WEBHOOKS;
+    }
   }
 
   return { enabled, baseUrl, webhooks };
 }
 
 /**
- * Saves the workflow configuration to localStorage.
+ * Saves the workflow configuration.
+ * Saves to both backend (if available) and localStorage.
  * @param config
  */
-export function saveWorkflowConfig(config: WorkflowConfig): void {
+export async function saveWorkflowConfig(config: WorkflowConfig): Promise<void> {
+  // Save to localStorage
   localStorage.setItem(WORKFLOW_STORAGE_KEYS.enabled, String(config.enabled));
   localStorage.setItem(WORKFLOW_STORAGE_KEYS.baseUrl, config.baseUrl);
   localStorage.setItem(WORKFLOW_STORAGE_KEYS.webhooks, JSON.stringify(config.webhooks));
+
+  // Save to backend if in Electron
+  if (typeof window !== 'undefined' && window.voiceinvoice?.settings) {
+    try {
+      await window.voiceinvoice.settings.update({
+        [WORKFLOW_STORAGE_KEYS.enabled]: String(config.enabled),
+        [WORKFLOW_STORAGE_KEYS.baseUrl]: config.baseUrl,
+        [WORKFLOW_STORAGE_KEYS.webhooks]: JSON.stringify(config.webhooks),
+      });
+    } catch (err) {
+      console.error('[Workflow] Failed to save settings to backend:', err);
+    }
+  }
 }
 
 /**
  * Gets the webhook URL for a specific workflow intent.
  * @param intent
  */
-export function getWebhookUrl(intent: WorkflowIntent): string | null {
-  const config = getWorkflowConfig();
+export async function getWebhookUrl(intent: WorkflowIntent): Promise<string | null> {
+  const config = await getWorkflowConfig();
 
   if (!config.enabled || !isValidBaseUrl(config.baseUrl)) {
     return null;
@@ -251,7 +313,8 @@ export function getWebhookUrl(intent: WorkflowIntent): string | null {
 
   // Combine base URL with webhook path
   const baseUrl = config.baseUrl.replace(/\/$/, ''); // Remove trailing slash
-  return `${baseUrl}${webhook.path}`;
+  const path = webhook.path.startsWith('/') ? webhook.path : `/${webhook.path}`;
+  return `${baseUrl}${path}`;
 }
 
 /**
@@ -267,7 +330,7 @@ export async function triggerWorkflow(
 ): Promise<WorkflowResult> {
   const startTime = Date.now();
 
-  const url = getWebhookUrl(intent);
+  const url = await getWebhookUrl(intent);
   if (!url) {
     return {
       success: false,
@@ -278,8 +341,8 @@ export async function triggerWorkflow(
     };
   }
 
-  const config = getWorkflowConfig();
-  const webhook = config.webhooks.find((w) => w.intent === intent);
+  const config = await getWorkflowConfig();
+  const webhook = config.webhooks.find((w: WorkflowWebhookConfig) => w.intent === intent);
 
   // Build payload
   const payload = {
@@ -442,18 +505,18 @@ function detectErrorType(errorMessage: string): {
 /**
  * Gets information about all available workflows.
  */
-export function getAvailableWorkflows(): WorkflowWebhookConfig[] {
-  const config = getWorkflowConfig();
-  return config.webhooks.filter((w) => w.enabled);
+export async function getAvailableWorkflows(): Promise<WorkflowWebhookConfig[]> {
+  const config = await getWorkflowConfig();
+  return config.webhooks.filter((w: WorkflowWebhookConfig) => w.enabled);
 }
 
 /**
  * Gets the human-readable name for a workflow intent.
  * @param intent
  */
-export function getWorkflowName(intent: WorkflowIntent): string {
-  const config = getWorkflowConfig();
-  const webhook = config.webhooks.find((w) => w.intent === intent);
+export async function getWorkflowName(intent: WorkflowIntent): Promise<string> {
+  const config = await getWorkflowConfig();
+  const webhook = config.webhooks.find((w: WorkflowWebhookConfig) => w.intent === intent);
   return webhook?.name ?? intent.replace('WORKFLOW_', '').replace(/_/g, ' ');
 }
 
@@ -461,9 +524,9 @@ export function getWorkflowName(intent: WorkflowIntent): string {
  * Gets the description for a workflow intent.
  * @param intent
  */
-export function getWorkflowDescription(intent: WorkflowIntent): string {
-  const config = getWorkflowConfig();
-  const webhook = config.webhooks.find((w) => w.intent === intent);
+export async function getWorkflowDescription(intent: WorkflowIntent): Promise<string> {
+  const config = await getWorkflowConfig();
+  const webhook = config.webhooks.find((w: WorkflowWebhookConfig) => w.intent === intent);
   return webhook?.description ?? '';
 }
 
@@ -505,7 +568,7 @@ export async function triggerWorkflowWithRecording(
   params: WorkflowParams = {}
 ): Promise<WorkflowResult> {
   const result = await triggerWorkflow(intent, params);
-  const workflowName = getWorkflowName(intent);
+  const workflowName = await getWorkflowName(intent);
 
   // Record the execution if callback is set
   if (recordCallback) {

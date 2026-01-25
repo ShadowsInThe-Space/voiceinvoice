@@ -129,7 +129,7 @@ export function AlertProvider({ children }: AlertProviderProps): React.ReactElem
   // Check system configuration
   const checkSystemConfig = useCallback(async () => {
     // Check if workflows are enabled but n8n is not reachable
-    const workflowConfig = getWorkflowConfig();
+    const workflowConfig = await getWorkflowConfig();
     if (workflowConfig.enabled) {
       try {
         const response = await fetch(`${workflowConfig.baseUrl}/healthz`, {
