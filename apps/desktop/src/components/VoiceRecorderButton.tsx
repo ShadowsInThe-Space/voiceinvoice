@@ -87,8 +87,9 @@ export function VoiceRecorderButton({
           onClick={handleClick}
           disabled={disabled}
           aria-label={ariaLabel}
+          title={isRecording ? 'Aufnahme stoppen (Leertaste)' : 'Aufnahme starten (Leertaste)'}
           className={cn(
-            "relative flex items-center justify-center w-28 h-28 rounded-full shadow-2xl transition-all duration-500 ease-out transform active:scale-90 border-8",
+            "relative flex items-center justify-center w-28 h-28 rounded-full shadow-2xl transition-all duration-500 ease-out transform active:scale-90 border-8 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30",
             isRecording
               ? "bg-accent border-accent-foreground/20 hover:bg-accent/90"
               : "bg-primary border-primary-foreground/10 hover:bg-primary/90 hover:scale-105",
@@ -134,7 +135,7 @@ export function VoiceRecorderButton({
 
         {/* Error Display */}
         {error && (
-          <div className="absolute mt-20 text-sm font-medium text-destructive bg-destructive/10 px-3 py-1 rounded-md">
+          <div role="alert" className="absolute mt-20 text-sm font-medium text-destructive bg-destructive/10 px-3 py-1 rounded-md">
             Fehler: {error.message}
           </div>
         )}

@@ -252,5 +252,64 @@ describe('VoiceRecorderButton', () => {
         expect.stringMatching(/aufnahme stoppen|stop recording/i)
       );
     });
+
+    it('should have visible focus styles for keyboard navigation', () => {
+      render(<VoiceRecorderButton onRecordingComplete={mockOnRecordingComplete} />);
+      const button = screen.getByRole('button');
+      expect(button).toHaveClass('focus-visible:ring-4');
+      expect(button).toHaveClass('focus-visible:outline-none');
+    });
+
+    it('should have title attribute with keyboard hint', () => {
+      // Idle state
+      mockUseVoiceRecording.mockReturnValue({
+        isRecording: false,
+        duration: 0,
+        error: null,
+        startRecording: mockStartRecording,
+        stopRecording: mockStopRecording,
+      });
+
+      const { rerender } = render(
+        <VoiceRecorderButton onRecordingComplete={mockOnRecordingComplete} />
+      );
+
+      expect(screen.getByRole('button')).toHaveAttribute(
+        'title',
+        expect.stringContaining('(Leertaste)')
+      );
+
+      // Recording state
+      mockUseVoiceRecording.mockReturnValue({
+        isRecording: true,
+        duration: 1000,
+        error: null,
+        startRecording: mockStartRecording,
+        stopRecording: mockStopRecording,
+      });
+
+      rerender(<VoiceRecorderButton onRecordingComplete={mockOnRecordingComplete} />);
+
+      expect(screen.getByRole('button')).toHaveAttribute(
+        'title',
+        expect.stringContaining('(Leertaste)')
+      );
+    });
+
+    it('should use role="alert" for error messages', () => {
+      mockUseVoiceRecording.mockReturnValue({
+        isRecording: false,
+        duration: 0,
+        error: new Error('Test error'),
+        startRecording: mockStartRecording,
+        stopRecording: mockStopRecording,
+      });
+
+      render(<VoiceRecorderButton onRecordingComplete={mockOnRecordingComplete} />);
+
+      const alert = screen.getByRole('alert');
+      expect(alert).toBeInTheDocument();
+      expect(alert).toHaveTextContent(/Test error/);
+    });
   });
 });
