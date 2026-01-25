@@ -75,24 +75,26 @@ export default function SettingsPage(): React.ReactElement {
     if (savedRate) setTtsRate(parseFloat(savedRate));
 
     // Load backend settings
-    if (typeof window !== 'undefined' && window.voiceinvoice) {
-      window.voiceinvoice.settings
-        .get()
-        .then((settings: unknown) => {
-          const typedSettings = settings as Record<string, string>;
-          if (typedSettings) {
-            if (typedSettings.n8nWebhookUrl) {
-              setN8nWebhookUrl(typedSettings.n8nWebhookUrl);
+    if (typeof window !== 'undefined' && window.voiceinvoice?.settings?.get) {
+      const getPromise = window.voiceinvoice.settings.get();
+      if (getPromise && typeof getPromise.then === 'function') {
+        getPromise
+          .then((settings: unknown) => {
+            const typedSettings = settings as Record<string, string>;
+            if (typedSettings) {
+              if (typedSettings.n8nWebhookUrl) {
+                setN8nWebhookUrl(typedSettings.n8nWebhookUrl);
+              }
+              if (typedSettings[WORKFLOW_STORAGE_KEYS.enabled] !== undefined) {
+                setWorkflowsEnabled(typedSettings[WORKFLOW_STORAGE_KEYS.enabled] === 'true');
+              }
+              if (typedSettings[WORKFLOW_STORAGE_KEYS.baseUrl]) {
+                setN8nBaseUrl(typedSettings[WORKFLOW_STORAGE_KEYS.baseUrl]);
+              }
             }
-            if (typedSettings[WORKFLOW_STORAGE_KEYS.enabled] !== undefined) {
-              setWorkflowsEnabled(typedSettings[WORKFLOW_STORAGE_KEYS.enabled] === 'true');
-            }
-            if (typedSettings[WORKFLOW_STORAGE_KEYS.baseUrl]) {
-              setN8nBaseUrl(typedSettings[WORKFLOW_STORAGE_KEYS.baseUrl]);
-            }
-          }
-        })
-        .catch((err) => console.error('Failed to load backend settings:', err));
+          })
+          .catch((err) => console.error('Failed to load backend settings:', err));
+      }
     }
   }, []);
 
@@ -136,7 +138,7 @@ export default function SettingsPage(): React.ReactElement {
         localStorage.setItem(STORAGE_KEYS.ttsRate, ttsRate.toString());
 
         // Save to backend
-        if (typeof window !== 'undefined' && window.voiceinvoice) {
+        if (typeof window !== 'undefined' && window.voiceinvoice?.settings?.update) {
           await window.voiceinvoice.settings.update({
             n8nWebhookUrl,
             [WORKFLOW_STORAGE_KEYS.enabled]: String(workflowsEnabled),
@@ -196,7 +198,7 @@ export default function SettingsPage(): React.ReactElement {
     setWorkflowsEnabled(false);
     setN8nBaseUrl('http://localhost:5678');
 
-    if (typeof window !== 'undefined' && window.voiceinvoice) {
+    if (typeof window !== 'undefined' && window.voiceinvoice?.settings?.update) {
       window.voiceinvoice.settings
         .update({
           n8nWebhookUrl: '',
