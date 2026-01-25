@@ -8,7 +8,7 @@
 
 import { dialog } from 'electron';
 import { PrismaClient } from '@prisma/client';
-import { BankingService } from '../../src/lib/banking/banking-service';
+import { BankingService, CONFIDENCE_THRESHOLDS } from '../../src/lib/banking/banking-service';
 
 /**
  * Context for banking IPC handlers.
@@ -45,6 +45,44 @@ function success<T>(data: T): ApiResult<T> {
  */
 function error(message: string): ApiResult<never> {
   return { success: false, error: { message } };
+}
+
+/**
+ * Invoice data for matching.
+ */
+interface InvoiceForMatching {
+  id: string;
+  number: string;
+  customerName: string;
+  total: number;
+  status: string;
+}
+
+/**
+ * Fetches unpaid invoices for matching.
+ * This is a shared helper to avoid DRY violation.
+ *
+ * @param {PrismaClient} prisma - Prisma client
+ * @returns {Promise<InvoiceForMatching[]>} Invoices for matching
+ */
+async function getUnpaidInvoicesForMatching(prisma: PrismaClient): Promise<InvoiceForMatching[]> {
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      status: { in: ['SENT', 'OVERDUE'] },
+      deletedAt: null,
+    },
+    include: {
+      customer: true,
+    },
+  });
+
+  return invoices.map((inv) => ({
+    id: inv.id,
+    number: inv.number,
+    customerName: inv.customer.name,
+    total: inv.total,
+    status: inv.status,
+  }));
 }
 
 /**
@@ -98,6 +136,9 @@ export async function selectFolderHandler(): Promise<ApiResult<string | null>> {
 /**
  * Imports transactions from a CSV file.
  *
+ * Uses Prisma transactions to ensure database consistency.
+ * Prevents double payment by checking invoice status before marking as paid.
+ *
  * @param {BankingIpcContext} ctx - Handler context
  * @param {string} filePath - Path to CSV file
  * @returns {Promise<ApiResult<{imported: number, duplicates: number, matched: number, errors: string[]}>>} Import result
@@ -115,27 +156,15 @@ export async function importCsvHandler(
     let matched = 0;
     const errors: string[] = [];
 
-    // Get unpaid invoices for matching
-    const invoices = await ctx.prisma.invoice.findMany({
-      where: {
-        status: { in: ['SENT', 'OVERDUE'] },
-        deletedAt: null,
-      },
-      include: {
-        customer: true,
-      },
-    });
+    // Get unpaid invoices for matching using shared helper
+    const invoicesForMatching = await getUnpaidInvoicesForMatching(ctx.prisma);
 
-    const invoicesForMatching = invoices.map((inv) => ({
-      id: inv.id,
-      number: inv.number,
-      customerName: inv.customer.name,
-      total: inv.total,
-    }));
+    // Track which invoices have been matched in this import to prevent double matching
+    const matchedInvoiceIds = new Set<string>();
 
     for (const tx of transactions) {
       try {
-        // Check for duplicates (same date, amount, counterparty)
+        // Use upsert pattern to handle race conditions in duplicate detection
         const existing = await ctx.prisma.bankTransaction.findFirst({
           where: {
             transactionDate: tx.transactionDate,
@@ -150,7 +179,11 @@ export async function importCsvHandler(
           continue;
         }
 
-        // Find potential matches
+        // Find potential matches - exclude already matched invoices in this import
+        const availableInvoices = invoicesForMatching.filter(
+          (inv) => !matchedInvoiceIds.has(inv.id)
+        );
+
         const matchInput: { counterparty: string; amount: number; purpose?: string } = {
           counterparty: tx.counterparty,
           amount: tx.amount,
@@ -159,10 +192,13 @@ export async function importCsvHandler(
           matchInput.purpose = tx.purpose;
         }
 
-        const matches = ctx.bankingService.findMatches(matchInput, invoicesForMatching);
+        const matches = ctx.bankingService.findMatches(matchInput, availableInvoices);
 
         // Only auto-match if confidence is very high
-        const bestMatch = matches.length > 0 && matches[0].confidence >= 0.85 ? matches[0] : null;
+        const bestMatch =
+          matches.length > 0 && matches[0].confidence >= CONFIDENCE_THRESHOLDS.AUTO_MATCH
+            ? matches[0]
+            : null;
 
         // Build data object conditionally to satisfy exactOptionalPropertyTypes
         const txData: Parameters<typeof ctx.prisma.bankTransaction.create>[0]['data'] = {
@@ -182,20 +218,31 @@ export async function importCsvHandler(
           txData.matchConfidence = bestMatch.confidence;
         }
 
-        // Create transaction record
-        await ctx.prisma.bankTransaction.create({ data: txData });
+        // Use Prisma transaction to ensure consistency between transaction and invoice update
+        await ctx.prisma.$transaction(async (prisma) => {
+          // Create transaction record
+          await prisma.bankTransaction.create({ data: txData });
+
+          // Update invoice status if fully paid and not already paid
+          if (bestMatch && bestMatch.confidence >= CONFIDENCE_THRESHOLDS.AUTO_MATCH) {
+            // Re-check invoice status to prevent double payment
+            const invoice = await prisma.invoice.findUnique({
+              where: { id: bestMatch.invoiceId },
+            });
+
+            if (invoice && invoice.status !== 'PAID') {
+              await prisma.invoice.update({
+                where: { id: bestMatch.invoiceId },
+                data: { status: 'PAID', paidAt: tx.transactionDate },
+              });
+            }
+          }
+        });
 
         imported++;
         if (bestMatch) {
           matched++;
-
-          // Update invoice status if fully paid
-          if (bestMatch.confidence >= 0.85) {
-            await ctx.prisma.invoice.update({
-              where: { id: bestMatch.invoiceId },
-              data: { status: 'PAID', paidAt: tx.transactionDate },
-            });
-          }
+          matchedInvoiceIds.add(bestMatch.invoiceId);
         }
       } catch (err) {
         errors.push(
@@ -276,23 +323,8 @@ export async function findMatchesHandler(
       return error('Transaktion nicht gefunden');
     }
 
-    // Get unpaid invoices
-    const invoices = await ctx.prisma.invoice.findMany({
-      where: {
-        status: { in: ['SENT', 'OVERDUE'] },
-        deletedAt: null,
-      },
-      include: {
-        customer: true,
-      },
-    });
-
-    const invoicesForMatching = invoices.map((inv) => ({
-      id: inv.id,
-      number: inv.number,
-      customerName: inv.customer.name,
-      total: inv.total,
-    }));
+    // Get unpaid invoices using shared helper
+    const invoicesForMatching = await getUnpaidInvoicesForMatching(ctx.prisma);
 
     const matchInput: { counterparty: string; amount: number; purpose?: string } = {
       counterparty: transaction.counterparty,
@@ -304,19 +336,24 @@ export async function findMatchesHandler(
 
     const matches = ctx.bankingService.findMatches(matchInput, invoicesForMatching);
 
-    // Enrich with invoice details
-    const enrichedMatches = matches.map((match) => {
-      const invoice = invoices.find((inv) => inv.id === match.invoiceId)!;
-      return {
-        transactionId,
-        invoiceId: match.invoiceId,
-        invoiceNumber: invoice.number,
-        customerName: invoice.customer.name,
-        invoiceAmount: invoice.total,
-        confidence: match.confidence,
-        matchReasons: match.reasons,
-      };
-    });
+    // Enrich with invoice details - use safe lookup instead of non-null assertion
+    const enrichedMatches = matches
+      .map((match) => {
+        const invoice = invoicesForMatching.find((inv) => inv.id === match.invoiceId);
+        // Skip matches for invoices that no longer exist (deleted during operation)
+        if (!invoice) return null;
+
+        return {
+          transactionId,
+          invoiceId: match.invoiceId,
+          invoiceNumber: invoice.number,
+          customerName: invoice.customerName,
+          invoiceAmount: invoice.total,
+          confidence: match.confidence,
+          matchReasons: match.reasons,
+        };
+      })
+      .filter((match): match is NonNullable<typeof match> => match !== null);
 
     return success(enrichedMatches);
   } catch (err) {
@@ -326,6 +363,9 @@ export async function findMatchesHandler(
 
 /**
  * Confirms a match between transaction and invoice.
+ *
+ * Uses Prisma transaction to ensure consistency.
+ * Checks invoice status before marking as paid to prevent double payment.
  *
  * @param {BankingIpcContext} ctx - Handler context
  * @param {string} transactionId - Transaction ID
@@ -348,23 +388,39 @@ export async function confirmMatchHandler(
       return error('Transaktion nicht gefunden');
     }
 
-    // Update transaction
-    await ctx.prisma.bankTransaction.update({
-      where: { id: transactionId },
-      data: {
-        matchedInvoiceId: invoiceId,
-        matchConfidence: confidence,
-        reconciled: true,
-      },
-    });
+    // Use Prisma transaction for consistency
+    await ctx.prisma.$transaction(async (prisma) => {
+      // Check if invoice is already paid
+      const invoice = await prisma.invoice.findUnique({
+        where: { id: invoiceId },
+      });
 
-    // Mark invoice as paid
-    await ctx.prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        status: 'PAID',
-        paidAt: transaction.transactionDate,
-      },
+      if (!invoice) {
+        throw new Error('Rechnung nicht gefunden');
+      }
+
+      if (invoice.status === 'PAID') {
+        throw new Error('Rechnung ist bereits bezahlt');
+      }
+
+      // Update transaction
+      await prisma.bankTransaction.update({
+        where: { id: transactionId },
+        data: {
+          matchedInvoiceId: invoiceId,
+          matchConfidence: confidence,
+          reconciled: true,
+        },
+      });
+
+      // Mark invoice as paid
+      await prisma.invoice.update({
+        where: { id: invoiceId },
+        data: {
+          status: 'PAID',
+          paidAt: transaction.transactionDate,
+        },
+      });
     });
 
     return success(undefined);

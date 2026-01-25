@@ -10,6 +10,74 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+// ============================================================================
+// Constants - Confidence Thresholds and Weights
+// ============================================================================
+
+/**
+ * Confidence thresholds for invoice matching.
+ */
+const CONFIDENCE_THRESHOLDS = {
+  /** Minimum confidence to include in results */
+  MINIMUM: 0.3,
+  /** Threshold for automatic matching */
+  AUTO_MATCH: 0.85,
+} as const;
+
+/**
+ * Confidence weights for different matching criteria.
+ */
+const CONFIDENCE_WEIGHTS = {
+  /** Weight for exact amount match */
+  AMOUNT_EXACT: 0.4,
+  /** Weight for very close amount (< 1% difference) */
+  AMOUNT_VERY_CLOSE: 0.35,
+  /** Weight for similar amount (< 5% difference) */
+  AMOUNT_SIMILAR: 0.2,
+  /** Weight for exact customer name match */
+  NAME_EXACT: 0.35,
+  /** Weight for similar customer name */
+  NAME_SIMILAR: 0.25,
+  /** Weight for partially similar name */
+  NAME_PARTIAL: 0.1,
+  /** Weight for full invoice number found */
+  INVOICE_NUMBER_FULL: 0.25,
+  /** Weight for partial invoice number (digits only) */
+  INVOICE_NUMBER_PARTIAL: 0.15,
+} as const;
+
+/**
+ * Similarity thresholds for string matching.
+ */
+const SIMILARITY_THRESHOLDS = {
+  /** Threshold for "exact" name match */
+  EXACT: 0.9,
+  /** Threshold for "similar" name match */
+  SIMILAR: 0.7,
+  /** Threshold for "partial" name match */
+  PARTIAL: 0.5,
+} as const;
+
+/**
+ * Amount comparison tolerances.
+ */
+const AMOUNT_TOLERANCE = {
+  /** Absolute tolerance for "exact" match in currency units */
+  EXACT_ABSOLUTE: 0.01,
+  /** Percentage tolerance for "very close" match */
+  VERY_CLOSE_PERCENT: 0.01,
+  /** Percentage tolerance for "similar" match */
+  SIMILAR_PERCENT: 0.05,
+} as const;
+
+/**
+ * Minimum digits required for partial invoice number matching.
+ */
+const MIN_INVOICE_NUMBER_DIGITS = 4;
+
+// Export constants for use in handlers
+export { CONFIDENCE_THRESHOLDS };
+
 /**
  * Parsed transaction from CSV file.
  */
@@ -147,6 +215,7 @@ function parseCsvLine(line: string, delimiter: string = ';'): string[] {
  * @param {string[]} lines - CSV lines (excluding header)
  * @param {string[]} headers - Header fields
  * @returns {ParsedTransaction[]} Parsed transactions
+ * @throws {Error} If required columns are not found
  */
 function parseSparkasseCsv(lines: string[], headers: string[]): ParsedTransaction[] {
   const transactions: ParsedTransaction[] = [];
@@ -162,21 +231,30 @@ function parseSparkasseCsv(lines: string[], headers: string[]): ParsedTransactio
   const amountIdx = headers.findIndex((h) => h.toLowerCase().includes('betrag'));
   const currencyIdx = headers.findIndex((h) => h.toLowerCase().includes('waehrung'));
 
+  // Validate required columns exist
+  if (dateIdx === -1 || amountIdx === -1) {
+    throw new Error('CSV-Datei enthält nicht die erforderlichen Spalten (Buchungstag, Betrag)');
+  }
+
   for (const line of lines) {
     if (!line.trim()) continue;
 
     const fields = parseCsvLine(line);
+
+    // Skip if required fields are missing
+    if (fields.length <= Math.max(dateIdx, amountIdx)) continue;
+
     const transactionDate = parseGermanDate(fields[dateIdx]);
 
     if (!transactionDate) continue;
 
     transactions.push({
       transactionDate,
-      valueDate: parseGermanDate(fields[valueDateIdx]) || undefined,
-      counterparty: fields[counterpartyIdx] || 'Unbekannt',
+      valueDate: valueDateIdx >= 0 ? parseGermanDate(fields[valueDateIdx]) || undefined : undefined,
+      counterparty: counterpartyIdx >= 0 ? fields[counterpartyIdx] || 'Unbekannt' : 'Unbekannt',
       amount: parseGermanAmount(fields[amountIdx]),
-      currency: fields[currencyIdx] || 'EUR',
-      purpose: fields[purposeIdx] || undefined,
+      currency: currencyIdx >= 0 ? fields[currencyIdx] || 'EUR' : 'EUR',
+      purpose: purposeIdx >= 0 ? fields[purposeIdx] || undefined : undefined,
     });
   }
 
@@ -189,6 +267,7 @@ function parseSparkasseCsv(lines: string[], headers: string[]): ParsedTransactio
  * @param {string[]} lines - CSV lines (excluding header)
  * @param {string[]} headers - Header fields
  * @returns {ParsedTransaction[]} Parsed transactions
+ * @throws {Error} If required columns are not found
  */
 function parseDeutscheBankCsv(lines: string[], headers: string[]): ParsedTransaction[] {
   const transactions: ParsedTransaction[] = [];
@@ -200,21 +279,30 @@ function parseDeutscheBankCsv(lines: string[], headers: string[]): ParsedTransac
   const purposeIdx = headers.findIndex((h) => h.toLowerCase().includes('verwendungszweck'));
   const amountIdx = headers.findIndex((h) => h.toLowerCase().includes('betrag'));
 
+  // Validate required columns exist
+  if (dateIdx === -1 || amountIdx === -1) {
+    throw new Error('CSV-Datei enthält nicht die erforderlichen Spalten (Buchungsdatum, Betrag)');
+  }
+
   for (const line of lines) {
     if (!line.trim()) continue;
 
     const fields = parseCsvLine(line);
+
+    // Skip if required fields are missing
+    if (fields.length <= Math.max(dateIdx, amountIdx)) continue;
+
     const transactionDate = parseGermanDate(fields[dateIdx]);
 
     if (!transactionDate) continue;
 
     transactions.push({
       transactionDate,
-      counterparty: fields[counterpartyIdx] || 'Unbekannt',
-      counterpartyIban: fields[ibanIdx] || undefined,
+      counterparty: counterpartyIdx >= 0 ? fields[counterpartyIdx] || 'Unbekannt' : 'Unbekannt',
+      counterpartyIban: ibanIdx >= 0 ? fields[ibanIdx] || undefined : undefined,
       amount: parseGermanAmount(fields[amountIdx]),
       currency: 'EUR',
-      purpose: fields[purposeIdx] || undefined,
+      purpose: purposeIdx >= 0 ? fields[purposeIdx] || undefined : undefined,
     });
   }
 
@@ -344,9 +432,24 @@ export class BankingService {
    *
    * @param {string} filePath - Path to CSV file
    * @returns {ParsedTransaction[]} Parsed transactions
-   * @throws {Error} If file cannot be read or parsed
+   * @throws {Error} If file cannot be read, is not a CSV, or cannot be parsed
    */
   parseCsvFile(filePath: string): ParsedTransaction[] {
+    // Validate file path
+    if (!filePath) {
+      throw new Error('Kein Dateipfad angegeben');
+    }
+
+    if (!filePath.toLowerCase().endsWith('.csv')) {
+      throw new Error('Nur CSV-Dateien sind erlaubt');
+    }
+
+    // Check file exists and is a file (not directory)
+    const stats = fs.statSync(filePath);
+    if (!stats.isFile()) {
+      throw new Error('Pfad ist keine Datei');
+    }
+
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split(/\r?\n/);
 
@@ -410,31 +513,36 @@ export class BankingService {
       let confidence = 0;
       const reasons: string[] = [];
 
-      // Amount match (exact or very close)
-      const amountDiff = Math.abs(transaction.amount - invoice.total);
-      const amountPercent = amountDiff / Math.max(Math.abs(invoice.total), 1);
+      // Amount match - use absolute values to handle negative amounts (outgoing payments)
+      const txAmountAbs = Math.abs(transaction.amount);
+      const invAmountAbs = Math.abs(invoice.total);
+      const amountDiff = Math.abs(txAmountAbs - invAmountAbs);
+      const amountPercent = amountDiff / Math.max(invAmountAbs, 1);
 
-      if (amountDiff < 0.01) {
-        confidence += 0.4;
+      // Use epsilon-based comparison for floating-point precision
+      const epsilon = Math.max(invAmountAbs * 0.0001, AMOUNT_TOLERANCE.EXACT_ABSOLUTE);
+
+      if (amountDiff < epsilon) {
+        confidence += CONFIDENCE_WEIGHTS.AMOUNT_EXACT;
         reasons.push('Betrag stimmt exakt überein');
-      } else if (amountPercent < 0.01) {
-        confidence += 0.35;
+      } else if (amountPercent < AMOUNT_TOLERANCE.VERY_CLOSE_PERCENT) {
+        confidence += CONFIDENCE_WEIGHTS.AMOUNT_VERY_CLOSE;
         reasons.push('Betrag stimmt fast überein (< 1% Abweichung)');
-      } else if (amountPercent < 0.05) {
-        confidence += 0.2;
+      } else if (amountPercent < AMOUNT_TOLERANCE.SIMILAR_PERCENT) {
+        confidence += CONFIDENCE_WEIGHTS.AMOUNT_SIMILAR;
         reasons.push('Betrag ähnlich (< 5% Abweichung)');
       }
 
       // Customer name match
       const nameSimilarity = calculateSimilarity(transaction.counterparty, invoice.customerName);
-      if (nameSimilarity > 0.9) {
-        confidence += 0.35;
+      if (nameSimilarity > SIMILARITY_THRESHOLDS.EXACT) {
+        confidence += CONFIDENCE_WEIGHTS.NAME_EXACT;
         reasons.push('Kundenname stimmt überein');
-      } else if (nameSimilarity > 0.7) {
-        confidence += 0.25;
+      } else if (nameSimilarity > SIMILARITY_THRESHOLDS.SIMILAR) {
+        confidence += CONFIDENCE_WEIGHTS.NAME_SIMILAR;
         reasons.push('Kundenname ähnlich');
-      } else if (nameSimilarity > 0.5) {
-        confidence += 0.1;
+      } else if (nameSimilarity > SIMILARITY_THRESHOLDS.PARTIAL) {
+        confidence += CONFIDENCE_WEIGHTS.NAME_PARTIAL;
         reasons.push('Kundenname teilweise ähnlich');
       }
 
@@ -444,20 +552,20 @@ export class BankingService {
         const invoiceNumLower = invoice.number.toLowerCase();
 
         if (purposeLower.includes(invoiceNumLower)) {
-          confidence += 0.25;
+          confidence += CONFIDENCE_WEIGHTS.INVOICE_NUMBER_FULL;
           reasons.push('Rechnungsnummer im Verwendungszweck gefunden');
         } else {
-          // Check for partial match (at least 4 chars)
+          // Check for partial match (at least MIN_INVOICE_NUMBER_DIGITS digits)
           const numDigits = invoice.number.replace(/\D/g, '');
-          if (numDigits.length >= 4 && purposeLower.includes(numDigits)) {
-            confidence += 0.15;
+          if (numDigits.length >= MIN_INVOICE_NUMBER_DIGITS && purposeLower.includes(numDigits)) {
+            confidence += CONFIDENCE_WEIGHTS.INVOICE_NUMBER_PARTIAL;
             reasons.push('Rechnungsnummer (Ziffern) im Verwendungszweck');
           }
         }
       }
 
       // Only include if confidence is meaningful
-      if (confidence >= 0.3) {
+      if (confidence >= CONFIDENCE_THRESHOLDS.MINIMUM) {
         matches.push({
           invoiceId: invoice.id,
           confidence: Math.min(confidence, 1),
