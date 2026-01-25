@@ -82,7 +82,7 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
   const [speaking, setSpeaking] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [useGoogleTTS, setUseGoogleTTS] = useState(true);
+  const [useGoogleTTS, setUseGoogleTTS] = useState(true); // Default: Google Cloud TTS (high quality)
   const [speakingRate, setSpeakingRate] = useState(1.0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
