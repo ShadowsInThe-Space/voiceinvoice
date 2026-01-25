@@ -6,6 +6,8 @@
  * @module lib/ai/gemini-client
  */
 
+import { generateExtractionPrompt } from './invoice-keywords';
+
 /**
  * Configuration for GeminiClient.
  */
@@ -272,7 +274,11 @@ export class GeminiClient {
    * @param text
    */
   async parseInvoice(text: string): Promise<InvoiceParseResult> {
-    const prompt = PROMPTS[this.locale].parseInvoice.replace('{text}', text);
+    // Use enhanced keyword-based prompt for German, fallback to simple prompt for English
+    const prompt =
+      this.locale === 'de'
+        ? generateExtractionPrompt(text)
+        : PROMPTS[this.locale].parseInvoice.replace('{text}', text);
 
     const response = await this.makeGeminiRequest(prompt);
 
