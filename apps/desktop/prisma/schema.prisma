@@ -73,6 +73,7 @@ model Invoice {
 
   // Relations
   items       InvoiceItem[]
+  transactions BankTransaction[]
 
   @@index([customerId])
   @@index([status])
@@ -150,3 +151,53 @@ model ConsentRecord {
 }
 
 // Invoice status values: DRAFT, SENT, PAID, OVERDUE, CANCELLED
+
+// Bank Account for synchronization
+model BankAccount {
+  id            String   @id @default(cuid())
+  iban          String   @unique
+  bankName      String?
+  accountHolder String?
+  currency      String   @default("EUR")
+
+  transactions BankTransaction[]
+
+  // Sync-ready fields
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  syncVersion   Int      @default(0)
+  deletedAt     DateTime?
+
+  @@index([iban])
+}
+
+// Bank Transaction from imports
+model BankTransaction {
+  id              String   @id @default(cuid())
+  bankAccountId   String
+  bankAccount     BankAccount @relation(fields: [bankAccountId], references: [id])
+
+  date            DateTime
+  amount          Float
+  currency        String   @default("EUR")
+  description     String?
+  senderName      String?
+  senderIban      String?
+  reference       String?
+
+  // Matching
+  matchedInvoiceId String?
+  matchedInvoice   Invoice? @relation(fields: [matchedInvoiceId], references: [id])
+
+  status          String   @default("PENDING") // PENDING, MATCHED, IGNORED
+
+  // Sync-ready fields
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  syncVersion     Int      @default(0)
+  deletedAt       DateTime?
+
+  @@index([bankAccountId])
+  @@index([date])
+  @@index([status])
+}

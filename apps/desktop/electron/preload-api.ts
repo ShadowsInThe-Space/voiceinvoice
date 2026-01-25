@@ -46,6 +46,14 @@ export interface SettingsApi {
 }
 
 /**
+ * Banking API exposed to renderer.
+ */
+export interface BankingApi {
+  importTransactions: (content: string, format: 'CSV' | 'MT940', fileName?: string) => Promise<{ imported: number, skipped: number }>;
+  getTransactions: () => Promise<unknown[]>;
+}
+
+/**
  * Voice API exposed to renderer.
  */
 export interface VoiceApi {
@@ -74,6 +82,7 @@ export interface PreloadApi {
   invoice: InvoiceApi;
   customer: CustomerApi;
   settings: SettingsApi;
+  banking: BankingApi;
   voice: VoiceApi;
   app: AppApi;
 }
@@ -118,6 +127,12 @@ export function createPreloadApi(invoke: IpcInvoker): PreloadApi {
     settings: {
       get: () => invoke('settings:get'),
       update: (data: unknown) => invoke('settings:update', data),
+    },
+
+    banking: {
+      importTransactions: (content: string, format: 'CSV' | 'MT940', fileName?: string) =>
+        invoke('banking:importTransactions', content, format, fileName) as Promise<{ imported: number, skipped: number }>,
+      getTransactions: () => invoke('banking:getTransactions') as Promise<unknown[]>,
     },
 
     voice: {

@@ -31,7 +31,7 @@ Dieses Dokument listet alle noch nicht implementierten Features und Platzhalter 
   - [ ] UI-Felder für Webhook-URLs in `settings.tsx` hinzufügen.
   - [ ] Logik zum Senden von Rechnungsdaten an n8n bei Statusänderungen.
 - [ ] **Bank-Synchronisation**:
-  - [ ] Import-Funktion für Kontoauszüge (CSV/MT940).
+  - [x] Import-Funktion für Kontoauszüge (CSV/MT940).
   - [ ] Matching-Algorithmus zum Abgleich von Zahlungen mit offenen Rechnungen.
 
 ## 🖥️ Desktop-App Verfeinerungen

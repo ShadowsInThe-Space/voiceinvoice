@@ -11,8 +11,11 @@
  * @module electron/main
  */
 
+import 'dotenv/config';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import * as path from 'path';
+import { PrismaClient } from '@prisma/client';
+import { BankService } from '../src/lib/banking/BankService';
 import { createWindowConfig } from './window-manager';
 import {
   createInvoiceHandler,
@@ -141,6 +144,15 @@ function setupHandlers(): void {
   );
   ipcMain.handle('voice:list-recordings', () => listRecordings());
   ipcMain.handle('voice:delete-recording', (_event, filePath) => deleteRecording(filePath));
+
+  // Banking handlers
+  const prisma = new PrismaClient();
+  const bankService = new BankService(prisma);
+
+  ipcMain.handle('banking:importTransactions', (_event, content, format, fileName) =>
+    bankService.importTransactions(content, format, fileName)
+  );
+  ipcMain.handle('banking:getTransactions', () => bankService.getTransactions());
 }
 
 // App lifecycle

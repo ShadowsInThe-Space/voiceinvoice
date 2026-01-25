@@ -26,6 +26,7 @@ import {
   Bell,
   User,
   Mic,
+  Landmark,
 } from 'lucide-react';
 
 /**
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/invoices/new', label: 'Neue Rechnung', icon: FilePlus },
   { href: '/invoices', label: 'Rechnungen', icon: FileText },
+  { href: '/banking', label: 'Banking', icon: Landmark },
   { href: '/settings', label: 'Einstellungen', icon: Settings },
 ];
 
