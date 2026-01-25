@@ -22,11 +22,7 @@ import {
   Legend,
   CartesianGrid,
 } from 'recharts';
-import type {
-  DailyExecutionCount,
-  WorkflowSuccessRate,
-  ErrorTypeBreakdown,
-} from '@/lib/database';
+import type { DailyExecutionCount, WorkflowSuccessRate, ErrorTypeBreakdown } from '@/lib/database';
 
 /**
  * Props for WorkflowStatistics component.
@@ -55,6 +51,8 @@ const COLORS = {
 
 /**
  * Loading skeleton for charts.
+ * @param root0
+ * @param root0.title
  */
 function ChartSkeleton({ title }: { title: string }) {
   return (
@@ -67,14 +65,11 @@ function ChartSkeleton({ title }: { title: string }) {
 
 /**
  * Executions over time line chart.
+ * @param root0
+ * @param root0.data
+ * @param root0.loading
  */
-function ExecutionsChart({
-  data,
-  loading,
-}: {
-  data: DailyExecutionCount[];
-  loading?: boolean;
-}) {
+function ExecutionsChart({ data, loading }: { data: DailyExecutionCount[]; loading?: boolean }) {
   if (loading) {
     return <ChartSkeleton title="Ausführungen über Zeit" />;
   }
@@ -139,14 +134,11 @@ function ExecutionsChart({
 
 /**
  * Success rate per workflow bar chart.
+ * @param root0
+ * @param root0.data
+ * @param root0.loading
  */
-function SuccessRateChart({
-  data,
-  loading,
-}: {
-  data: WorkflowSuccessRate[];
-  loading?: boolean;
-}) {
+function SuccessRateChart({ data, loading }: { data: WorkflowSuccessRate[]; loading?: boolean }) {
   if (loading) {
     return <ChartSkeleton title="Erfolgsrate pro Workflow" />;
   }
@@ -173,19 +165,29 @@ function SuccessRateChart({
       <h4 className="text-sm font-medium text-gray-700 mb-4">Erfolgsrate pro Workflow</h4>
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, bottom: 5, left: 80 }}>
+          <BarChart
+            data={chartData}
+            layout="vertical"
+            margin={{ top: 5, right: 20, bottom: 5, left: 80 }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
             <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
             <YAxis type="category" dataKey="shortName" tick={{ fontSize: 11 }} width={75} />
             <Tooltip
               contentStyle={{ fontSize: 12 }}
-              formatter={(value: number) => [`${value.toFixed(1)}%`, 'Erfolgsrate']}
+              formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Erfolgsrate']}
             />
             <Bar dataKey="successRate" fill={COLORS.primary} radius={[0, 4, 4, 0]}>
               {chartData.map((entry, index) => (
                 <Cell
                   key={`cell-${index}`}
-                  fill={entry.successRate >= 80 ? COLORS.success : entry.successRate >= 50 ? COLORS.primary : COLORS.failure}
+                  fill={
+                    entry.successRate >= 80
+                      ? COLORS.success
+                      : entry.successRate >= 50
+                        ? COLORS.primary
+                        : COLORS.failure
+                  }
                 />
               ))}
             </Bar>
@@ -198,14 +200,11 @@ function SuccessRateChart({
 
 /**
  * Error type breakdown pie chart.
+ * @param root0
+ * @param root0.data
+ * @param root0.loading
  */
-function ErrorBreakdownChart({
-  data,
-  loading,
-}: {
-  data: ErrorTypeBreakdown[];
-  loading?: boolean;
-}) {
+function ErrorBreakdownChart({ data, loading }: { data: ErrorTypeBreakdown[]; loading?: boolean }) {
   if (loading) {
     return <ChartSkeleton title="Fehlertypen" />;
   }
@@ -240,9 +239,7 @@ function ErrorBreakdownChart({
               cx="50%"
               cy="50%"
               outerRadius={60}
-              label={({ displayName, percentage }) =>
-                `${displayName} (${percentage.toFixed(0)}%)`
-              }
+              label={({ name, percent }) => `${name} (${(Number(percent) * 100).toFixed(0)}%)`}
               labelLine={false}
             >
               {chartData.map((_, index) => (
@@ -251,7 +248,7 @@ function ErrorBreakdownChart({
             </Pie>
             <Tooltip
               contentStyle={{ fontSize: 12 }}
-              formatter={(value: number, name: string) => [`${value} Fehler`, name]}
+              formatter={(value, name) => [`${value} Fehler`, String(name)]}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -264,6 +261,10 @@ function ErrorBreakdownChart({
  * Workflow statistics dashboard with multiple charts.
  *
  * @param props - Component props
+ * @param props.dailyCounts
+ * @param props.successRates
+ * @param props.errorBreakdown
+ * @param props.loading
  * @returns Statistics charts
  *
  * @example

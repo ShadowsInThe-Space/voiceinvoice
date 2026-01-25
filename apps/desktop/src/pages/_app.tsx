@@ -26,6 +26,7 @@ import {
   Bell,
   User,
   Mic,
+  BarChart3,
 } from 'lucide-react';
 import { AlertProvider } from '../contexts/AlertContext';
 import { SystemAlerts } from '../components/SystemAlerts';
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/invoices/new', label: 'Neue Rechnung', icon: FilePlus },
   { href: '/invoices', label: 'Rechnungen', icon: FileText },
+  { href: '/workflows', label: 'Workflows', icon: BarChart3 },
   { href: '/settings', label: 'Einstellungen', icon: Settings },
 ];
 
