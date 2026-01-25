@@ -390,7 +390,38 @@ export class DatabaseService {
       id
     );
 
-    return this.getInvoiceById(id) as Promise<Invoice>;
+    const updatedInvoice = (await this.getInvoiceById(id)) as InvoiceWithRelations;
+
+    // Trigger n8n webhook if status changed
+    if (input.status && input.status !== current.status) {
+      await this.sendToN8n(updatedInvoice);
+    }
+
+    return updatedInvoice;
+  }
+
+  /**
+   * Sends invoice data to n8n webhook if URL is configured.
+   * @param invoice
+   */
+  private async sendToN8n(invoice: InvoiceWithRelations): Promise<void> {
+    const webhookUrl = await this.getSetting('n8nWebhookUrl');
+    if (!webhookUrl) {
+      return;
+    }
+
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(invoice),
+      });
+    } catch (error) {
+      console.error('Failed to send invoice to n8n:', error);
+      // We do not throw here to prevent failing the main operation
+    }
   }
 
   /**

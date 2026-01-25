@@ -7,7 +7,7 @@
  * @module tests/database/database-service
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import {
   DatabaseService,
@@ -430,6 +430,87 @@ describe('DatabaseService', () => {
         const invoices = await db.getInvoicesByCustomer(customerId);
 
         expect(invoices).toHaveLength(2);
+      });
+    });
+
+    describe('n8n Integration', () => {
+      beforeEach(() => {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({}),
+        });
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it('should trigger webhook when status changes and URL is set', async () => {
+        const url = 'https://n8n.example.com/webhook/test';
+        await db.setSetting('n8nWebhookUrl', url);
+
+        const invoice = await db.createInvoice({
+          customerId,
+          items: [{ description: 'Test', quantity: 1, unitPrice: 100 }],
+        });
+
+        await db.updateInvoice(invoice.id, { status: 'SENT' });
+
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(fetch).toHaveBeenCalledWith(
+          url,
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.stringContaining(invoice.number),
+          })
+        );
+      });
+
+      it('should not trigger webhook if URL is not set', async () => {
+        // Ensure no setting
+        await db.deleteSetting('n8nWebhookUrl');
+
+        const invoice = await db.createInvoice({
+          customerId,
+          items: [{ description: 'Test', quantity: 1, unitPrice: 100 }],
+        });
+
+        await db.updateInvoice(invoice.id, { status: 'SENT' });
+
+        expect(fetch).not.toHaveBeenCalled();
+      });
+
+      it('should not trigger webhook if status does not change', async () => {
+        const url = 'https://n8n.example.com/webhook/test';
+        await db.setSetting('n8nWebhookUrl', url);
+
+        const invoice = await db.createInvoice({
+          customerId,
+          items: [{ description: 'Test', quantity: 1, unitPrice: 100 }],
+        });
+
+        // Initial status is DRAFT. Update with DRAFT.
+        await db.updateInvoice(invoice.id, { status: 'DRAFT' });
+
+        expect(fetch).not.toHaveBeenCalled();
+      });
+
+      it('should gracefully handle fetch errors', async () => {
+        const url = 'https://n8n.example.com/webhook/fail';
+        await db.setSetting('n8nWebhookUrl', url);
+
+        // Mock fetch failure
+        global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+
+        const invoice = await db.createInvoice({
+          customerId,
+          items: [{ description: 'Test', quantity: 1, unitPrice: 100 }],
+        });
+
+        // Should not throw
+        await expect(db.updateInvoice(invoice.id, { status: 'SENT' })).resolves.toBeDefined();
+
+        expect(fetch).toHaveBeenCalledTimes(1);
       });
     });
   });
