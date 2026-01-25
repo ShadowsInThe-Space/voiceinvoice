@@ -2,12 +2,25 @@
  * IPC Handlers for Workflow Analytics.
  *
  * Provides database operations for workflow execution statistics,
- * KPIs, and invoice timeline data.
+ * KPIs, and invoice timeline data using Prisma.
  *
  * @module electron/ipc/analytics-handlers
  */
 
+import { PrismaClient } from '@prisma/client';
+import * as path from 'path';
 import type { IpcResult } from './handlers';
+
+/**
+ * Initialize Prisma client with the correct database path.
+ */
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: `file:${path.join(__dirname, '..', '..', 'prisma', 'data', 'voiceinvoice.db')}`,
+    },
+  },
+});
 
 /**
  * Latest KPI values.
@@ -102,199 +115,67 @@ export interface TopCustomer {
 }
 
 /**
- * Mock data for development.
- * In production, these would come from the real database.
- */
-const MOCK_KPIS: LatestKPIs = {
-  offeneMahnungenEuro: 12500,
-  verarbeiteteRechnungen: 156,
-  gematchteZahlungen: 89500,
-  ueberfaelligeVertraege: 3,
-};
-
-const MOCK_STATS: ExecutionStats = {
-  totalExecutions: 245,
-  successfulExecutions: 228,
-  failedExecutions: 17,
-  avgExecutionTimeMs: 1250,
-  successRate: 93.1,
-};
-
-/**
- * Generates mock daily counts for the last N days.
- * @param days
- */
-function generateMockDailyCounts(days: number): DailyExecutionCount[] {
-  const counts: DailyExecutionCount[] = [];
-  const now = new Date();
-
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-    const successCount = Math.floor(Math.random() * 10) + 5;
-    const failureCount = Math.floor(Math.random() * 3);
-
-    counts.push({
-      date: date.toISOString().split('T')[0],
-      count: successCount + failureCount,
-      successCount,
-      failureCount,
-    });
-  }
-
-  return counts;
-}
-
-const MOCK_SUCCESS_RATES: WorkflowSuccessRate[] = [
-  {
-    workflowName: 'Rechnungseingang-Agent',
-    workflowIntent: 'WORKFLOW_RECHNUNGSEINGANG',
-    successRate: 98.5,
-    totalExecutions: 85,
-  },
-  {
-    workflowName: 'Mahnwesen-Agent',
-    workflowIntent: 'WORKFLOW_MAHNWESEN',
-    successRate: 94.2,
-    totalExecutions: 52,
-  },
-  {
-    workflowName: 'Zahlungsabgleich-Agent',
-    workflowIntent: 'WORKFLOW_ZAHLUNGSABGLEICH',
-    successRate: 87.3,
-    totalExecutions: 63,
-  },
-  {
-    workflowName: 'Monatsreport-Agent',
-    workflowIntent: 'WORKFLOW_MONATSREPORT',
-    successRate: 100.0,
-    totalExecutions: 12,
-  },
-];
-
-const MOCK_ERROR_BREAKDOWN: ErrorTypeBreakdown[] = [
-  { errorType: 'TIMEOUT', count: 8, percentage: 47.1 },
-  { errorType: 'NETWORK_ERROR', count: 5, percentage: 29.4 },
-  { errorType: 'VALIDATION_ERROR', count: 3, percentage: 17.6 },
-  { errorType: 'UNKNOWN', count: 1, percentage: 5.9 },
-];
-
-const MOCK_EXECUTIONS: WorkflowExecutionRecord[] = [
-  {
-    id: 'ex1',
-    workflowIntent: 'WORKFLOW_RECHNUNGSEINGANG',
-    workflowName: 'Rechnungseingang-Agent',
-    triggeredAt: new Date().toISOString(),
-    executionTimeMs: 1234,
-    success: true,
-    errorType: null,
-    errorMessage: null,
-    params: null,
-    responseData: '{"processed": 5}',
-  },
-  {
-    id: 'ex2',
-    workflowIntent: 'WORKFLOW_MAHNWESEN',
-    workflowName: 'Mahnwesen-Agent',
-    triggeredAt: new Date(Date.now() - 3600000).toISOString(),
-    executionTimeMs: 2156,
-    success: true,
-    errorType: null,
-    errorMessage: null,
-    params: null,
-    responseData: '{"reminders": 3}',
-  },
-  {
-    id: 'ex3',
-    workflowIntent: 'WORKFLOW_ZAHLUNGSABGLEICH',
-    workflowName: 'Zahlungsabgleich-Agent',
-    triggeredAt: new Date(Date.now() - 7200000).toISOString(),
-    executionTimeMs: 5000,
-    success: false,
-    errorType: 'TIMEOUT',
-    errorMessage: 'Request timed out after 5000ms',
-    params: null,
-    responseData: null,
-  },
-];
-
-const MOCK_TIMELINE_INVOICES: TimelineInvoice[] = [
-  {
-    id: 'inv1',
-    number: 'RE-2026-001',
-    customerId: 'c1',
-    customerName: 'Acme Corp',
-    total: 2500,
-    dueAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    daysUntilDue: -5,
-    isOverdue: true,
-    status: 'OVERDUE',
-  },
-  {
-    id: 'inv2',
-    number: 'RE-2026-002',
-    customerId: 'c2',
-    customerName: 'Globex GmbH',
-    total: 1800,
-    dueAt: new Date(Date.now() + 86400000 * 3).toISOString(),
-    daysUntilDue: 3,
-    isOverdue: false,
-    status: 'SENT',
-  },
-  {
-    id: 'inv3',
-    number: 'RE-2026-003',
-    customerId: 'c3',
-    customerName: 'TechStart AG',
-    total: 4200,
-    dueAt: new Date(Date.now() + 86400000 * 10).toISOString(),
-    daysUntilDue: 10,
-    isOverdue: false,
-    status: 'SENT',
-  },
-  {
-    id: 'inv4',
-    number: 'RE-2026-004',
-    customerId: 'c1',
-    customerName: 'Acme Corp',
-    total: 3100,
-    dueAt: new Date(Date.now() + 86400000 * 15).toISOString(),
-    daysUntilDue: 15,
-    isOverdue: false,
-    status: 'SENT',
-  },
-  {
-    id: 'inv5',
-    number: 'RE-2026-005',
-    customerId: 'c4',
-    customerName: 'Digital Solutions',
-    total: 950,
-    dueAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    daysUntilDue: -2,
-    isOverdue: true,
-    status: 'OVERDUE',
-  },
-];
-
-const MOCK_TOP_CUSTOMERS: TopCustomer[] = [
-  { id: 'c1', name: 'Acme Corp', totalRevenue: 45600, invoiceCount: 12, paidCount: 10 },
-  { id: 'c2', name: 'Globex GmbH', totalRevenue: 32400, invoiceCount: 8, paidCount: 7 },
-  { id: 'c3', name: 'TechStart AG', totalRevenue: 28900, invoiceCount: 6, paidCount: 5 },
-  { id: 'c4', name: 'Digital Solutions', totalRevenue: 18500, invoiceCount: 5, paidCount: 4 },
-  { id: 'c5', name: 'CloudFirst Inc', totalRevenue: 15200, invoiceCount: 4, paidCount: 4 },
-];
-
-/**
- * Gets the latest KPI values.
+ * Gets the latest KPI values from the database.
  */
 export async function getWorkflowKPIsHandler(): Promise<IpcResult<LatestKPIs>> {
   try {
-    // TODO: Replace with real Prisma query
-    return {
-      success: true,
-      data: MOCK_KPIS,
+    // Get latest KPIs from WorkflowKPI table
+    const kpiResults = await prisma.$queryRaw<Array<{ metricName: string; metricValue: number }>>`
+      SELECT metricName, metricValue
+      FROM WorkflowKPI
+      WHERE id IN (
+        SELECT id FROM WorkflowKPI k1
+        WHERE recordedAt = (
+          SELECT MAX(recordedAt) FROM WorkflowKPI k2
+          WHERE k2.metricName = k1.metricName
+        )
+      )
+    `;
+
+    // Also get overdue invoice totals directly from Invoice table
+    const overdueResult = await prisma.$queryRaw<Array<{ total: number; count: number }>>`
+      SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count
+      FROM Invoice
+      WHERE status = 'OVERDUE' AND deletedAt IS NULL
+    `;
+
+    // Build KPIs object
+    const kpis: LatestKPIs = {
+      offeneMahnungenEuro: 0,
+      verarbeiteteRechnungen: 0,
+      gematchteZahlungen: 0,
+      ueberfaelligeVertraege: 0,
     };
+
+    // Map database values
+    for (const kpi of kpiResults) {
+      switch (kpi.metricName) {
+        case 'offene_mahnungen_euro':
+          kpis.offeneMahnungenEuro = kpi.metricValue;
+          break;
+        case 'verarbeitete_rechnungen':
+          kpis.verarbeiteteRechnungen = kpi.metricValue;
+          break;
+        case 'gematchte_zahlungen':
+          kpis.gematchteZahlungen = kpi.metricValue;
+          break;
+        case 'ueberfaellige_count':
+          kpis.ueberfaelligeVertraege = kpi.metricValue;
+          break;
+      }
+    }
+
+    // Use actual overdue data if KPI not set
+    if (kpis.offeneMahnungenEuro === 0 && overdueResult[0]) {
+      kpis.offeneMahnungenEuro = overdueResult[0].total;
+    }
+    if (kpis.ueberfaelligeVertraege === 0 && overdueResult[0]) {
+      kpis.ueberfaelligeVertraege = overdueResult[0].count;
+    }
+
+    return { success: true, data: kpis };
   } catch (error) {
+    console.error('[getWorkflowKPIsHandler] Error:', error);
     return {
       success: false,
       error: {
@@ -306,22 +187,58 @@ export async function getWorkflowKPIsHandler(): Promise<IpcResult<LatestKPIs>> {
 
 /**
  * Gets execution statistics for a time range.
- * @param _startDate
- * @param _endDate
- * @param _workflowIntent
+ * @param startDate
+ * @param endDate
+ * @param workflowIntent
  */
 export async function getExecutionStatsHandler(
-  _startDate?: string,
-  _endDate?: string,
-  _workflowIntent?: string
+  startDate?: string,
+  endDate?: string,
+  workflowIntent?: string
 ): Promise<IpcResult<ExecutionStats>> {
   try {
-    // TODO: Replace with real Prisma query
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+
+    let whereClause = `triggeredAt >= '${start.toISOString()}' AND triggeredAt <= '${end.toISOString()}'`;
+    if (workflowIntent) {
+      whereClause += ` AND workflowIntent = '${workflowIntent}'`;
+    }
+
+    const result = await prisma.$queryRawUnsafe<
+      Array<{
+        total: number;
+        successful: number;
+        failed: number;
+        avgTime: number;
+      }>
+    >(`
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful,
+        SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failed,
+        AVG(executionTimeMs) as avgTime
+      FROM WorkflowExecution
+      WHERE ${whereClause}
+    `);
+
+    const stats = result[0] || { total: 0, successful: 0, failed: 0, avgTime: 0 };
+
     return {
       success: true,
-      data: MOCK_STATS,
+      data: {
+        totalExecutions: Number(stats.total) || 0,
+        successfulExecutions: Number(stats.successful) || 0,
+        failedExecutions: Number(stats.failed) || 0,
+        avgExecutionTimeMs: Math.round(Number(stats.avgTime) || 0),
+        successRate:
+          stats.total > 0
+            ? Math.round((Number(stats.successful) / Number(stats.total)) * 1000) / 10
+            : 0,
+      },
     };
   } catch (error) {
+    console.error('[getExecutionStatsHandler] Error:', error);
     return {
       success: false,
       error: {
@@ -339,12 +256,49 @@ export async function getDailyCountsHandler(
   days: number = 30
 ): Promise<IpcResult<DailyExecutionCount[]>> {
   try {
-    // TODO: Replace with real Prisma query
-    return {
-      success: true,
-      data: generateMockDailyCounts(days),
-    };
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const results = await prisma.$queryRaw<
+      Array<{
+        date: string;
+        total: number;
+        successCount: number;
+        failureCount: number;
+      }>
+    >`
+      SELECT
+        DATE(triggeredAt) as date,
+        COUNT(*) as total,
+        SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successCount,
+        SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failureCount
+      FROM WorkflowExecution
+      WHERE triggeredAt >= ${startDate.toISOString()}
+      GROUP BY DATE(triggeredAt)
+      ORDER BY date ASC
+    `;
+
+    // Fill in missing days with zeros
+    const filledData: DailyExecutionCount[] = [];
+    const dataMap = new Map(results.map((r) => [r.date, r]));
+
+    for (let i = 0; i < days; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - (days - 1 - i));
+      const dateStr = date.toISOString().split('T')[0];
+
+      const existing = dataMap.get(dateStr);
+      filledData.push({
+        date: dateStr,
+        count: Number(existing?.total) || 0,
+        successCount: Number(existing?.successCount) || 0,
+        failureCount: Number(existing?.failureCount) || 0,
+      });
+    }
+
+    return { success: true, data: filledData };
   } catch (error) {
+    console.error('[getDailyCountsHandler] Error:', error);
     return {
       success: false,
       error: {
@@ -359,12 +313,35 @@ export async function getDailyCountsHandler(
  */
 export async function getSuccessRatesHandler(): Promise<IpcResult<WorkflowSuccessRate[]>> {
   try {
-    // TODO: Replace with real Prisma query
-    return {
-      success: true,
-      data: MOCK_SUCCESS_RATES,
-    };
+    const results = await prisma.$queryRaw<
+      Array<{
+        workflowName: string;
+        workflowIntent: string;
+        total: number;
+        successful: number;
+      }>
+    >`
+      SELECT
+        workflowName,
+        workflowIntent,
+        COUNT(*) as total,
+        SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful
+      FROM WorkflowExecution
+      GROUP BY workflowIntent, workflowName
+      ORDER BY total DESC
+    `;
+
+    const data: WorkflowSuccessRate[] = results.map((r) => ({
+      workflowName: r.workflowName,
+      workflowIntent: r.workflowIntent,
+      totalExecutions: Number(r.total),
+      successRate:
+        r.total > 0 ? Math.round((Number(r.successful) / Number(r.total)) * 1000) / 10 : 0,
+    }));
+
+    return { success: true, data };
   } catch (error) {
+    console.error('[getSuccessRatesHandler] Error:', error);
     return {
       success: false,
       error: {
@@ -379,12 +356,32 @@ export async function getSuccessRatesHandler(): Promise<IpcResult<WorkflowSucces
  */
 export async function getErrorBreakdownHandler(): Promise<IpcResult<ErrorTypeBreakdown[]>> {
   try {
-    // TODO: Replace with real Prisma query
-    return {
-      success: true,
-      data: MOCK_ERROR_BREAKDOWN,
-    };
+    const results = await prisma.$queryRaw<
+      Array<{
+        errorType: string;
+        count: number;
+      }>
+    >`
+      SELECT
+        COALESCE(errorType, 'UNKNOWN') as errorType,
+        COUNT(*) as count
+      FROM WorkflowExecution
+      WHERE success = 0
+      GROUP BY errorType
+      ORDER BY count DESC
+    `;
+
+    const totalErrors = results.reduce((sum, r) => sum + Number(r.count), 0);
+
+    const data: ErrorTypeBreakdown[] = results.map((r) => ({
+      errorType: r.errorType || 'UNKNOWN',
+      count: Number(r.count),
+      percentage: totalErrors > 0 ? Math.round((Number(r.count) / totalErrors) * 1000) / 10 : 0,
+    }));
+
+    return { success: true, data };
   } catch (error) {
+    console.error('[getErrorBreakdownHandler] Error:', error);
     return {
       success: false,
       error: {
@@ -396,20 +393,41 @@ export async function getErrorBreakdownHandler(): Promise<IpcResult<ErrorTypeBre
 
 /**
  * Gets recent workflow executions.
- * @param _limit
- * @param _workflowIntent
+ * @param limit
+ * @param workflowIntent
  */
 export async function getRecentExecutionsHandler(
-  _limit: number = 20,
-  _workflowIntent?: string
+  limit: number = 20,
+  workflowIntent?: string
 ): Promise<IpcResult<WorkflowExecutionRecord[]>> {
   try {
-    // TODO: Replace with real Prisma query
-    return {
-      success: true,
-      data: MOCK_EXECUTIONS,
-    };
+    const where: Record<string, unknown> = {};
+    if (workflowIntent) {
+      where.workflowIntent = workflowIntent;
+    }
+
+    const executions = await prisma.workflowExecution.findMany({
+      where,
+      orderBy: { triggeredAt: 'desc' },
+      take: limit,
+    });
+
+    const data: WorkflowExecutionRecord[] = executions.map((e) => ({
+      id: e.id,
+      workflowIntent: e.workflowIntent,
+      workflowName: e.workflowName,
+      triggeredAt: e.triggeredAt.toISOString(),
+      executionTimeMs: e.executionTimeMs,
+      success: e.success,
+      errorType: e.errorType,
+      errorMessage: e.errorMessage,
+      params: e.params,
+      responseData: e.responseData,
+    }));
+
+    return { success: true, data };
   } catch (error) {
+    console.error('[getRecentExecutionsHandler] Error:', error);
     return {
       success: false,
       error: {
@@ -424,12 +442,62 @@ export async function getRecentExecutionsHandler(
  */
 export async function getTimelineInvoicesHandler(): Promise<IpcResult<TimelineInvoice[]>> {
   try {
-    // TODO: Replace with real Prisma query
-    return {
-      success: true,
-      data: MOCK_TIMELINE_INVOICES,
-    };
+    const results = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        number: string;
+        customerId: string;
+        customerName: string;
+        total: number;
+        dueAt: string | null;
+        status: string;
+      }>
+    >`
+      SELECT
+        i.id,
+        i.number,
+        i.customerId,
+        c.name as customerName,
+        i.total,
+        i.dueAt,
+        i.status
+      FROM Invoice i
+      LEFT JOIN Customer c ON i.customerId = c.id
+      WHERE i.deletedAt IS NULL
+        AND i.status IN ('SENT', 'OVERDUE', 'DRAFT')
+      ORDER BY i.dueAt ASC
+    `;
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const data: TimelineInvoice[] = results.map((inv) => {
+      let daysUntilDue = Infinity;
+      let isOverdue = false;
+
+      if (inv.dueAt) {
+        const dueDate = new Date(inv.dueAt);
+        dueDate.setHours(0, 0, 0, 0);
+        daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        isOverdue = daysUntilDue < 0 && inv.status !== 'PAID';
+      }
+
+      return {
+        id: inv.id,
+        number: inv.number,
+        customerId: inv.customerId,
+        customerName: inv.customerName || 'Unbekannt',
+        total: inv.total,
+        dueAt: inv.dueAt,
+        daysUntilDue,
+        isOverdue,
+        status: inv.status,
+      };
+    });
+
+    return { success: true, data };
   } catch (error) {
+    console.error('[getTimelineInvoicesHandler] Error:', error);
     return {
       success: false,
       error: {
@@ -441,18 +509,44 @@ export async function getTimelineInvoicesHandler(): Promise<IpcResult<TimelineIn
 
 /**
  * Gets top customers by revenue.
- * @param _limit
+ * @param limit
  */
-export async function getTopCustomersHandler(
-  _limit: number = 5
-): Promise<IpcResult<TopCustomer[]>> {
+export async function getTopCustomersHandler(limit: number = 5): Promise<IpcResult<TopCustomer[]>> {
   try {
-    // TODO: Replace with real Prisma query
-    return {
-      success: true,
-      data: MOCK_TOP_CUSTOMERS,
-    };
+    const results = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        totalRevenue: number;
+        invoiceCount: number;
+        paidCount: number;
+      }>
+    >`
+      SELECT
+        c.id,
+        c.name,
+        COALESCE(SUM(CASE WHEN i.status = 'PAID' THEN i.total ELSE 0 END), 0) as totalRevenue,
+        COUNT(i.id) as invoiceCount,
+        SUM(CASE WHEN i.status = 'PAID' THEN 1 ELSE 0 END) as paidCount
+      FROM Customer c
+      LEFT JOIN Invoice i ON c.id = i.customerId AND i.deletedAt IS NULL
+      WHERE c.deletedAt IS NULL
+      GROUP BY c.id, c.name
+      ORDER BY totalRevenue DESC
+      LIMIT ${limit}
+    `;
+
+    const data: TopCustomer[] = results.map((c) => ({
+      id: c.id,
+      name: c.name,
+      totalRevenue: Number(c.totalRevenue) || 0,
+      invoiceCount: Number(c.invoiceCount) || 0,
+      paidCount: Number(c.paidCount) || 0,
+    }));
+
+    return { success: true, data };
   } catch (error) {
+    console.error('[getTopCustomersHandler] Error:', error);
     return {
       success: false,
       error: {
