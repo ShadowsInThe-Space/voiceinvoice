@@ -19,9 +19,28 @@
  *
  * - INVOICE: User wants to create or manage an invoice
  * - ANALYTICS: User is asking for reports or statistics
+ * - WORKFLOW_*: User wants to trigger a specific n8n workflow
  * - UNKNOWN: Intent could not be determined
  */
-export type Intent = 'INVOICE' | 'ANALYTICS' | 'UNKNOWN';
+export type Intent =
+  | 'INVOICE'
+  | 'ANALYTICS'
+  | 'WORKFLOW_RECHNUNGSEINGANG'
+  | 'WORKFLOW_MAHNWESEN'
+  | 'WORKFLOW_ZAHLUNGSABGLEICH'
+  | 'WORKFLOW_AUSGABEN'
+  | 'WORKFLOW_MONATSREPORT'
+  | 'WORKFLOW_LEAD_QUALIFIZIERUNG'
+  | 'WORKFLOW_FOLLOW_UP'
+  | 'WORKFLOW_KUNDENFEEDBACK'
+  | 'WORKFLOW_VERTRAGS_ERINNERUNG'
+  | 'WORKFLOW_KUNDENANFRAGEN'
+  | 'UNKNOWN';
+
+/**
+ * Workflow intent types for n8n integration.
+ */
+export type WorkflowIntent = Extract<Intent, `WORKFLOW_${string}`>;
 
 /**
  * Result of intent classification.
@@ -173,6 +192,71 @@ const ANALYTICS_PATTERNS = {
 };
 
 /**
+ * Keywords and patterns for WORKFLOW intent detection.
+ * Maps voice commands to specific n8n workflows.
+ */
+const WORKFLOW_PATTERNS: Record<
+  WorkflowIntent,
+  { keywords: string[]; phrases: string[]; priority: number }
+> = {
+  WORKFLOW_MAHNWESEN: {
+    keywords: ['mahnung', 'mahnungen', 'mahnen', 'überfällig', 'überfällige', 'zahlungserinnerung'],
+    phrases: [
+      'sende mahnungen',
+      'prüfe überfällige',
+      'zahlungserinnerung senden',
+      'mahnung erstellen',
+    ],
+    priority: 1,
+  },
+  WORKFLOW_RECHNUNGSEINGANG: {
+    keywords: ['rechnungseingang', 'eingangsrechnung', 'eingehende'],
+    phrases: ['prüfe eingehende rechnungen', 'neue rechnungen', 'rechnungseingang prüfen'],
+    priority: 2,
+  },
+  WORKFLOW_ZAHLUNGSABGLEICH: {
+    keywords: ['zahlungsabgleich', 'abgleich', 'kontoauszug', 'bezahlt'],
+    phrases: ['gleiche zahlungen ab', 'prüfe zahlungen', 'kontoauszug abgleichen'],
+    priority: 3,
+  },
+  WORKFLOW_AUSGABEN: {
+    keywords: ['ausgaben', 'kategorisierung', 'kategorisieren', 'kosten'],
+    phrases: ['kategorisiere ausgaben', 'ausgaben einordnen', 'kosten kategorisieren'],
+    priority: 4,
+  },
+  WORKFLOW_MONATSREPORT: {
+    keywords: ['monatsreport', 'monatsabschluss', 'monatsbericht', 'finanzübersicht'],
+    phrases: ['erstelle monatsreport', 'monatsabschluss erstellen', 'monatsbericht generieren'],
+    priority: 5,
+  },
+  WORKFLOW_LEAD_QUALIFIZIERUNG: {
+    keywords: ['lead', 'leads', 'qualifizierung', 'interessent', 'interessenten'],
+    phrases: ['qualifiziere leads', 'prüfe leads', 'lead bewerten', 'interessenten prüfen'],
+    priority: 6,
+  },
+  WORKFLOW_FOLLOW_UP: {
+    keywords: ['follow-up', 'followup', 'nachfassen', 'nachfrage', 'erinnerung'],
+    phrases: ['sende follow-up', 'nachfassen bei', 'follow-up senden', 'erinnere kunde'],
+    priority: 7,
+  },
+  WORKFLOW_KUNDENFEEDBACK: {
+    keywords: ['feedback', 'kundenfeedback', 'bewertung', 'bewertungen', 'zufriedenheit'],
+    phrases: ['sammle feedback', 'kundenfeedback analysieren', 'bewertungen prüfen'],
+    priority: 8,
+  },
+  WORKFLOW_VERTRAGS_ERINNERUNG: {
+    keywords: ['vertrag', 'verträge', 'vertragserinnerung', 'vertragsablauf', 'verlängerung'],
+    phrases: ['prüfe verträge', 'vertragsablauf prüfen', 'vertragserinnerung senden'],
+    priority: 9,
+  },
+  WORKFLOW_KUNDENANFRAGEN: {
+    keywords: ['kundenanfrage', 'kundenanfragen', 'anfrage', 'anfragen', 'ticket', 'support'],
+    phrases: ['verteile anfragen', 'kundenanfragen routen', 'anfragen zuweisen', 'support tickets'],
+    priority: 10,
+  },
+};
+
+/**
  * AI Agent Orchestrator for voice-to-invoice processing.
  *
  * This class manages the complete pipeline from voice transcription
@@ -273,15 +357,35 @@ export class AgentOrchestrator {
       };
     }
 
+    // Check for workflow intents first (highest priority for automation commands)
+    const workflowResult = this.detectWorkflowIntent(normalizedText);
+
+    // If workflow intent detected with high confidence, return immediately
+    if (workflowResult && workflowResult.confidence >= 0.7) {
+      return {
+        intent: workflowResult.intent,
+        confidence: workflowResult.confidence,
+        method: 'RULES',
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
     // Calculate scores for each intent
     const invoiceScore = this.calculateInvoiceScore(normalizedText);
     const analyticsScore = this.calculateAnalyticsScore(normalizedText);
 
-    // Determine winner
+    // Determine winner (include workflow if it has lower confidence)
     let intent: Intent;
     let confidence: number;
 
-    if (invoiceScore > analyticsScore && invoiceScore >= 0.5) {
+    // Compare all scores including workflow
+    const workflowScore = workflowResult?.confidence ?? 0;
+    const maxScore = Math.max(invoiceScore, analyticsScore, workflowScore);
+
+    if (workflowResult && workflowScore === maxScore && workflowScore >= 0.5) {
+      intent = workflowResult.intent;
+      confidence = workflowScore;
+    } else if (invoiceScore > analyticsScore && invoiceScore >= 0.5) {
       intent = 'INVOICE';
       confidence = Math.min(invoiceScore, 1.0);
     } else if (analyticsScore > invoiceScore && analyticsScore >= 0.5) {
@@ -293,7 +397,7 @@ export class AgentOrchestrator {
       confidence = analyticsScore;
     } else {
       intent = 'UNKNOWN';
-      confidence = Math.max(invoiceScore, analyticsScore);
+      confidence = Math.max(invoiceScore, analyticsScore, workflowScore);
     }
 
     return {
@@ -469,6 +573,77 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Detects workflow-specific intents from voice input.
+   *
+   * Checks for keywords and phrases that map to specific n8n workflows.
+   * Returns the best matching workflow intent or null if none found.
+   *
+   * @param text - Normalized (lowercase) text to analyze
+   * @returns Workflow intent result or null
+   */
+  private detectWorkflowIntent(
+    text: string
+  ): { intent: WorkflowIntent; confidence: number } | null {
+    const results: { intent: WorkflowIntent; confidence: number }[] = [];
+
+    for (const [workflowIntent, patterns] of Object.entries(WORKFLOW_PATTERNS)) {
+      let score = 0;
+
+      // Check for exact phrase matches (highest confidence)
+      const phraseMatch = patterns.phrases.some((phrase) => text.includes(phrase));
+      if (phraseMatch) {
+        score += 0.8;
+      }
+
+      // Check for keyword matches
+      const keywordMatches = patterns.keywords.filter((keyword) => text.includes(keyword));
+      if (keywordMatches.length > 0) {
+        // More keywords = higher confidence
+        score += Math.min(0.3 + keywordMatches.length * 0.15, 0.6);
+      }
+
+      // Check for action verbs that indicate workflow trigger
+      const actionVerbs = ['starte', 'führe aus', 'ausführen', 'trigger', 'aktiviere'];
+      const hasActionVerb = actionVerbs.some((verb) => text.includes(verb));
+      if (hasActionVerb && keywordMatches.length > 0) {
+        score += 0.15;
+      }
+
+      if (score > 0) {
+        results.push({
+          intent: workflowIntent as WorkflowIntent,
+          confidence: Math.min(score, 1.0),
+        });
+      }
+    }
+
+    // Return the highest scoring workflow intent
+    if (results.length === 0) {
+      return null;
+    }
+
+    // Sort by confidence descending, then by priority ascending
+    results.sort((a, b) => {
+      if (b.confidence !== a.confidence) {
+        return b.confidence - a.confidence;
+      }
+      return WORKFLOW_PATTERNS[a.intent].priority - WORKFLOW_PATTERNS[b.intent].priority;
+    });
+
+    return results[0];
+  }
+
+  /**
+   * Checks if the given intent is a workflow intent.
+   *
+   * @param intent - Intent to check
+   * @returns True if intent triggers a workflow
+   */
+  static isWorkflowIntent(intent: Intent): intent is WorkflowIntent {
+    return intent.startsWith('WORKFLOW_');
+  }
+
+  /**
    * Returns the current configuration.
    *
    * @returns {OrchestratorConfig} Current configuration
@@ -482,3 +657,40 @@ export class AgentOrchestrator {
  * AI Orchestrator version for compatibility checking.
  */
 export const AI_ORCHESTRATOR_VERSION = '0.1.0';
+
+// Re-export routing module
+export {
+  makeRoutingDecision,
+  canAutoSave,
+  requiresUserConfirmation,
+  requiresManualInput,
+  DEFAULT_ROUTING_THRESHOLDS,
+  type Route,
+  type RoutingThresholds,
+  type RoutingDecision,
+} from './routing';
+
+// Re-export pipeline module
+export {
+  PipelineOrchestrator,
+  PipelineStage,
+  type TranscriptionResult,
+  type PipelineError,
+  type StageLatencies,
+  type PipelineResult,
+  type PipelineCallbacks,
+  type TranscriptionHandler,
+  type PipelineConfig,
+} from './pipeline';
+
+// Re-export entity extraction module
+export {
+  extractEntities,
+  parseGermanAmount,
+  parseGermanDate,
+  parsePercentage,
+  extractInvoiceItems,
+  type InvoiceEntity,
+  type InvoiceItem,
+  type ExtractionResult,
+} from './entity-extraction';

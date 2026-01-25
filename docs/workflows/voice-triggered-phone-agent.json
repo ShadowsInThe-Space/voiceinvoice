@@ -1,0 +1,592 @@
+{
+  "name": "Voice-Triggered Phone Agent - Kunden-Erinnerung",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice-command",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Sprachbefehl empfangen",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "voice-command-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.OPENAI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "value": "={{ $json.audioData }}"
+            },
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "language",
+              "value": "de"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "whisper-transcribe",
+      "name": "Whisper: Sprache transkribieren",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Du bist ein Intent-Classifier für Telefon-Erinnerungen. Extrahiere aus dem Text:\n\n1. intent: 'rechnung_erinnerung' oder 'termin_erinnerung'\n2. kunde: Kundenname oder -ID\n3. details: Rechnungsnummer oder Termindetails\n4. dringlichkeit: 'normal', 'dringend', 'freundlich'\n\nAntworte NUR mit validem JSON."
+            },
+            {
+              "role": "user",
+              "content": "={{ $json.text }}"
+            }
+          ]
+        },
+        "options": {
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "gpt-intent",
+      "name": "GPT-4: Intent & Entitäten extrahieren",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "rechnung_erinnerung",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputLabel": "Rechnung"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "termin_erinnerung",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputLabel": "Termin"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-intent",
+      "name": "Switch: Intent-Routing",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  c.id, c.name, c.phone, c.email,\n  i.invoice_number, i.amount, i.due_date,\n  i.status\nFROM customers c\nJOIN invoices i ON c.id = i.customer_id\nWHERE c.name ILIKE '%{{ $json.kunde }}%'\n  OR i.invoice_number = '{{ $json.details }}'\nLIMIT 1"
+      },
+      "id": "db-rechnung",
+      "name": "DB: Rechnungsdaten laden",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-voiceinvoice",
+          "name": "VoiceInvoice DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  c.id, c.name, c.phone, c.email,\n  a.appointment_date, a.appointment_time,\n  a.description, a.location\nFROM customers c\nJOIN appointments a ON c.id = a.customer_id\nWHERE c.name ILIKE '%{{ $json.kunde }}%'\n  AND a.appointment_date >= CURRENT_DATE\nORDER BY a.appointment_date ASC\nLIMIT 1"
+      },
+      "id": "db-termin",
+      "name": "DB: Termindaten laden",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 400],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-voiceinvoice",
+          "name": "VoiceInvoice DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const kunde = $input.first().json;\nconst intent = $('GPT-4: Intent & Entitäten extrahieren').first().json;\n\nlet script = '';\n\nif (intent.intent === 'rechnung_erinnerung') {\n  const dringlichkeit = {\n    'freundlich': 'Ich hoffe, es geht Ihnen gut. ',\n    'normal': '',\n    'dringend': 'Es ist dringend, dass wir über '\n  };\n  \n  script = `Guten Tag, hier spricht der automatische Assistent von [Firmenname]. \n${dringlichkeit[intent.dringlichkeit] || ''}\nIch rufe an bezüglich der Rechnung Nummer ${kunde.invoice_number} \nüber ${kunde.amount} Euro, fällig am ${new Date(kunde.due_date).toLocaleDateString('de-DE')}.\n\nKönnten Sie mir bitte mitteilen, wann wir mit der Zahlung rechnen können?\n\n[WARTE AUF ANTWORT]\n\nVielen Dank für die Information. Haben Sie noch Fragen zur Rechnung?\n\n[WARTE AUF ANTWORT]\n\nWunderbar, ich wünsche Ihnen noch einen schönen Tag. Auf Wiederhören.`;\n\n} else {\n  script = `Guten Tag, hier spricht der automatische Assistent von [Firmenname].\n\nIch möchte Sie freundlich an Ihren Termin am \n${new Date(kunde.appointment_date).toLocaleDateString('de-DE')} um ${kunde.appointment_time} Uhr erinnern.\n\n${kunde.location ? 'Der Termin findet statt bei: ' + kunde.location : ''}\n${kunde.description ? 'Betreff: ' + kunde.description : ''}\n\nKönnen Sie den Termin bestätigen?\n\n[WARTE AUF ANTWORT]\n\nPerfekt, vielen Dank. Wir freuen uns auf Sie. Auf Wiederhören.`;\n}\n\nreturn {\n  kunde_name: kunde.name,\n  kunde_phone: kunde.phone,\n  kunde_email: kunde.email,\n  intent: intent.intent,\n  dringlichkeit: intent.dringlichkeit,\n  call_script: script,\n  raw_data: kunde\n};"
+      },
+      "id": "prepare-script",
+      "name": "Code: Anruf-Script generieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call/phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"phoneNumberId\": \"{{ $env.VAPI_PHONE_NUMBER_ID }}\",\n  \"customer\": {\n    \"number\": \"{{ $json.kunde_phone }}\",\n    \"name\": \"{{ $json.kunde_name }}\"\n  },\n  \"assistant\": {\n    \"model\": {\n      \"provider\": \"openai\",\n      \"model\": \"gpt-4o\",\n      \"temperature\": 0.7,\n      \"systemPrompt\": \"Du bist ein freundlicher Telefonassistent für [Firmenname]. Sprich Deutsch. Sei höflich aber bestimmt. Folge diesem Script:\\n\\n{{ $json.call_script }}\"\n    },\n    \"voice\": {\n      \"provider\": \"elevenlabs\",\n      \"voiceId\": \"pNInz6obpgDQGcFmaJgB\"\n    },\n    \"firstMessage\": \"Guten Tag, hier ist der automatische Assistent von [Firmenname].\"\n  },\n  \"metadata\": {\n    \"intent\": \"{{ $json.intent }}\",\n    \"kunde_id\": \"{{ $json.raw_data.id }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "vapi-call",
+      "name": "VAPI: Telefon-Agent starten",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "vapi-auth",
+          "name": "VAPI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "call_logs",
+        "columns": "customer_id, call_type, call_id, status, script_used, initiated_at",
+        "values": "={{ $('Code: Anruf-Script generieren').first().json.raw_data.id }}, '{{ $('GPT-4: Intent & Entitäten extrahieren').first().json.intent }}', '{{ $json.id }}', 'initiated', '{{ $('Code: Anruf-Script generieren').first().json.call_script.substring(0, 500) }}', NOW()"
+      },
+      "id": "db-log",
+      "name": "DB: Anruf protokollieren",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1780, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-voiceinvoice",
+          "name": "VoiceInvoice DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"Anruf an {{ $('Code: Anruf-Script generieren').first().json.kunde_name }} wird gestartet\",\n  \"call_id\": \"{{ $('VAPI: Telefon-Agent starten').first().json.id }}\",\n  \"intent\": \"{{ $('GPT-4: Intent & Entitäten extrahieren').first().json.intent }}\",\n  \"kunde_phone\": \"{{ $('Code: Anruf-Script generieren').first().json.kunde_phone }}\"\n}",
+        "options": {}
+      },
+      "id": "response-success",
+      "name": "Response: Erfolg",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-webhook",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "vapi-webhook",
+      "name": "Webhook: VAPI Callback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 600],
+      "webhookId": "vapi-callback-webhook"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.type }}",
+                    "rightValue": "end-of-call-report",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputLabel": "Anruf beendet"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.type }}",
+                    "rightValue": "transcript",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputLabel": "Transcript"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-callback",
+      "name": "Switch: Callback-Typ",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "call_logs",
+        "columns": "status, duration_seconds, transcript, ended_at, outcome",
+        "whereClause": "call_id = '{{ $json.message.call.id }}'",
+        "values": "'completed', {{ $json.message.call.duration }}, '{{ $json.message.transcript }}', NOW(), '{{ $json.message.endedReason }}'"
+      },
+      "id": "db-update",
+      "name": "DB: Anruf-Status aktualisieren",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 500],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-voiceinvoice",
+          "name": "VoiceInvoice DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Analysiere das Anruf-Transkript und extrahiere:\n1. outcome: 'zahlung_zugesagt', 'termin_bestaetigt', 'rueckruf_gewuenscht', 'nicht_erreicht', 'abgelehnt'\n2. next_action: empfohlene nächste Aktion\n3. summary: kurze Zusammenfassung\n4. sentiment: 'positiv', 'neutral', 'negativ'\n\nAntworte NUR mit validem JSON."
+            },
+            {
+              "role": "user",
+              "content": "={{ $json.message.transcript }}"
+            }
+          ]
+        },
+        "options": {
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "gpt-analyze",
+      "name": "GPT-4: Anruf analysieren",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "call_logs",
+        "columns": "outcome_analysis, next_action, sentiment",
+        "whereClause": "call_id = '{{ $('Webhook: VAPI Callback').first().json.message.call.id }}'",
+        "values": "'{{ $json.summary }}', '{{ $json.next_action }}', '{{ $json.sentiment }}'"
+      },
+      "id": "db-analysis",
+      "name": "DB: Analyse speichern",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 500],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-voiceinvoice",
+          "name": "VoiceInvoice DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.outcome }}",
+              "rightValue": "rueckruf_gewuenscht",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-followup",
+      "name": "IF: Follow-up nötig?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 500]
+    },
+    {
+      "parameters": {
+        "channel": "#sales-notifications",
+        "text": "=:phone: *Rückruf gewünscht*\n\n*Kunde:* {{ $('Code: Anruf-Script generieren').first().json.kunde_name }}\n*Telefon:* {{ $('Code: Anruf-Script generieren').first().json.kunde_phone }}\n*Betreff:* {{ $('GPT-4: Intent & Entitäten extrahieren').first().json.intent }}\n\n*Zusammenfassung:*\n{{ $json.summary }}\n\n*Empfohlene Aktion:*\n{{ $json.next_action }}",
+        "otherOptions": {}
+      },
+      "id": "slack-notify",
+      "name": "Slack: Team benachrichtigen",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 400],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-api",
+          "name": "Slack API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: Sprachbefehl empfangen": {
+      "main": [
+        [
+          {
+            "node": "Whisper: Sprache transkribieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whisper: Sprache transkribieren": {
+      "main": [
+        [
+          {
+            "node": "GPT-4: Intent & Entitäten extrahieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4: Intent & Entitäten extrahieren": {
+      "main": [
+        [
+          {
+            "node": "Switch: Intent-Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: Intent-Routing": {
+      "main": [
+        [
+          {
+            "node": "DB: Rechnungsdaten laden",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DB: Termindaten laden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Rechnungsdaten laden": {
+      "main": [
+        [
+          {
+            "node": "Code: Anruf-Script generieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Termindaten laden": {
+      "main": [
+        [
+          {
+            "node": "Code: Anruf-Script generieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Anruf-Script generieren": {
+      "main": [
+        [
+          {
+            "node": "VAPI: Telefon-Agent starten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VAPI: Telefon-Agent starten": {
+      "main": [
+        [
+          {
+            "node": "DB: Anruf protokollieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Anruf protokollieren": {
+      "main": [
+        [
+          {
+            "node": "Response: Erfolg",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: VAPI Callback": {
+      "main": [
+        [
+          {
+            "node": "Switch: Callback-Typ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: Callback-Typ": {
+      "main": [
+        [
+          {
+            "node": "DB: Anruf-Status aktualisieren",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GPT-4: Anruf analysieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Anruf-Status aktualisieren": {
+      "main": [
+        [
+          {
+            "node": "GPT-4: Anruf analysieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4: Anruf analysieren": {
+      "main": [
+        [
+          {
+            "node": "DB: Analyse speichern",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Analyse speichern": {
+      "main": [
+        [
+          {
+            "node": "IF: Follow-up nötig?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Follow-up nötig?": {
+      "main": [
+        [
+          {
+            "node": "Slack: Team benachrichtigen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "voice-agent",
+      "createdAt": "2026-01-25T00:00:00.000Z"
+    },
+    {
+      "name": "telefon",
+      "createdAt": "2026-01-25T00:00:00.000Z"
+    },
+    {
+      "name": "erinnerung",
+      "createdAt": "2026-01-25T00:00:00.000Z"
+    }
+  ],
+  "pinData": {},
+  "versionId": "1"
+}

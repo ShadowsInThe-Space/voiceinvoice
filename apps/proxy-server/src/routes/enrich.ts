@@ -73,8 +73,16 @@ export async function registerEnrichRoutes(server: FastifyInstance): Promise<voi
 
       return reply.status(200).send(response);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
       server.log.error({ err: error }, 'Invoice extraction failed');
-      throw error;
+
+      const errorResponse: ErrorResponse = {
+        error: `Invoice extraction failed: ${errorMessage}`,
+        statusCode: 500,
+      };
+
+      return reply.status(500).send(errorResponse);
     }
   });
 }

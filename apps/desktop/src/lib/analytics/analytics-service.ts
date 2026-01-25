@@ -145,7 +145,10 @@ export class AnalyticsService {
       .sort((a, b) => a.month.localeCompare(b.month));
 
     // Group by customer
-    const byCustomerMap = new Map<string, { customerId: string; customerName: string; amount: number }>();
+    const byCustomerMap = new Map<
+      string,
+      { customerId: string; customerName: string; amount: number }
+    >();
     for (const inv of invoices) {
       const existing = byCustomerMap.get(inv.customerId);
       if (existing) {
@@ -158,8 +161,7 @@ export class AnalyticsService {
         });
       }
     }
-    const byCustomer = Array.from(byCustomerMap.values())
-      .sort((a, b) => b.amount - a.amount);
+    const byCustomer = Array.from(byCustomerMap.values()).sort((a, b) => b.amount - a.amount);
 
     // Calculate trend
     const { trend, trendPercent } = cache
@@ -193,11 +195,14 @@ export class AnalyticsService {
     const newCustomers = customers.length;
 
     // Calculate active customers (those with paid invoices)
-    const activeCustomerIds = new Set(invoices.map(inv => inv.customerId));
+    const activeCustomerIds = new Set(invoices.map((inv) => inv.customerId));
     const activeCustomers = activeCustomerIds.size;
 
     // Calculate top customers
-    const customerStatsMap = new Map<string, { customer: Customer; totalRevenue: number; invoiceCount: number }>();
+    const customerStatsMap = new Map<
+      string,
+      { customer: Customer; totalRevenue: number; invoiceCount: number }
+    >();
 
     for (const inv of invoices) {
       const existing = customerStatsMap.get(inv.customerId);
@@ -248,12 +253,12 @@ export class AnalyticsService {
     const averageValue = totalValue / invoices.length;
 
     // Get all items for invoices
-    const invoiceIds = new Set(invoices.map(inv => inv.id));
+    const invoiceIds = new Set(invoices.map((inv) => inv.id));
     let items: InvoiceItem[] = [];
 
     if (cache) {
       // In-memory filter of items
-      items = cache.items.filter(item => invoiceIds.has(item.invoiceId));
+      items = cache.items.filter((item) => invoiceIds.has(item.invoiceId));
     } else {
       items = await this.getItemsForInvoices(Array.from(invoiceIds));
     }
@@ -269,7 +274,10 @@ export class AnalyticsService {
     // Find most common items
     const descriptionCountMap = new Map<string, number>();
     for (const item of items) {
-      descriptionCountMap.set(item.description, (descriptionCountMap.get(item.description) || 0) + 1);
+      descriptionCountMap.set(
+        item.description,
+        (descriptionCountMap.get(item.description) || 0) + 1
+      );
     }
     const mostCommonItems = Array.from(descriptionCountMap.entries())
       .map(([description, count]) => ({ description, count }))
@@ -354,8 +362,11 @@ export class AnalyticsService {
     return this.prisma.invoiceItem.findMany();
   }
 
-  private filterPaidInvoicesFromCache(invoices: InvoiceWithCustomer[], range?: DateRange): InvoiceWithCustomer[] {
-    return invoices.filter(inv => {
+  private filterPaidInvoicesFromCache(
+    invoices: InvoiceWithCustomer[],
+    range?: DateRange
+  ): InvoiceWithCustomer[] {
+    return invoices.filter((inv) => {
       if (inv.status !== 'PAID') return false;
       if (!range) return true;
       const paidAt = inv.paidAt ? new Date(inv.paidAt) : null;
@@ -366,7 +377,7 @@ export class AnalyticsService {
 
   private filterInvoicesFromCache(invoices: InvoiceWithCustomer[], range?: DateRange): Invoice[] {
     if (!range) return invoices;
-    return invoices.filter(inv => {
+    return invoices.filter((inv) => {
       const createdAt = new Date(inv.createdAt);
       return createdAt >= range.from && createdAt <= range.to;
     });
@@ -374,13 +385,16 @@ export class AnalyticsService {
 
   private filterCustomersFromCache(customers: Customer[], range?: DateRange): Customer[] {
     if (!range) return customers;
-    return customers.filter(c => {
+    return customers.filter((c) => {
       const createdAt = new Date(c.createdAt);
       return createdAt >= range.from && createdAt <= range.to;
     });
   }
 
-  private calculateTrendFromCache(invoices: InvoiceWithCustomer[], range?: DateRange): { trend: 'up' | 'down' | 'stable'; trendPercent: number } {
+  private calculateTrendFromCache(
+    invoices: InvoiceWithCustomer[],
+    range?: DateRange
+  ): { trend: 'up' | 'down' | 'stable'; trendPercent: number } {
     const now = new Date();
     let currentStart: Date;
     let currentEnd: Date;
@@ -400,8 +414,14 @@ export class AnalyticsService {
       previousEnd = new Date(now.getFullYear(), now.getMonth(), 0);
     }
 
-    const currentInvoices = this.filterPaidInvoicesFromCache(invoices, { from: currentStart, to: currentEnd });
-    const previousInvoices = this.filterPaidInvoicesFromCache(invoices, { from: previousStart, to: previousEnd });
+    const currentInvoices = this.filterPaidInvoicesFromCache(invoices, {
+      from: currentStart,
+      to: currentEnd,
+    });
+    const previousInvoices = this.filterPaidInvoicesFromCache(invoices, {
+      from: previousStart,
+      to: previousEnd,
+    });
 
     const currentTotal = currentInvoices.reduce((sum, inv) => sum + inv.total, 0);
     const previousTotal = previousInvoices.reduce((sum, inv) => sum + inv.total, 0);
@@ -471,6 +491,7 @@ export class AnalyticsService {
 
   /**
    * Gets paid invoices within date range.
+   * @param range
    */
   private async getPaidInvoicesInRange(range?: DateRange): Promise<InvoiceWithCustomer[]> {
     let query = `
@@ -512,7 +533,7 @@ export class AnalyticsService {
       })[]
     >(query, ...params);
 
-    return results.map(row => ({
+    return results.map((row) => ({
       id: row.id,
       number: row.number,
       customerId: row.customerId,
@@ -554,6 +575,7 @@ export class AnalyticsService {
 
   /**
    * Gets all invoices within date range.
+   * @param range
    */
   private async getInvoicesInRange(range?: DateRange): Promise<Invoice[]> {
     let query = `SELECT * FROM Invoice WHERE deletedAt IS NULL`;
@@ -571,6 +593,7 @@ export class AnalyticsService {
 
   /**
    * Gets customers created within date range.
+   * @param range
    */
   private async getCustomersInRange(range?: DateRange): Promise<Customer[]> {
     let query = `SELECT * FROM Customer WHERE deletedAt IS NULL`;
@@ -588,6 +611,7 @@ export class AnalyticsService {
 
   /**
    * Gets invoice items for given invoice IDs.
+   * @param invoiceIds
    */
   private async getItemsForInvoices(invoiceIds: string[]): Promise<InvoiceItem[]> {
     if (invoiceIds.length === 0) {
@@ -602,8 +626,11 @@ export class AnalyticsService {
 
   /**
    * Calculates trend by comparing current period to previous period.
+   * @param range
    */
-  private async calculateTrend(range?: DateRange): Promise<{ trend: 'up' | 'down' | 'stable'; trendPercent: number }> {
+  private async calculateTrend(
+    range?: DateRange
+  ): Promise<{ trend: 'up' | 'down' | 'stable'; trendPercent: number }> {
     const now = new Date();
     let currentStart: Date;
     let currentEnd: Date;
@@ -625,8 +652,14 @@ export class AnalyticsService {
       previousEnd = new Date(now.getFullYear(), now.getMonth(), 0);
     }
 
-    const currentInvoices = await this.getPaidInvoicesInRange({ from: currentStart, to: currentEnd });
-    const previousInvoices = await this.getPaidInvoicesInRange({ from: previousStart, to: previousEnd });
+    const currentInvoices = await this.getPaidInvoicesInRange({
+      from: currentStart,
+      to: currentEnd,
+    });
+    const previousInvoices = await this.getPaidInvoicesInRange({
+      from: previousStart,
+      to: previousEnd,
+    });
 
     const currentTotal = currentInvoices.reduce((sum, inv) => sum + inv.total, 0);
     const previousTotal = previousInvoices.reduce((sum, inv) => sum + inv.total, 0);
@@ -652,9 +685,12 @@ export class AnalyticsService {
 
   /**
    * Calculates average payment time in days.
+   * @param invoices
    */
   private async calculateAveragePaymentTime(invoices: Invoice[]): Promise<number> {
-    const paidInvoices = invoices.filter(inv => inv.status === 'PAID' && inv.issuedAt && inv.paidAt);
+    const paidInvoices = invoices.filter(
+      (inv) => inv.status === 'PAID' && inv.issuedAt && inv.paidAt
+    );
 
     if (paidInvoices.length === 0) {
       return 0;

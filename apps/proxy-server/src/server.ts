@@ -16,6 +16,7 @@ import rateLimit from '@fastify/rate-limit';
 import { registerHealthRoutes } from './routes/health';
 import { registerTranscribeRoutes } from './routes/transcribe';
 import { registerEnrichRoutes } from './routes/enrich';
+import { registerLicenseRoutes } from './routes/license';
 
 /**
  * Server build options.
@@ -105,6 +106,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   await registerHealthRoutes(server);
   await registerTranscribeRoutes(server);
   await registerEnrichRoutes(server);
+  await registerLicenseRoutes(server);
 
   // Global error handler
   server.setErrorHandler((error: FastifyError, _request, reply) => {

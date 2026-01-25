@@ -11,8 +11,9 @@
  * @module electron/main
  */
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import { createWindowConfig } from './window-manager';
 import {
   createInvoiceHandler,
@@ -22,6 +23,16 @@ import {
   type IpcHandlerContext,
 } from './ipc/handlers';
 import { saveRecording, listRecordings, deleteRecording } from './ipc/voice-handlers';
+import {
+  getWorkflowKPIsHandler,
+  getExecutionStatsHandler,
+  getDailyCountsHandler,
+  getSuccessRatesHandler,
+  getErrorBreakdownHandler,
+  getRecentExecutionsHandler,
+  getTimelineInvoicesHandler,
+  getTopCustomersHandler,
+} from './ipc/analytics-handlers';
 
 /**
  * Main application window reference.
@@ -104,12 +115,12 @@ function createMainWindow(): BrowserWindow {
 const databaseOperations = {
   createInvoice: async (data: unknown) => {
     console.log('Mock DB: createInvoice', data);
-    return { id: 'mock-id', ...data as object };
+    return { id: 'mock-id', ...(data as object) };
   },
   getCustomers: async () => {
     return [
       { id: 'c1', companyName: 'Acme Corp', type: 'CUSTOMER' },
-      { id: 'c2', companyName: 'Globex', type: 'SUPPLIER' }
+      { id: 'c2', companyName: 'Globex', type: 'SUPPLIER' },
     ];
   },
   getSettings: async () => {
@@ -118,11 +129,11 @@ const databaseOperations = {
   updateSettings: async (data: unknown) => {
     console.log('Mock DB: updateSettings', data);
     return data;
-  }
+  },
 };
 
 const context: IpcHandlerContext = {
-  database: databaseOperations
+  database: databaseOperations,
 };
 
 // Setup handlers
@@ -130,17 +141,59 @@ function setupHandlers(): void {
   // Invoice handlers
   ipcMain.handle('invoice:create', (_event, data) => createInvoiceHandler(context, data));
   ipcMain.handle('customer:list', () => getCustomersHandler(context));
-  
+
   // Settings handlers
   ipcMain.handle('settings:get', () => getSettingsHandler(context));
   ipcMain.handle('settings:update', (_event, data) => updateSettingsHandler(context, data));
 
   // Voice handlers
-  ipcMain.handle('voice:save-recording', (_event, audioData, duration, mimeType) => 
+  ipcMain.handle('voice:save-recording', (_event, audioData, duration, mimeType) =>
     saveRecording(audioData, duration, mimeType)
   );
   ipcMain.handle('voice:list-recordings', () => listRecordings());
   ipcMain.handle('voice:delete-recording', (_event, filePath) => deleteRecording(filePath));
+
+  // Analytics handlers
+  ipcMain.handle('analytics:getKPIs', () => getWorkflowKPIsHandler());
+  ipcMain.handle('analytics:getStats', (_event, startDate, endDate, workflowIntent) =>
+    getExecutionStatsHandler(startDate, endDate, workflowIntent)
+  );
+  ipcMain.handle('analytics:getDailyCounts', (_event, days) => getDailyCountsHandler(days));
+  ipcMain.handle('analytics:getSuccessRates', () => getSuccessRatesHandler());
+  ipcMain.handle('analytics:getErrorBreakdown', () => getErrorBreakdownHandler());
+  ipcMain.handle('analytics:getRecentExecutions', (_event, limit, workflowIntent) =>
+    getRecentExecutionsHandler(limit, workflowIntent)
+  );
+  ipcMain.handle('analytics:getTimelineInvoices', () => getTimelineInvoicesHandler());
+  ipcMain.handle('analytics:getTopCustomers', (_event, limit) => getTopCustomersHandler(limit));
+
+  // File handlers
+  ipcMain.handle(
+    'file:saveFile',
+    async (
+      _event,
+      content: string,
+      defaultFilename: string,
+      filters: { name: string; extensions: string[] }[]
+    ) => {
+      try {
+        const result = await dialog.showSaveDialog({
+          defaultPath: defaultFilename,
+          filters: filters,
+        });
+
+        if (result.canceled || !result.filePath) {
+          return false;
+        }
+
+        fs.writeFileSync(result.filePath, content, 'utf-8');
+        return true;
+      } catch (error) {
+        console.error('Error saving file:', error);
+        return false;
+      }
+    }
+  );
 }
 
 // App lifecycle

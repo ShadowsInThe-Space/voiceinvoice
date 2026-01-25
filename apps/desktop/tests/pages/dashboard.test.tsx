@@ -175,35 +175,18 @@ describe('Dashboard Page', () => {
   });
 
   describe('Export Functionality', () => {
-    let createObjectURLMock: ReturnType<typeof vi.fn>;
-    let revokeObjectURLMock: ReturnType<typeof vi.fn>;
-    let mockAnchor: {
-      href: string;
-      download: string;
-      click: ReturnType<typeof vi.fn>;
-      style: Record<string, string>;
-    };
+    let mockAnchor: HTMLAnchorElement;
     const originalCreateElement = document.createElement.bind(document);
 
     beforeEach(() => {
-      // Mock URL.createObjectURL and URL.revokeObjectURL
-      createObjectURLMock = vi.fn(() => 'blob:mock-url');
-      revokeObjectURLMock = vi.fn();
-      global.URL.createObjectURL = createObjectURLMock;
-      global.URL.revokeObjectURL = revokeObjectURLMock;
-
-      // Create mock anchor element
-      mockAnchor = {
-        href: '',
-        download: '',
-        click: vi.fn(),
-        style: {},
-      };
+      // Create a real anchor element but spy on its click method
+      mockAnchor = originalCreateElement('a') as HTMLAnchorElement;
+      vi.spyOn(mockAnchor, 'click').mockImplementation(() => {});
 
       // Mock createElement only for anchor elements
       vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
         if (tagName === 'a') {
-          return mockAnchor as unknown as HTMLAnchorElement;
+          return mockAnchor;
         }
         return originalCreateElement(tagName);
       });
@@ -246,15 +229,14 @@ describe('Dashboard Page', () => {
       const csvButton = await screen.findByRole('button', { name: /csv/i });
       await user.click(csvButton);
 
-      // Verify Blob was created with CSV content
-      expect(createObjectURLMock).toHaveBeenCalled();
-      const blobCall = createObjectURLMock.mock.calls[0][0];
-      expect(blobCall).toBeInstanceOf(Blob);
-      expect(blobCall.type).toBe('text/csv;charset=utf-8;');
+      // Wait for setTimeout in download to trigger click
+      await waitFor(() => {
+        expect(mockAnchor.click).toHaveBeenCalled();
+      });
 
-      // Verify download was triggered
-      expect(mockAnchor.click).toHaveBeenCalled();
-      expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-url');
+      // Verify anchor was configured for download with data URL
+      expect(mockAnchor.href).toMatch(/^data:text\/csv;charset=utf-8;;base64,/);
+      expect(mockAnchor.download).toMatch(/^rechnungen-.*\.csv$/);
     });
 
     it('should export invoices as JSON when clicking JSON option', async () => {
@@ -273,15 +255,14 @@ describe('Dashboard Page', () => {
       const jsonButton = await screen.findByRole('button', { name: /json/i });
       await user.click(jsonButton);
 
-      // Verify Blob was created with JSON content
-      expect(createObjectURLMock).toHaveBeenCalled();
-      const blobCall = createObjectURLMock.mock.calls[0][0];
-      expect(blobCall).toBeInstanceOf(Blob);
-      expect(blobCall.type).toBe('application/json');
+      // Wait for setTimeout in download to trigger click
+      await waitFor(() => {
+        expect(mockAnchor.click).toHaveBeenCalled();
+      });
 
-      // Verify download was triggered
-      expect(mockAnchor.click).toHaveBeenCalled();
-      expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-url');
+      // Verify anchor was configured for download with data URL
+      expect(mockAnchor.href).toMatch(/^data:application\/json;base64,/);
+      expect(mockAnchor.download).toMatch(/^rechnungen-.*\.json$/);
     });
 
     it('should include correct invoice data in CSV export', async () => {
@@ -298,13 +279,15 @@ describe('Dashboard Page', () => {
       const csvButton = await screen.findByRole('button', { name: /csv/i });
       await user.click(csvButton);
 
-      // Get the Blob content - use FileReader to read the Blob
-      const blobCall = createObjectURLMock.mock.calls[0][0] as Blob;
-      const csvContent = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsText(blobCall);
+      // Wait for setTimeout in download to trigger click
+      await waitFor(() => {
+        expect(mockAnchor.click).toHaveBeenCalled();
       });
+
+      // Extract and decode base64 content from data URL
+      const dataUrl = mockAnchor.href;
+      const base64Content = dataUrl.split(',')[1];
+      const csvContent = decodeURIComponent(escape(atob(base64Content)));
 
       // Check CSV headers
       expect(csvContent).toContain('Rechnungsnummer');
@@ -334,13 +317,15 @@ describe('Dashboard Page', () => {
       const jsonButton = await screen.findByRole('button', { name: /json/i });
       await user.click(jsonButton);
 
-      // Get the Blob content - use FileReader to read the Blob
-      const blobCall = createObjectURLMock.mock.calls[0][0] as Blob;
-      const jsonContent = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsText(blobCall);
+      // Wait for setTimeout in download to trigger click
+      await waitFor(() => {
+        expect(mockAnchor.click).toHaveBeenCalled();
       });
+
+      // Extract and decode base64 content from data URL
+      const dataUrl = mockAnchor.href;
+      const base64Content = dataUrl.split(',')[1];
+      const jsonContent = decodeURIComponent(escape(atob(base64Content)));
       const parsedData = JSON.parse(jsonContent);
 
       // Check JSON structure
