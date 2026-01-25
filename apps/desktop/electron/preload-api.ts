@@ -65,6 +65,17 @@ export interface AppApi {
 }
 
 /**
+ * File API for saving files via Electron dialog.
+ */
+export interface FileApi {
+  saveFile: (
+    content: string,
+    defaultFilename: string,
+    filters: { name: string; extensions: string[] }[]
+  ) => Promise<boolean>;
+}
+
+/**
  * Complete Preload API interface.
  *
  * This is the full API exposed to the renderer process
@@ -76,6 +87,7 @@ export interface PreloadApi {
   settings: SettingsApi;
   voice: VoiceApi;
   app: AppApi;
+  file: FileApi;
 }
 
 /**
@@ -132,6 +144,14 @@ export function createPreloadApi(invoke: IpcInvoker): PreloadApi {
     app: {
       getVersion: () => invoke('app:getVersion') as Promise<string>,
       getPlatform: () => invoke('app:getPlatform') as Promise<string>,
+    },
+
+    file: {
+      saveFile: (
+        content: string,
+        defaultFilename: string,
+        filters: { name: string; extensions: string[] }[]
+      ) => invoke('file:saveFile', content, defaultFilename, filters) as Promise<boolean>,
     },
   };
 }

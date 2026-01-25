@@ -18,3 +18,6 @@ export type { InvoiceListProps } from './InvoiceList';
 
 export { LogoUpload, LOGO_STORAGE_KEY } from './LogoUpload';
 export type { LogoUploadProps } from './LogoUpload';
+
+export { SystemAlert, SystemAlertContainer, useSystemAlerts, SYSTEM_ALERTS } from './SystemAlert';
+export type { SystemAlertConfig, AlertType } from './SystemAlert';

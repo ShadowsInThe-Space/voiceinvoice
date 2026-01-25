@@ -42,6 +42,7 @@
     "concurrently": "^8.2.0",
     "electron": "^35.2.0",
     "electron-builder": "^25.1.8",
+    "esbuild": ">=0.25.0",
     "eslint-config-next": "^14.1.0",
     "jsdom": "^24.0.0",
     "postcss": "^8.4.0",
