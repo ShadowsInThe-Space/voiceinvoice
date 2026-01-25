@@ -28,7 +28,7 @@ export function ChatInterface(): React.ReactElement {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [geminiClient, setGeminiClient] = useState<GeminiClient | null>(null);
-  const [autoSpeak, setAutoSpeak] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // TTS Hook
@@ -65,12 +65,22 @@ export function ChatInterface(): React.ReactElement {
   useEffect(() => {
     const savedProvider = localStorage.getItem('voiceinvoice_tts_provider');
     const savedRate = localStorage.getItem('voiceinvoice_tts_rate');
+    const savedAutoSpeak = localStorage.getItem('voiceinvoice_auto_speak');
 
+    // Default to Google Cloud TTS (high quality), fallback to Browser TTS automatically
     if (savedProvider) {
       setUseGoogleTTS(savedProvider === 'google');
+    } else {
+      setUseGoogleTTS(true); // Default: Google Cloud TTS
     }
+
     if (savedRate) {
       setSpeakingRate(parseFloat(savedRate));
+    }
+
+    // Restore auto-speak preference (default: true)
+    if (savedAutoSpeak !== null) {
+      setAutoSpeak(savedAutoSpeak === 'true');
     }
   }, [setUseGoogleTTS, setSpeakingRate]);
 
@@ -169,7 +179,11 @@ export function ChatInterface(): React.ReactElement {
           <button
             onClick={() => {
               if (speaking) stopSpeaking();
-              setAutoSpeak((prev) => !prev);
+              setAutoSpeak((prev) => {
+                const newValue = !prev;
+                localStorage.setItem('voiceinvoice_auto_speak', String(newValue));
+                return newValue;
+              });
             }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
               autoSpeak
