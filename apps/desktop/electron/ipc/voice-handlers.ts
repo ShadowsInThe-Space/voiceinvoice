@@ -159,26 +159,26 @@ export async function listRecordings(): Promise<RecordingMetadata[]> {
     const recordingsDir = await getRecordingsDir();
     const files = await fs.readdir(recordingsDir);
 
-    const recordings: RecordingMetadata[] = [];
-
-    for (const file of files) {
-      if (file.startsWith('rec-')) {
+    const processingPromises = files
+      .filter((file) => file.startsWith('rec-'))
+      .map(async (file) => {
         const filePath = path.join(recordingsDir, file);
         const stats = await fs.stat(filePath);
 
         // Extract ID from filename
         const id = file.replace(/\.[^.]+$/, '');
 
-        recordings.push({
+        return {
           id,
           filePath,
           duration: 0, // Would need metadata storage for accurate duration
           mimeType: 'audio/webm', // Default, would need metadata storage
           createdAt: stats.birthtime,
           fileSize: stats.size,
-        });
-      }
-    }
+        };
+      });
+
+    const recordings = await Promise.all(processingPromises);
 
     return recordings.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   } catch {
