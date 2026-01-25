@@ -1,0 +1,13 @@
+node_modules
+dist
+build
+coverage
+.git
+.husky
+.vscode
+.idea
+*.log
+.DS_Store
+tmp
+docs
+tests/e2e-results

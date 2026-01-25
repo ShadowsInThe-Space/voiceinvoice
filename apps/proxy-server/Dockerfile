@@ -1,82 +1,44 @@
-# VoiceInvoice Proxy Server
-# Multi-stage build for optimized production image
+FROM node:20-alpine AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
 
-# ===== Build Stage =====
-FROM node:20-alpine AS builder
+FROM base AS builder
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+RUN pnpm add -g turbo
+COPY . .
+# Prune the workspace for the proxy-server
+RUN turbo prune --scope=@voiceinvoice/proxy-server --docker
 
+FROM base AS installer
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# First install dependencies
+COPY --from=builder /app/out/json/ .
+COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
+RUN pnpm install
 
-# Copy root workspace files
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY turbo.json tsconfig.json ./
+# Build the project
+COPY --from=builder /app/out/full/ .
 
-# Copy package manifests for dependency resolution
-COPY packages/shared-types/package.json ./packages/shared-types/
-COPY apps/proxy-server/package.json ./apps/proxy-server/
+# Generate Prisma Client (if needed by build, though seemingly unused yet)
+RUN pnpm turbo run db:generate --filter=@voiceinvoice/proxy-server
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Build the project
+RUN pnpm turbo run build --filter=@voiceinvoice/proxy-server
 
-# Generate Prisma Client
-WORKDIR /app/apps/proxy-server
-RUN pnpm prisma generate --schema=prisma/schema-server.prisma
+FROM base AS runner
 WORKDIR /app
 
-# Copy source files
-COPY packages/shared-types/ ./packages/shared-types/
-COPY apps/proxy-server/ ./apps/proxy-server/
+# Don't run production as root
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 fastify
+USER fastify
 
-# Build shared-types first, then proxy-server
-WORKDIR /app/packages/shared-types
-RUN pnpm run build 2>/dev/null || true
-
-WORKDIR /app/apps/proxy-server
-RUN pnpm run build
-
-# ===== Production Stage =====
-FROM node:20-alpine AS production
-
-WORKDIR /app
-
-# Create non-root user for security
-# Install OpenSSL for Prisma
-RUN apk add --no-cache openssl && \
-    addgroup -g 1001 -S nodejs && \
-    adduser -S voiceinvoice -u 1001
-# Install pnpm for production
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# Copy package files
-COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml ./
-COPY --from=builder /app/packages/shared-types/package.json ./packages/shared-types/
-COPY --from=builder /app/apps/proxy-server/package.json ./apps/proxy-server/
-
-# Install production dependencies only (skip prepare scripts for husky)
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts
-
-# Copy built files
-COPY --from=builder /app/packages/shared-types/dist ./packages/shared-types/dist
-COPY --from=builder /app/apps/proxy-server/dist ./apps/proxy-server/dist
-
-# Set ownership
-RUN chown -R voiceinvoice:nodejs /app
-
-USER voiceinvoice
-
-# Environment
-ENV NODE_ENV=production
-ENV PORT=3001
-ENV HOST=0.0.0.0
+COPY --from=installer /app .
 
 EXPOSE 3001
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget -qO- http://localhost:3001/health || exit 1
-
-# Start server
-WORKDIR /app/apps/proxy-server
-CMD ["node", "dist/index.js"]
+CMD ["node", "apps/proxy-server/dist/index.js"]
