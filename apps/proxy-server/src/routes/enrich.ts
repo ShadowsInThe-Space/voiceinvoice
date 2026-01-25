@@ -77,8 +77,11 @@ export async function registerEnrichRoutes(server: FastifyInstance): Promise<voi
 
       server.log.error({ err: error }, 'Invoice extraction failed');
 
+      const isProduction = process.env.NODE_ENV === 'production';
       const errorResponse: ErrorResponse = {
-        error: `Invoice extraction failed: ${errorMessage}`,
+        error: isProduction
+          ? 'Internal server error'
+          : `Invoice extraction failed: ${errorMessage}`,
         statusCode: 500,
       };
 

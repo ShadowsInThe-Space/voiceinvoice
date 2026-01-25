@@ -86,8 +86,9 @@ export async function registerTranscribeRoutes(server: FastifyInstance): Promise
 
         server.log.error({ err: error }, 'Transcription failed');
 
+        const isProduction = process.env.NODE_ENV === 'production';
         const errorResponse: ErrorResponse = {
-          error: `Transcription failed: ${errorMessage}`,
+          error: isProduction ? 'Internal server error' : `Transcription failed: ${errorMessage}`,
           statusCode: 500,
         };
 
