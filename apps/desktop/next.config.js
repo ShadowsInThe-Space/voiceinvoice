@@ -1,5 +1,6 @@
 const nextConfig = {
-  output: 'export',
+  // Removed 'output: export' to enable API Routes for TTS
+  // Electron runs Next.js in dev server mode, so we need server-side features
   distDir: '.next',
   images: {
     unoptimized: true,

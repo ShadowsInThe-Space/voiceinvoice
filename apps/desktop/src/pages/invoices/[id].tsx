@@ -135,19 +135,59 @@ export default function InvoiceDetailPage(): React.ReactElement {
   useEffect(() => {
     if (!id || typeof id !== 'string') return;
 
-    setIsLoading(true);
-    setError(null);
+    const fetchInvoice = async () => {
+      setIsLoading(true);
+      setError(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      const foundInvoice = MOCK_INVOICES[id];
-      if (foundInvoice) {
-        setInvoice(foundInvoice);
-      } else {
-        setError('Rechnung nicht gefunden');
+      try {
+        const response = await fetch(`/api/invoices/${id}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch invoice');
+        }
+
+        if (data.success && data.invoice) {
+          // Transform API response to match component type
+          const transformedInvoice = {
+            id: data.invoice.id,
+            invoiceNumber: data.invoice.invoiceNumber,
+            date: new Date(data.invoice.date),
+            dueDate: data.invoice.dueDate
+              ? new Date(data.invoice.dueDate)
+              : new Date(data.invoice.date),
+            netAmount: data.invoice.netAmount,
+            taxRate: data.invoice.taxRate,
+            taxAmount: data.invoice.taxAmount,
+            grossAmount: data.invoice.grossAmount,
+            currency: data.invoice.currency,
+            status: data.invoice.status as any,
+            description: data.invoice.description,
+            customerId: data.invoice.customerId,
+            customer: { name: data.invoice.customer.name },
+            createdAt: new Date(data.invoice.createdAt),
+            updatedAt: new Date(data.invoice.updatedAt),
+          };
+          setInvoice(transformedInvoice);
+        } else {
+          setError('Rechnung nicht gefunden');
+        }
+      } catch (err) {
+        console.error('Failed to fetch invoice:', err);
+        setError(err instanceof Error ? err.message : 'Rechnung nicht gefunden');
+
+        // Fallback to mock data
+        const foundInvoice = MOCK_INVOICES[id];
+        if (foundInvoice) {
+          setInvoice(foundInvoice);
+          setError(null);
+        }
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
-    }, 300);
+    };
+
+    fetchInvoice();
   }, [id]);
 
   /**

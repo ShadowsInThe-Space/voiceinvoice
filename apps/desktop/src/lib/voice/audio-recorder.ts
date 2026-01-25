@@ -231,6 +231,10 @@ export class AudioRecorder {
         reject(new Error(`Recording error: ${event}`));
       };
 
+      // Request final data before stopping to ensure audioChunks is populated
+      // This triggers ondataavailable immediately with all recorded data
+      this.mediaRecorder.requestData();
+
       this.mediaRecorder.stop();
     });
   }

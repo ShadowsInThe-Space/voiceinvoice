@@ -1,0 +1,91 @@
+# n8n Production Deployment for Hetzner
+# Domain: n8n.shadowsinthe.space
+# Deploy: docker-compose -f docker-compose.production.yml up -d
+
+version: '3.8'
+
+services:
+  n8n:
+    image: n8nio/n8n:ai
+    container_name: n8n-production
+    restart: unless-stopped
+
+    ports:
+      - '5678:5678'
+
+    environment:
+      # Basic Configuration
+      - N8N_HOST=n8n.shadowsinthe.space
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+
+      # Webhook Configuration
+      - WEBHOOK_URL=https://n8n.shadowsinthe.space/
+
+      # Database (SQLite for simplicity, consider PostgreSQL for production)
+      - DB_TYPE=sqlite
+      - DB_SQLITE_DATABASE=/home/node/.n8n/database.sqlite
+
+      # Security
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+
+      # Encryption
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+
+      # Timezone
+      - GENERIC_TIMEZONE=Europe/Berlin
+      - TZ=Europe/Berlin
+
+      # Execution
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=336 # 14 days
+
+      # Logging
+      - N8N_LOG_LEVEL=info
+      - N8N_LOG_OUTPUT=console,file
+      - N8N_LOG_FILE_LOCATION=/home/node/.n8n/logs/
+
+      # Performance
+      - N8N_CONCURRENCY_PRODUCTION_LIMIT=10
+
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - n8n-files:/files
+
+    networks:
+      - n8n-network
+
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget --no-verbose --tries=1 --spider http://localhost:5678/healthz || exit 1',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    labels:
+      # Traefik labels for reverse proxy (if using Traefik)
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.n8n.rule=Host(`n8n.shadowsinthe.space`)'
+      - 'traefik.http.routers.n8n.entrypoints=websecure'
+      - 'traefik.http.routers.n8n.tls=true'
+      - 'traefik.http.routers.n8n.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.n8n.loadbalancer.server.port=5678'
+
+networks:
+  n8n-network:
+    driver: bridge
+
+volumes:
+  n8n-data:
+    driver: local
+  n8n-files:
+    driver: local

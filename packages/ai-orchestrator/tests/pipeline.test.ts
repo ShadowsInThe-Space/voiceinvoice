@@ -1,5 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PipelineOrchestrator, PipelineStage } from '../src/pipeline';
+
+// Mock the cleaner module
+vi.mock('../src/cleaner', () => ({
+  cleanTranscript: vi.fn().mockResolvedValue({
+    cleanedTranscript: 'Rechnung für Müller GmbH über 500 Euro',
+    removedElements: ['äh (2x)', 'ähm (1x)'],
+    latencyMs: 200,
+  }),
+}));
 
 describe('PipelineOrchestrator', () => {
   describe('Construction', () => {
@@ -425,6 +434,247 @@ describe('PipelineOrchestrator', () => {
           stage: 'transcription',
           message: expect.stringContaining('Test error'),
         },
+      });
+    });
+  });
+
+  describe('Transcript Cleaning', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('should enable cleaning by default', () => {
+      const pipeline = new PipelineOrchestrator();
+      const config = pipeline.getConfig();
+
+      expect(config.enableCleaning).toBe(true);
+    });
+
+    it('should allow disabling cleaning', () => {
+      const pipeline = new PipelineOrchestrator({
+        enableCleaning: false,
+      });
+      const config = pipeline.getConfig();
+
+      expect(config.enableCleaning).toBe(false);
+    });
+
+    it('should include CLEANING stage when enabled', async () => {
+      const { cleanTranscript } = await import('../src/cleaner');
+      const mockClean = cleanTranscript as ReturnType<typeof vi.fn>;
+
+      const pipeline = new PipelineOrchestrator({
+        enableCleaning: true,
+      });
+
+      await pipeline.processText('Äh, Rechnung für Kunde');
+
+      expect(mockClean).toHaveBeenCalledWith({
+        rawTranscript: 'Äh, Rechnung für Kunde',
+      });
+    });
+
+    it('should skip CLEANING stage when disabled', async () => {
+      const { cleanTranscript } = await import('../src/cleaner');
+      const mockClean = cleanTranscript as ReturnType<typeof vi.fn>;
+
+      const pipeline = new PipelineOrchestrator({
+        enableCleaning: false,
+      });
+
+      await pipeline.processText('Rechnung für Kunde');
+
+      expect(mockClean).not.toHaveBeenCalled();
+    });
+
+    it('should include cleaning result in pipeline result', async () => {
+      const pipeline = new PipelineOrchestrator({
+        enableCleaning: true,
+      });
+
+      const result = await pipeline.processText('Äh, Rechnung für Kunde');
+
+      expect(result.cleaning).toBeDefined();
+      expect(result.cleaning?.text).toBe('Rechnung für Müller GmbH über 500 Euro');
+      expect(result.cleaning?.removedElements).toContain('äh (2x)');
+      expect(result.cleaning?.latencyMs).toBe(200);
+    });
+
+    it('should track cleaning stage latency', async () => {
+      const pipeline = new PipelineOrchestrator({
+        enableCleaning: true,
+      });
+
+      const result = await pipeline.processText('Äh, Rechnung');
+
+      expect(result.stageLatencies.cleaning).toBe(200);
+    });
+
+    it('should call onCleaning callback', async () => {
+      const onCleaning = vi.fn();
+
+      const pipeline = new PipelineOrchestrator({
+        enableCleaning: true,
+        callbacks: { onCleaning },
+      });
+
+      await pipeline.processText('Äh, Rechnung');
+
+      expect(onCleaning).toHaveBeenCalledTimes(1);
+      expect(onCleaning).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'Rechnung für Müller GmbH über 500 Euro',
+          removedElements: ['äh (2x)', 'ähm (1x)'],
+          latencyMs: 200,
+        })
+      );
+    });
+
+    it('should call cleaning stage callbacks', async () => {
+      const onStageStart = vi.fn();
+      const onStageEnd = vi.fn();
+
+      const pipeline = new PipelineOrchestrator({
+        enableCleaning: true,
+        callbacks: { onStageStart, onStageEnd },
+      });
+
+      await pipeline.processText('Äh, Rechnung');
+
+      expect(onStageStart).toHaveBeenCalledWith(PipelineStage.CLEANING);
+      expect(onStageEnd).toHaveBeenCalledWith(PipelineStage.CLEANING);
+    });
+
+    it('should use cleaned text for classification', async () => {
+      const { cleanTranscript } = await import('../src/cleaner');
+      const mockClean = cleanTranscript as ReturnType<typeof vi.fn>;
+
+      mockClean.mockResolvedValueOnce({
+        cleanedTranscript: 'Rechnung für Test GmbH',
+        removedElements: ['äh (3x)'],
+        latencyMs: 150,
+      });
+
+      const onClassification = vi.fn();
+
+      const pipeline = new PipelineOrchestrator({
+        enableCleaning: true,
+        callbacks: { onClassification },
+      });
+
+      await pipeline.processText('Äh, äh, äh, Rechnung für Test GmbH');
+
+      // Classification should receive the cleaned text
+      expect(onClassification).toHaveBeenCalled();
+      const classificationArg = onClassification.mock.calls[0][0];
+      expect(classificationArg.intent).toBe('INVOICE');
+    });
+
+    it('should continue with raw text if cleaning fails', async () => {
+      const { cleanTranscript } = await import('../src/cleaner');
+      const mockClean = cleanTranscript as ReturnType<typeof vi.fn>;
+
+      mockClean.mockRejectedValueOnce(new Error('Cleaning API failed'));
+
+      const pipeline = new PipelineOrchestrator({
+        enableCleaning: true,
+      });
+
+      const result = await pipeline.processText('Rechnung für Kunde');
+
+      // Pipeline should succeed despite cleaning failure
+      expect(result.success).toBe(true);
+      expect(result.classification).toBeDefined();
+      expect(result.cleaning).toBeUndefined(); // Cleaning failed, so no result
+    });
+
+    it('should call onError when cleaning fails', async () => {
+      const { cleanTranscript } = await import('../src/cleaner');
+      const mockClean = cleanTranscript as ReturnType<typeof vi.fn>;
+
+      mockClean.mockRejectedValueOnce(new Error('API timeout'));
+
+      const onError = vi.fn();
+
+      const pipeline = new PipelineOrchestrator({
+        enableCleaning: true,
+        callbacks: { onError },
+      });
+
+      await pipeline.processText('Rechnung');
+
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stage: PipelineStage.CLEANING,
+          message: 'API timeout',
+        })
+      );
+    });
+
+    it('should include cleaning in callbacks order', async () => {
+      const callOrder: string[] = [];
+      const mockTranscriber = vi.fn().mockResolvedValue({
+        text: 'Äh, Rechnung',
+        confidence: 0.9,
+        latencyMs: 100,
+      });
+
+      const pipeline = new PipelineOrchestrator({
+        transcriptionHandler: mockTranscriber,
+        enableCleaning: true,
+        callbacks: {
+          onTranscription: (): void => {
+            callOrder.push('transcription');
+          },
+          onCleaning: (): void => {
+            callOrder.push('cleaning');
+          },
+          onClassification: (): void => {
+            callOrder.push('classification');
+          },
+          onRouting: (): void => {
+            callOrder.push('routing');
+          },
+          onComplete: (): void => {
+            callOrder.push('complete');
+          },
+        },
+      });
+
+      await pipeline.processAudio(new ArrayBuffer(100));
+
+      expect(callOrder).toEqual([
+        'transcription',
+        'cleaning',
+        'classification',
+        'routing',
+        'complete',
+      ]);
+    });
+
+    it('should have CLEANING stage in enum', () => {
+      expect(PipelineStage.CLEANING).toBe('cleaning');
+    });
+
+    it('should track all stages including cleaning', async () => {
+      const mockTranscriber = vi.fn().mockResolvedValue({
+        text: 'Äh, Rechnung',
+        confidence: 0.9,
+        latencyMs: 100,
+      });
+
+      const pipeline = new PipelineOrchestrator({
+        transcriptionHandler: mockTranscriber,
+        enableCleaning: true,
+      });
+
+      const result = await pipeline.processAudio(new ArrayBuffer(100));
+
+      expect(result.stageLatencies).toMatchObject({
+        transcription: 100,
+        cleaning: 200,
+        classification: expect.any(Number),
+        routing: expect.any(Number),
       });
     });
   });

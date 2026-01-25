@@ -439,3 +439,9 @@ export {
   type TextProcessingResult,
   type DualLayerConfig,
 } from './dual-layer-privacy';
+
+// ============================================
+// Chirp Client Exports
+// ============================================
+
+export { GoogleChirpClient, INVOICE_PHRASE_HINTS } from './chirp-client';
