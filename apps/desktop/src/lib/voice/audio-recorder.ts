@@ -52,24 +52,42 @@ export interface RecordingResult {
 
 /**
  * Default configuration for AudioRecorder.
+ *
+ * Optimized for Google Cloud Speech-to-Text Chirp 3:
+ * - 16kHz sample rate (recommended by Google)
+ * - Echo cancellation enabled
+ * - Noise suppression DISABLED (Chirp 3 has built-in denoiser)
+ * - Auto gain control DISABLED (Google recommends against preprocessing)
+ *
+ * @see https://cloud.google.com/speech-to-text/v2/docs/best-practices
+ * @see https://cloud.google.com/speech-to-text/v2/docs/chirp_3-model
  */
 const DEFAULT_CONFIG: AudioRecorderConfig = {
   mimeType: 'audio/webm;codecs=opus',
-  sampleRate: 48000,
-  echoCancellation: true,
-  noiseSuppression: true,
-  autoGainControl: true,
+  sampleRate: 16000, // Google recommended: 16kHz for Chirp 3
+  echoCancellation: true, // Keep enabled for better quality
+  noiseSuppression: false, // Disabled: Chirp 3 has built-in denoiser
+  autoGainControl: false, // Disabled: Google recommends no AGC
 };
 
 /**
  * Preferred MIME types in order of preference.
+ *
+ * Ordered by quality for Speech-to-Text:
+ * 1. Lossless formats (best for STT)
+ * 2. High-quality lossy formats (Opus is better than MP3)
+ *
+ * Note: Browser support varies - we use the first supported format.
+ *
+ * @see https://cloud.google.com/speech-to-text/docs/encoding
  */
 const PREFERRED_MIME_TYPES = [
-  'audio/webm;codecs=opus',
-  'audio/webm',
-  'audio/ogg;codecs=opus',
-  'audio/ogg',
-  'audio/mp4',
+  'audio/wav', // Lossless (LINEAR16) - best quality
+  'audio/webm;codecs=opus', // High-quality lossy (Opus codec)
+  'audio/webm', // WebM container
+  'audio/ogg;codecs=opus', // Opus in Ogg container
+  'audio/ogg', // Generic Ogg
+  'audio/mp4', // Fallback
 ];
 
 /**

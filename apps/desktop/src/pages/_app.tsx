@@ -27,6 +27,7 @@ import {
   User,
   Mic,
   BarChart3,
+  MessageSquare,
 } from 'lucide-react';
 import { AlertProvider } from '../contexts/AlertContext';
 import { SystemAlerts } from '../components/SystemAlerts';
@@ -38,6 +39,7 @@ import { SyncStatusBadge } from '../components/SyncStatusBadge';
  */
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/chat', label: 'Assistent', icon: MessageSquare },
   { href: '/invoices/new', label: 'Neue Rechnung', icon: FilePlus },
   { href: '/invoices', label: 'Rechnungen', icon: FileText },
   { href: '/workflows', label: 'Workflows', icon: BarChart3 },
@@ -80,7 +82,7 @@ export default function App({ Component, pageProps }: AppProps): React.ReactElem
 
   // Handle Scroll for Header Shadow
   useEffect(() => {
-    const handleScroll = () => {
+    const handleScroll = (): void => {
       setIsScrolled(window.scrollY > 10);
     };
     window.addEventListener('scroll', handleScroll);
@@ -109,7 +111,7 @@ export default function App({ Component, pageProps }: AppProps): React.ReactElem
 
   // Close sidebar on navigation
   useEffect(() => {
-    const handleRouteChange = () => {
+    const handleRouteChange = (): void => {
       setIsSidebarOpen(false);
     };
     router.events?.on('routeChangeComplete', handleRouteChange);
