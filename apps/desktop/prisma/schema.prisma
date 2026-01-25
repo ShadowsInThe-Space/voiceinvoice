@@ -73,6 +73,7 @@ model Invoice {
 
   // Relations
   items       InvoiceItem[]
+  bankTransaction BankTransaction?
 
   @@index([customerId])
   @@index([status])
@@ -147,6 +148,33 @@ model ConsentRecord {
   updatedAt   DateTime @updatedAt
 
   @@index([consentType])
+}
+
+// Bank transaction from imported statements
+model BankTransaction {
+  id              String   @id @default(cuid())
+  importDate      DateTime @default(now())
+  sourceFile      String?
+  transactionDate DateTime
+  valueDate       DateTime
+  counterparty    String
+  counterpartyIban String?
+  amount          Float
+  currency        String   @default("EUR")
+  purpose         String?
+
+  matchedInvoiceId String?  @unique
+  matchedInvoice   Invoice? @relation(fields: [matchedInvoiceId], references: [id])
+
+  matchConfidence Float?
+  reconciled      Boolean  @default(false)
+
+  // Sync-ready fields
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  syncVersion     Int      @default(0)
+
+  @@index([reconciled])
 }
 
 // Invoice status values: DRAFT, SENT, PAID, OVERDUE, CANCELLED
