@@ -62,3 +62,4 @@ yarn-error.log*
 *.key
 credentials.json
 service-account.json
+squashfs-root/

@@ -20,6 +20,11 @@ COPY apps/proxy-server/package.json ./apps/proxy-server/
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
+# Generate Prisma Client
+WORKDIR /app/apps/proxy-server
+RUN pnpm prisma generate --schema=prisma/schema-server.prisma
+WORKDIR /app
+
 # Copy source files
 COPY packages/shared-types/ ./packages/shared-types/
 COPY apps/proxy-server/ ./apps/proxy-server/
@@ -38,7 +43,12 @@ WORKDIR /app
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
+    # Create non-root user for security
+    RUN addgroup -g 1001 -S nodejs && \
     adduser -S voiceinvoice -u 1001
+
+# Install OpenSSL for Prisma
+RUN apk add --no-cache openssl
 
 # Install pnpm for production
 RUN corepack enable && corepack prepare pnpm@latest --activate
