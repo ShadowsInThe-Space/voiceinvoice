@@ -65,6 +65,7 @@ export interface AppApi {
 }
 
 /**
+/**
  * Analytics API exposed to renderer.
  */
 export interface AnalyticsApi {
@@ -168,7 +169,6 @@ export function createPreloadApi(invoke: IpcInvoker): PreloadApi {
         filters: { name: string; extensions: string[] }[]
       ) => invoke('file:saveFile', content, defaultFilename, filters) as Promise<boolean>,
     },
-
     analytics: {
       getKPIs: () => invoke('analytics:getKPIs'),
       getStats: (startDate?: string, endDate?: string, workflowIntent?: string) =>

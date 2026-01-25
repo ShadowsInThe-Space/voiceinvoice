@@ -42,14 +42,10 @@ FROM node:20-alpine AS production
 WORKDIR /app
 
 # Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    # Create non-root user for security
-    RUN addgroup -g 1001 -S nodejs && \
-    adduser -S voiceinvoice -u 1001
-
 # Install OpenSSL for Prisma
-RUN apk add --no-cache openssl
-
+RUN apk add --no-cache openssl && \
+    addgroup -g 1001 -S nodejs && \
+    adduser -S voiceinvoice -u 1001
 # Install pnpm for production
 RUN corepack enable && corepack prepare pnpm@latest --activate
 

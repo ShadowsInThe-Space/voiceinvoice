@@ -18,6 +18,7 @@ import { registerTranscribeRoutes } from './routes/transcribe';
 import { registerEnrichRoutes } from './routes/enrich';
 import { registerLicenseRoutes } from './routes/license';
 import { registerSyncRoutes } from './routes/sync';
+import { registerStripeRoutes } from './routes/stripe';
 
 /**
  * Server build options.
@@ -72,6 +73,21 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
     bodyLimit: 10 * 1024 * 1024, // 10MB for audio files
   });
 
+  // Add raw body parser for Stripe webhooks
+  // This preserves the raw body for signature verification
+  server.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+    try {
+      // Store raw body for webhook verification
+      (req as typeof req & { rawBody: Buffer }).rawBody = body as Buffer;
+
+      // Parse JSON for normal processing
+      const json = JSON.parse((body as Buffer).toString());
+      done(null, json);
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
   // Register security middleware
   await server.register(helmet, {
     // Allow cross-origin requests from Electron app
@@ -109,6 +125,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   await registerEnrichRoutes(server);
   await registerLicenseRoutes(server);
   await registerSyncRoutes(server);
+  await registerStripeRoutes(server);
 
   // Global error handler
   server.setErrorHandler((error: FastifyError, _request, reply) => {

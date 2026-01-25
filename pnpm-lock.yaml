@@ -6,7 +6,7 @@ settings:
 
 overrides:
   glob@>=10.2.0 <10.5.0: '>=10.5.0'
-  esbuild@<=0.24.2: '>=0.25.0'
+  esbuild: '>=0.25.0'
   tar: '>=7.5.4'
 
 importers:
@@ -124,6 +124,9 @@ importers:
       electron-builder:
         specifier: ^25.1.8
         version: 25.1.8(electron-builder-squirrel-windows@25.1.8)
+      electron-updater:
+        specifier: ^6.1.7
+        version: 6.7.3
       esbuild:
         specifier: '>=0.25.0'
         version: 0.27.2
@@ -184,6 +187,9 @@ importers:
       pino-pretty:
         specifier: ^11.0.0
         version: 11.3.0
+      stripe:
+        specifier: ^20.2.0
+        version: 20.2.0(@types/node@20.19.30)
       zod:
         specifier: ^3.22.0
         version: 3.25.76
@@ -3959,6 +3965,19 @@ packages:
       - supports-color
     dev: true
 
+  /builder-util-runtime@9.5.1:
+    resolution:
+      {
+        integrity: sha512-qt41tMfgHTllhResqM5DcnHyDIWNgzHvuY2jDcYP9iaGpkWxTUzV6GQjDeLnlR1/DtdlcsWQbA7sByMpmJFTLQ==,
+      }
+    engines: { node: '>=12.0.0' }
+    dependencies:
+      debug: 4.4.3
+      sax: 1.4.4
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
+
   /builder-util@25.1.7:
     resolution:
       {
@@ -4101,7 +4120,6 @@ packages:
     dependencies:
       call-bind-apply-helpers: 1.0.2
       get-intrinsic: 1.3.0
-    dev: true
 
   /callsites@3.1.0:
     resolution:
@@ -5225,6 +5243,24 @@ packages:
       {
         integrity: sha512-dQ0tM1svDRQOwxnXxm+twlGTjr9Upvt8UFWAgmLsxEzFQxhbti4VwxmMjsDxVC51Zo84swW7FVCXEV+VAkhuPw==,
       }
+
+  /electron-updater@6.7.3:
+    resolution:
+      {
+        integrity: sha512-EgkT8Z9noqXKbwc3u5FkJA+r48jwZ5DTUiOkJMOTEEH//n5Am6wfQGz7nvSFEA2oIAMv9jRzn5JKTyWeSKOPgg==,
+      }
+    dependencies:
+      builder-util-runtime: 9.5.1
+      fs-extra: 10.1.0
+      js-yaml: 4.1.1
+      lazy-val: 1.0.5
+      lodash.escaperegexp: 4.1.2
+      lodash.isequal: 4.5.0
+      semver: 7.7.3
+      tiny-typed-emitter: 2.1.0
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
 
   /electron@35.7.5:
     resolution:
@@ -8125,11 +8161,26 @@ packages:
       }
     dev: true
 
+  /lodash.escaperegexp@4.1.2:
+    resolution:
+      {
+        integrity: sha512-TM9YBvyC84ZxE3rgfefxUWiQKLilstD6k7PTGt6wfbtXF8ixIJLOL3VYyV/z+ZiPLsVxAsKAFVwWlWeb2Y8Yyw==,
+      }
+    dev: true
+
   /lodash.flatten@4.4.0:
     resolution:
       {
         integrity: sha512-C5N2Z3DgnnKr0LOpv/hKCgKdb7ZZwafIrsesve6lmzvZIRZRGaZ/l6Q8+2W7NaT+ZwO3fFlSCzCzrDCFdJfZ4g==,
       }
+    dev: true
+
+  /lodash.isequal@4.5.0:
+    resolution:
+      {
+        integrity: sha512-pDo3lu8Jhfjqls6GkMgpahsF9kCyayhgykjyLMNFTKWrpVdAQtYyB4muAMWozBB4ig/dtWAmsMxLEI8wuz+DYQ==,
+      }
+    deprecated: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
     dev: true
 
   /lodash.isplainobject@4.0.6:
@@ -8868,7 +8919,6 @@ packages:
         integrity: sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==,
       }
     engines: { node: '>= 0.4' }
-    dev: true
 
   /object-is@1.1.6:
     resolution:
@@ -9703,6 +9753,16 @@ packages:
     engines: { node: '>=6' }
     dev: true
 
+  /qs@6.14.1:
+    resolution:
+      {
+        integrity: sha512-4EK3+xJl8Ts67nLYNwqw/dsFVnCf+qR7RgXSK9jEEm9unao3njwMDdmsdvoKBKHzxd7tCYz5e5M+SnMjdtXGQQ==,
+      }
+    engines: { node: '>=0.6' }
+    dependencies:
+      side-channel: 1.1.0
+    dev: false
+
   /querystringify@2.2.0:
     resolution:
       {
@@ -10535,7 +10595,6 @@ packages:
     dependencies:
       es-errors: 1.3.0
       object-inspect: 1.13.4
-    dev: true
 
   /side-channel-map@1.0.1:
     resolution:
@@ -10548,7 +10607,6 @@ packages:
       es-errors: 1.3.0
       get-intrinsic: 1.3.0
       object-inspect: 1.13.4
-    dev: true
 
   /side-channel-weakmap@1.0.2:
     resolution:
@@ -10562,7 +10620,6 @@ packages:
       get-intrinsic: 1.3.0
       object-inspect: 1.13.4
       side-channel-map: 1.0.1
-    dev: true
 
   /side-channel@1.1.0:
     resolution:
@@ -10576,7 +10633,6 @@ packages:
       side-channel-list: 1.0.0
       side-channel-map: 1.0.1
       side-channel-weakmap: 1.0.2
-    dev: true
 
   /siginfo@2.0.0:
     resolution:
@@ -11075,6 +11131,22 @@ packages:
       js-tokens: 9.0.1
     dev: true
 
+  /stripe@20.2.0(@types/node@20.19.30):
+    resolution:
+      {
+        integrity: sha512-m8niTfdm3nPP/yQswRWMwQxqEUcTtB3RTJQ9oo6NINDzgi7aPOadsH/fPXIIfL1Sc5+lqQFKSk7WiO6CXmvaeA==,
+      }
+    engines: { node: '>=16' }
+    peerDependencies:
+      '@types/node': '>=16'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+    dependencies:
+      '@types/node': 20.19.30
+      qs: 6.14.1
+    dev: false
+
   /stubs@3.0.0:
     resolution:
       {
@@ -11350,6 +11422,13 @@ packages:
         integrity: sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg==,
       }
     dev: false
+
+  /tiny-typed-emitter@2.1.0:
+    resolution:
+      {
+        integrity: sha512-qVtvMxeXbVej0cQWKqVSSAHmKZEHAvxdF8HEUBFWts8h+xEo5m/lEiPakuyZ3BnCBjOD8i24kzNOiOLLgsSxhA==,
+      }
+    dev: true
 
   /tinybench@2.9.0:
     resolution:
