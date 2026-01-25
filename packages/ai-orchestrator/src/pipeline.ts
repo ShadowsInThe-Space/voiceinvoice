@@ -3,8 +3,9 @@
  *
  * Chains the complete voice-to-invoice processing pipeline:
  * 1. Transcription (audio -> text)
- * 2. Classification (text -> intent)
- * 3. Routing (intent -> action)
+ * 2. Cleaning (optional: removes filler words and noise)
+ * 3. Classification (text -> intent)
+ * 4. Routing (intent -> action)
  *
  * Provides callbacks for each stage and graceful error handling.
  */
@@ -16,12 +17,14 @@ import {
   RoutingThresholds,
   DEFAULT_ROUTING_THRESHOLDS,
 } from './routing';
+import { cleanTranscript } from './cleaner';
 
 /**
  * Pipeline processing stages.
  */
 export enum PipelineStage {
   TRANSCRIPTION = 'transcription',
+  CLEANING = 'cleaning',
   CLASSIFICATION = 'classification',
   ROUTING = 'routing',
 }
@@ -35,6 +38,20 @@ export interface TranscriptionResult {
 
   /** Confidence score from speech recognition */
   confidence: number;
+
+  /** Processing time in milliseconds */
+  latencyMs: number;
+}
+
+/**
+ * Result from the cleaning stage.
+ */
+export interface CleaningResult {
+  /** Cleaned transcript */
+  text: string;
+
+  /** List of removed elements (e.g., "äh (2x)") */
+  removedElements: string[];
 
   /** Processing time in milliseconds */
   latencyMs: number;
@@ -61,6 +78,9 @@ export interface StageLatencies {
   /** Transcription stage latency (ms) */
   transcription?: number;
 
+  /** Cleaning stage latency (ms) */
+  cleaning?: number;
+
   /** Classification stage latency (ms) */
   classification?: number;
 
@@ -77,6 +97,9 @@ export interface PipelineResult {
 
   /** Transcription result (if audio was processed) */
   transcription?: TranscriptionResult | undefined;
+
+  /** Cleaning result (if cleaning was performed) */
+  cleaning?: CleaningResult | undefined;
 
   /** Classification result */
   classification?: IntentResult | undefined;
@@ -100,6 +123,9 @@ export interface PipelineResult {
 export interface PipelineCallbacks {
   /** Called when transcription completes */
   onTranscription?: (result: TranscriptionResult) => void;
+
+  /** Called when cleaning completes */
+  onCleaning?: (result: CleaningResult) => void;
 
   /** Called when classification completes */
   onClassification?: (result: IntentResult) => void;
@@ -135,6 +161,9 @@ export interface PipelineConfig {
 
   /** Custom transcription handler (for dependency injection) */
   transcriptionHandler?: TranscriptionHandler | undefined;
+
+  /** Enable transcript cleaning (removes filler words, repetitions, noise) */
+  enableCleaning?: boolean;
 
   /** Pipeline callbacks */
   callbacks: PipelineCallbacks;
@@ -175,6 +204,7 @@ export class PipelineOrchestrator {
     this.config = {
       routingThresholds: config.routingThresholds ?? { ...DEFAULT_ROUTING_THRESHOLDS },
       transcriptionHandler: config.transcriptionHandler,
+      enableCleaning: config.enableCleaning ?? true, // Enable cleaning by default
       callbacks: config.callbacks ?? {},
     };
 
@@ -192,6 +222,7 @@ export class PipelineOrchestrator {
     return {
       ...this.config,
       routingThresholds: { ...this.config.routingThresholds },
+      enableCleaning: this.config.enableCleaning,
       callbacks: { ...this.config.callbacks },
     };
   }
@@ -304,15 +335,49 @@ export class PipelineOrchestrator {
     stageLatencies: StageLatencies,
     transcriptionResult?: TranscriptionResult
   ): Promise<PipelineResult> {
+    let cleaningResult: CleaningResult | undefined;
     let classificationResult: IntentResult | undefined;
     let routingDecision: RoutingDecision | undefined;
+    let processedText = text; // Text to use for classification (raw or cleaned)
 
     try {
-      // Stage 2: Classification
+      // Stage 2: Cleaning (optional)
+      if (this.config.enableCleaning) {
+        this.config.callbacks.onStageStart?.(PipelineStage.CLEANING);
+
+        try {
+          const cleaned = await cleanTranscript({ rawTranscript: text });
+          cleaningResult = {
+            text: cleaned.cleanedTranscript,
+            removedElements: cleaned.removedElements,
+            latencyMs: cleaned.latencyMs,
+          };
+          stageLatencies.cleaning = cleaned.latencyMs;
+          this.config.callbacks.onCleaning?.(cleaningResult);
+
+          // Use cleaned text for classification
+          processedText = cleaned.cleanedTranscript;
+        } catch (error) {
+          const pipelineError: PipelineError = {
+            stage: PipelineStage.CLEANING,
+            message: error instanceof Error ? error.message : 'Cleaning failed',
+            originalError: error instanceof Error ? error : undefined,
+          };
+          this.config.callbacks.onError?.(pipelineError);
+
+          // Continue with raw text if cleaning fails
+          console.warn('[Pipeline] Cleaning failed, using raw transcript');
+          processedText = text;
+        }
+
+        this.config.callbacks.onStageEnd?.(PipelineStage.CLEANING);
+      }
+
+      // Stage 3: Classification
       this.config.callbacks.onStageStart?.(PipelineStage.CLASSIFICATION);
 
       try {
-        classificationResult = await this.orchestrator.classifyIntent(text);
+        classificationResult = await this.orchestrator.classifyIntent(processedText);
         stageLatencies.classification = classificationResult.latencyMs;
         this.config.callbacks.onClassification?.(classificationResult);
       } catch (error) {
@@ -326,6 +391,7 @@ export class PipelineOrchestrator {
         const result: PipelineResult = {
           success: false,
           transcription: transcriptionResult,
+          cleaning: cleaningResult,
           error: pipelineError,
           stageLatencies,
           totalLatencyMs: Date.now() - startTime,
@@ -336,7 +402,7 @@ export class PipelineOrchestrator {
 
       this.config.callbacks.onStageEnd?.(PipelineStage.CLASSIFICATION);
 
-      // Stage 3: Routing
+      // Stage 4: Routing
       this.config.callbacks.onStageStart?.(PipelineStage.ROUTING);
 
       const routingStart = Date.now();
@@ -355,6 +421,7 @@ export class PipelineOrchestrator {
         const result: PipelineResult = {
           success: false,
           transcription: transcriptionResult,
+          cleaning: cleaningResult,
           classification: classificationResult,
           error: pipelineError,
           stageLatencies,
@@ -370,6 +437,7 @@ export class PipelineOrchestrator {
       const result: PipelineResult = {
         success: true,
         transcription: transcriptionResult,
+        cleaning: cleaningResult,
         classification: classificationResult,
         routing: routingDecision,
         stageLatencies,
@@ -389,6 +457,7 @@ export class PipelineOrchestrator {
       const result: PipelineResult = {
         success: false,
         ...(transcriptionResult && { transcription: transcriptionResult }),
+        ...(cleaningResult && { cleaning: cleaningResult }),
         ...(classificationResult && { classification: classificationResult }),
         ...(routingDecision && { routing: routingDecision }),
         error: pipelineError,

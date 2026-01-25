@@ -126,7 +126,7 @@ export class HttpSyncApiClient implements SyncApiClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // Shorter timeout for check
 
-      const response = await fetch(`${this.baseUrl}/api/health`, {
+      const response = await fetch(`${this.baseUrl}/health`, {
         method: 'GET',
         signal: controller.signal,
       });

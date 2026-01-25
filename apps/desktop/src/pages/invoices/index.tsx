@@ -75,15 +75,52 @@ export default function InvoicesPage(): React.ReactElement {
 
   // Load invoices on mount
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setInvoices(MOCK_INVOICES);
-      setIsLoading(false);
-    }, 500);
+    const fetchInvoices = async () => {
+      try {
+        const response = await fetch('/api/invoices/list');
+        if (!response.ok) {
+          throw new Error('Failed to fetch invoices');
+        }
+        const data = await response.json();
+
+        if (data.success && data.invoices) {
+          // Transform API response to match Invoice type
+          const transformedInvoices: Invoice[] = data.invoices.map((inv: any) => ({
+            id: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            date: new Date(inv.date),
+            dueDate: inv.dueDate ? new Date(inv.dueDate) : undefined,
+            netAmount: inv.netAmount,
+            taxRate: inv.taxRate,
+            taxAmount: inv.taxAmount,
+            grossAmount: inv.grossAmount,
+            currency: inv.currency,
+            status: inv.status as any,
+            description: inv.description,
+            customerId: inv.customerId,
+            createdAt: new Date(inv.createdAt),
+            updatedAt: new Date(inv.updatedAt),
+          }));
+          setInvoices(transformedInvoices);
+        } else {
+          // Fallback to mock data if API fails
+          setInvoices(MOCK_INVOICES);
+        }
+      } catch (error) {
+        console.error('Failed to fetch invoices:', error);
+        // Fallback to mock data on error
+        setInvoices(MOCK_INVOICES);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInvoices();
   }, []);
 
   /**
    * Handle invoice selection.
+   * @param invoice
    */
   const handleSelect = (invoice: Invoice) => {
     router.push(`/invoices/${invoice.id}`);
@@ -91,6 +128,7 @@ export default function InvoicesPage(): React.ReactElement {
 
   /**
    * Handle invoice deletion.
+   * @param id
    */
   const handleDelete = (id: string) => {
     setInvoices((prev) => prev.filter((inv) => inv.id !== id));
@@ -118,9 +156,7 @@ export default function InvoicesPage(): React.ReactElement {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Rechnungen
-        </h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Rechnungen</h1>
         <button
           type="button"
           onClick={handleNewInvoice}
@@ -132,11 +168,7 @@ export default function InvoicesPage(): React.ReactElement {
 
       {/* Invoice List */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-        <InvoiceList
-          invoices={invoices}
-          onSelect={handleSelect}
-          onDelete={handleDelete}
-        />
+        <InvoiceList invoices={invoices} onSelect={handleSelect} onDelete={handleDelete} />
       </div>
     </div>
   );

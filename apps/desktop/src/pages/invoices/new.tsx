@@ -6,7 +6,7 @@
  * @module pages/invoices/new
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { VoiceRecorderButton } from '../../components/VoiceRecorderButton';
 import {
@@ -97,6 +97,63 @@ export default function NewInvoicePage(): React.ReactElement {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Load invoice for editing if edit query param is present
+  useEffect(() => {
+    const { edit } = router.query;
+
+    if (!edit || typeof edit !== 'string') return;
+
+    const fetchInvoiceForEdit = async () => {
+      try {
+        const response = await fetch(`/api/invoices/${edit}`);
+        const data = await response.json();
+
+        if (data.success && data.invoice) {
+          // Switch to manual mode
+          setIsManualMode(true);
+
+          // Fill form with invoice data
+          setManualForm({
+            customerName: data.invoice.customer.name,
+            description: data.invoice.description || data.invoice.items[0]?.description || '',
+            amount: String(data.invoice.netAmount),
+            taxRate: String(data.invoice.taxRate),
+          });
+
+          // Set processing state to complete to show preview
+          setProcessingState('complete');
+
+          // Set the invoice for preview
+          const transformedInvoice: Invoice = {
+            id: data.invoice.id,
+            number: data.invoice.invoiceNumber,
+            customerId: data.invoice.customerId,
+            customer: { id: data.invoice.customerId, name: data.invoice.customer.name },
+            items: data.invoice.items.map((item: any) => ({
+              id: item.id,
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              total: item.total,
+            })),
+            subtotal: data.invoice.netAmount,
+            taxRate: data.invoice.taxRate,
+            taxAmount: data.invoice.taxAmount,
+            total: data.invoice.grossAmount,
+            status: data.invoice.status,
+            createdAt: new Date(data.invoice.createdAt),
+          };
+          setInvoice(transformedInvoice);
+        }
+      } catch (err) {
+        console.error('Failed to load invoice for editing:', err);
+        setError('Rechnung konnte nicht geladen werden');
+      }
+    };
+
+    fetchInvoiceForEdit();
+  }, [router.query]);
+
   /**
    * Handle recording completion.
    */
@@ -107,41 +164,40 @@ export default function NewInvoicePage(): React.ReactElement {
     setProcessingState('processing');
     setError(null);
 
-    // Simulated AI Processing
-    setTimeout(() => {
-      const mockResult = {
-        success: true,
-        invoice: {
-          id: 'inv-new-' + Date.now(),
-          number: 'RE-2025-001',
-          customerId: 'c1',
-          customer: { id: 'c1', name: 'Musterfirma GmbH' },
-          items: [
-            {
-              id: 'item-1',
-              description: 'Beratung & Strategie',
-              quantity: 1,
-              unitPrice: 150,
-              total: 150,
-            },
-          ],
-          subtotal: 150,
-          taxRate: 19,
-          taxAmount: 28.5,
-          total: 178.5,
-          status: 'DRAFT',
-          createdAt: new Date(),
-        },
-        transcription:
-          'Erstelle eine Rechnung für Test Kunde über Sprachgesteuerte Rechnungserstellung für 150 Euro.',
-        confidence: 0.98,
-      };
+    try {
+      // Send audio to Voice Processing API
+      const formData = new FormData();
+      formData.append('audio', blob, 'recording.webm');
 
-      setInvoice(mockResult.invoice);
-      setTranscription(mockResult.transcription);
-      setConfidence(mockResult.confidence);
+      const response = await fetch('/api/voice/process', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Voice processing failed');
+      }
+
+      // Update UI with results
+      setInvoice({
+        ...result.invoice,
+        createdAt: new Date(result.invoice.createdAt),
+      });
+      setTranscription(result.transcription);
+      setConfidence(result.confidence);
       setProcessingState('complete');
-    }, 800);
+    } catch (err) {
+      console.error('[Voice Recording] Error:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Verarbeitung fehlgeschlagen';
+      setError(`Fehler: ${errorMsg}`);
+      setProcessingState('error');
+    }
   }, []);
 
   const handleTranscriptionChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {

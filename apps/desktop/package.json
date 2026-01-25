@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "description": "VoiceInvoice Desktop Application (Electron + Next.js)",
+  "author": "VoiceInvoice Team <team@voiceinvoice.com>",
+  "homepage": "https://voiceinvoice.com",
   "main": "dist/electron/main.js",
   "scripts": {
     "dev": "next dev -p 3002",
     "dev:electron": "tsc electron/main.ts --outDir dist/electron --esModuleInterop --skipLibCheck && concurrently \"npm run dev\" \"wait-on http://localhost:3002 && NODE_ENV=development ELECTRON_DEV_URL=http://localhost:3002 electron . --no-sandbox\"",
     "build": "next build",
-    "build:electron": "tsc electron/main.ts --outDir dist/electron --esModuleInterop --skipLibCheck && next build && electron-builder",
+    "build:electron": "node scripts/build-electron.mjs && next build && electron-builder",
     "start": "next start",
     "lint": "next lint && eslint electron --ext .ts",
     "typecheck": "tsc --noEmit",
@@ -24,12 +26,11 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@google-cloud/text-to-speech": "^6.4.0",
+    "@google/generative-ai": "^0.21.0",
     "@prisma/client": "^5.9.0",
-    "@voiceinvoice/ai-orchestrator": "workspace:*",
-    "@voiceinvoice/database": "workspace:*",
-    "@voiceinvoice/privacy-engine": "workspace:*",
-    "@voiceinvoice/shared-types": "workspace:*",
     "clsx": "^2.1.1",
+    "formidable": "^3.5.4",
     "jspdf": "^4.0.0",
     "lucide-react": "^0.563.0",
     "next": "^14.1.0",
@@ -39,9 +40,14 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@voiceinvoice/ai-orchestrator": "workspace:*",
+    "@voiceinvoice/database": "workspace:*",
+    "@voiceinvoice/privacy-engine": "workspace:*",
+    "@voiceinvoice/shared-types": "workspace:*",
     "@testing-library/jest-dom": "^6.2.0",
     "@testing-library/react": "^14.1.0",
     "@testing-library/user-event": "^14.6.1",
+    "@types/formidable": "^3.4.6",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
@@ -65,6 +71,8 @@
   "build": {
     "appId": "com.voiceinvoice.enterprise",
     "productName": "VoiceInvoice Enterprise",
+    "executableName": "voiceinvoice-enterprise",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "directories": {
       "output": "release"
     },
@@ -83,6 +91,7 @@
       "node_modules/.prisma/**/*",
       "node_modules/@prisma/**/*",
       "node_modules/@prisma/client/.prisma/**/*",
+      "!node_modules/@voiceinvoice/**/*",
       "!**/.turbo/**",
       "!**/coverage/**"
     ],

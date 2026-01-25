@@ -11,8 +11,15 @@ import {
   VoiceInvoicePipeline,
   type PipelineConfig,
 } from '../../src/lib/pipeline/voice-invoice-pipeline';
-import type { GeminiClient, TranscriptionResult, InvoiceParseResult } from '../../src/lib/ai/gemini-client';
-import type { DatabaseService, InvoiceWithRelations } from '../../src/lib/database/database-service';
+import type {
+  GeminiClient,
+  TranscriptionResult,
+  InvoiceParseResult,
+} from '../../src/lib/ai/gemini-client';
+import type {
+  DatabaseService,
+  InvoiceWithRelations,
+} from '../../src/lib/database/database-service';
 import type { PrivacyEngine } from '../../src/lib/privacy/privacy-engine';
 
 // Mock types for testing
@@ -84,9 +91,7 @@ describe('VoiceInvoicePipeline', () => {
         success: true,
         invoice: {
           customerName: 'Max Mustermann',
-          items: [
-            { description: 'Webentwicklung', quantity: 3, unitPrice: 120 },
-          ],
+          items: [{ description: 'Webentwicklung', quantity: 3, unitPrice: 120 }],
         },
         confidence: 0.88,
       };
@@ -102,7 +107,10 @@ describe('VoiceInvoicePipeline', () => {
       mockGeminiClient.transcribe.mockResolvedValue(transcriptionResult);
       mockGeminiClient.parseInvoice.mockResolvedValue(parseResult);
       mockDatabaseService.searchCustomers.mockResolvedValue([]);
-      mockDatabaseService.createCustomer.mockResolvedValue({ id: 'cust-123', name: 'Max Mustermann' });
+      mockDatabaseService.createCustomer.mockResolvedValue({
+        id: 'cust-123',
+        name: 'Max Mustermann',
+      });
       mockDatabaseService.createInvoice.mockResolvedValue(mockInvoice);
       mockPrivacyEngine.getConsentStatus.mockResolvedValue({ granted: true });
 
@@ -144,9 +152,12 @@ describe('VoiceInvoicePipeline', () => {
       // Arrange
       const audioBlob = new Blob(['test audio data'], { type: 'audio/webm' });
 
+      // Use realistic invoice transcription so intent is classified correctly as CREATE_INVOICE
+      const transcription = 'Rechnung für Test GmbH, 10 Stunden Beratung zu 150 Euro pro Stunde';
+
       mockGeminiClient.transcribe.mockResolvedValue({
         success: true,
-        text: 'Some audio text',
+        text: transcription,
         confidence: 0.9,
       });
 
@@ -164,7 +175,7 @@ describe('VoiceInvoicePipeline', () => {
       // Assert
       expect(result.success).toBe(false);
       expect(result.error).toBe('Could not extract invoice data');
-      expect(result.transcription).toBe('Some audio text');
+      expect(result.transcription).toBe(transcription);
     });
 
     it('should return error when consent is not granted', async () => {
@@ -206,7 +217,11 @@ describe('VoiceInvoicePipeline', () => {
       // Arrange
       const audioBlob = new Blob(['test audio data'], { type: 'audio/webm' });
 
-      const existingCustomer = { id: 'existing-cust-123', name: 'Max Mustermann', email: 'max@example.com' };
+      const existingCustomer = {
+        id: 'existing-cust-123',
+        name: 'Max Mustermann',
+        email: 'max@example.com',
+      };
 
       mockGeminiClient.transcribe.mockResolvedValue({
         success: true,
@@ -255,9 +270,7 @@ describe('VoiceInvoicePipeline', () => {
         success: true,
         invoice: {
           customerName: 'Firma ABC',
-          items: [
-            { description: 'Beratung', quantity: 5, unitPrice: 200 },
-          ],
+          items: [{ description: 'Beratung', quantity: 5, unitPrice: 200 }],
         },
         confidence: 0.92,
       };
@@ -500,7 +513,9 @@ describe('VoiceInvoicePipeline', () => {
 
     it('should handle errors thrown during processTranscription', async () => {
       // Arrange
-      const transcription = 'Valid transcription';
+      // Use realistic invoice transcription so intent is classified as CREATE_INVOICE
+      const transcription =
+        'Erstelle Rechnung für Müller AG, 5 Stunden Softwareentwicklung, 200 Euro pro Stunde';
 
       // Make parseInvoice throw an error (not reject)
       mockGeminiClient.parseInvoice.mockImplementation(() => {
@@ -518,7 +533,9 @@ describe('VoiceInvoicePipeline', () => {
 
     it('should handle non-Error objects thrown', async () => {
       // Arrange
-      const transcription = 'Valid transcription';
+      // Use realistic invoice transcription so intent is classified as CREATE_INVOICE
+      const transcription =
+        'Neue Rechnung an Schmidt & Partner, 8 Stunden Projektmanagement, 180 Euro je Stunde';
 
       mockGeminiClient.parseInvoice.mockImplementation(() => {
         throw 'string error'; // Non-Error throw
@@ -536,16 +553,15 @@ describe('VoiceInvoicePipeline', () => {
   describe('invoice data mapping', () => {
     it('should correctly map parsed invoice to database input', async () => {
       // Arrange
-      const transcription = 'Rechnung fuer Kunde XYZ, Email info@xyz.de, 2 Stunden Support zu 80 Euro, Zahlbar in 14 Tagen';
+      const transcription =
+        'Rechnung fuer Kunde XYZ, Email info@xyz.de, 2 Stunden Support zu 80 Euro, Zahlbar in 14 Tagen';
 
       mockGeminiClient.parseInvoice.mockResolvedValue({
         success: true,
         invoice: {
           customerName: 'Kunde XYZ',
           customerEmail: 'info@xyz.de',
-          items: [
-            { description: 'Support', quantity: 2, unitPrice: 80, category: 'IT' },
-          ],
+          items: [{ description: 'Support', quantity: 2, unitPrice: 80, category: 'IT' }],
           paymentTerms: '14 Tage netto',
           notes: 'Zahlbar in 14 Tagen',
         },
