@@ -29,3 +29,11 @@ export {
   type UsePhoneAgentOptions,
   type UsePhoneAgentReturn,
 } from './use-phone-agent';
+
+export {
+  useHotkey,
+  useHotkeys,
+  formatHotkey,
+  type HotkeyConfig,
+  type HotkeyModifiers,
+} from './use-hotkey';
