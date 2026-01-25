@@ -1,0 +1,384 @@
+{
+  "name": "Voice Phone Agent - Gemini 2.5 Flash + ElevenLabs",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice-command",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Sprachbefehl empfangen",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "voice-command-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [\n      {\n        \"inline_data\": {\n          \"mime_type\": \"audio/wav\",\n          \"data\": \"{{ $json.audioData }}\"\n        }\n      },\n      {\n        \"text\": \"Transkribiere dieses Audio auf Deutsch und extrahiere:\\n1. intent: 'rechnung_erinnerung' oder 'termin_erinnerung'\\n2. kunde: Kundenname oder Firmenname\\n3. details: Rechnungsnummer oder Termindetails\\n4. dringlichkeit: 'freundlich', 'normal' oder 'dringend'\\n\\nAntworte NUR mit validem JSON.\"\n      }\n    ]\n  }],\n  \"generationConfig\": {\n    \"temperature\": 0.1,\n    \"responseMimeType\": \"application/json\"\n  }\n}",
+        "options": {}
+      },
+      "id": "gemini-transcribe",
+      "name": "Gemini 2.5 Flash: Audio → Intent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "gemini-api-key",
+          "name": "Gemini API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst text = response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\n\ntry {\n  return JSON.parse(text);\n} catch (e) {\n  // Fallback parsing\n  return {\n    intent: text.includes('rechnung') ? 'rechnung_erinnerung' : 'termin_erinnerung',\n    kunde: 'Unbekannt',\n    details: '',\n    dringlichkeit: 'normal'\n  };\n}"
+      },
+      "id": "parse-intent",
+      "name": "Code: Intent parsen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "rechnung_erinnerung",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputLabel": "Rechnung"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "termin_erinnerung",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputLabel": "Termin"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-intent",
+      "name": "Switch: Intent-Routing",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  c.id, c.name, c.phone, c.email,\n  i.invoice_number, i.amount, i.due_date, i.status\nFROM customers c\nJOIN invoices i ON c.id = i.customer_id\nWHERE c.name ILIKE '%{{ $json.kunde }}%'\n  OR i.invoice_number = '{{ $json.details }}'\nLIMIT 1"
+      },
+      "id": "db-rechnung",
+      "name": "DB: Rechnungsdaten laden",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-voiceinvoice",
+          "name": "VoiceInvoice DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  c.id, c.name, c.phone, c.email,\n  a.appointment_date, a.appointment_time,\n  a.description, a.location\nFROM customers c\nJOIN appointments a ON c.id = a.customer_id\nWHERE c.name ILIKE '%{{ $json.kunde }}%'\n  AND a.appointment_date >= CURRENT_DATE\nORDER BY a.appointment_date ASC\nLIMIT 1"
+      },
+      "id": "db-termin",
+      "name": "DB: Termindaten laden",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 400],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-voiceinvoice",
+          "name": "VoiceInvoice DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const kunde = $input.first().json;\nconst intent = $('Code: Intent parsen').first().json;\n\n// ElevenLabs Conversational AI 2.0 Konfiguration\nconst agentConfig = {\n  conversation: {\n    tts: {\n      voice_id: 'XB0fDUnXU5powFXDhCwa', // Anna (German professional)\n      model_id: 'eleven_turbo_v2_5'       // Fastest model\n    },\n    llm: {\n      provider: 'google',\n      model: 'gemini-2.5-flash',\n      temperature: 0.7\n    },\n    language_detection: true,\n    turn_taking: { mode: 'natural' }\n  }\n};\n\nlet systemPrompt = '';\nlet firstMessage = '';\n\nif (intent.intent === 'rechnung_erinnerung') {\n  const urgencyStyle = {\n    'freundlich': 'Sei besonders freundlich und verständnisvoll.',\n    'normal': 'Sei professionell und freundlich.',\n    'dringend': 'Sei höflich aber bestimmt. Betone die Dringlichkeit.'\n  };\n  \n  systemPrompt = `Du bist ein Telefonassistent für Rechnungserinnerungen.\n${urgencyStyle[intent.dringlichkeit] || urgencyStyle.normal}\n\nKundeninformationen:\n- Name: ${kunde.name}\n- Rechnungsnummer: ${kunde.invoice_number}\n- Betrag: ${kunde.amount} €\n- Fälligkeitsdatum: ${new Date(kunde.due_date).toLocaleDateString('de-DE')}\n\nDeine Aufgabe:\n1. Begrüße den Kunden höflich\n2. Erkläre den Grund des Anrufs (offene Rechnung)\n3. Frage nach dem voraussichtlichen Zahlungstermin\n4. Beantworte Fragen zur Rechnung\n5. Bedanke dich und verabschiede dich\n\nWichtig:\n- Sprich natürlich und nicht roboterhaft\n- Halte Antworten kurz (max 2-3 Sätze)\n- Bei Problemen: biete Rückruf durch Mitarbeiter an`;\n\n  firstMessage = `Guten Tag, hier spricht der automatische Assistent. Spreche ich mit ${kunde.name}?`;\n\n} else {\n  systemPrompt = `Du bist ein Telefonassistent für Terminerinnerungen.\nSei freundlich und hilfsbereit.\n\nTermininformationen:\n- Kunde: ${kunde.name}\n- Datum: ${new Date(kunde.appointment_date).toLocaleDateString('de-DE')}\n- Uhrzeit: ${kunde.appointment_time}\n${kunde.location ? '- Ort: ' + kunde.location : ''}\n${kunde.description ? '- Betreff: ' + kunde.description : ''}\n\nDeine Aufgabe:\n1. Begrüße den Kunden höflich\n2. Erinnere an den bevorstehenden Termin\n3. Bitte um Bestätigung oder frage nach Änderungswünschen\n4. Bei Absage: biete Alternativtermin an\n5. Bedanke dich und verabschiede dich`;\n\n  firstMessage = `Guten Tag, hier spricht der automatische Terminservice. Spreche ich mit ${kunde.name}?`;\n}\n\nagentConfig.conversation.llm.system_prompt = systemPrompt;\nagentConfig.conversation.first_message = firstMessage;\n\n// Tools für den Agenten\nagentConfig.conversation.tools = [\n  {\n    name: 'record_outcome',\n    description: 'Notiert das Ergebnis des Gesprächs',\n    parameters: {\n      type: 'object',\n      properties: {\n        outcome: {\n          type: 'string',\n          enum: ['zahlung_zugesagt', 'termin_bestaetigt', 'rueckruf_gewuenscht', 'abgelehnt']\n        },\n        details: { type: 'string' },\n        follow_up_date: { type: 'string' }\n      },\n      required: ['outcome']\n    }\n  }\n];\n\nreturn {\n  kunde_id: kunde.id,\n  kunde_name: kunde.name,\n  kunde_phone: kunde.phone,\n  kunde_email: kunde.email,\n  intent: intent.intent,\n  dringlichkeit: intent.dringlichkeit,\n  agent_config: agentConfig,\n  raw_data: kunde\n};"
+      },
+      "id": "prepare-agent",
+      "name": "Code: ElevenLabs Agent konfigurieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.elevenlabs.io/v1/convai/conversation",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent_config\": {{ JSON.stringify($json.agent_config) }},\n  \"call\": {\n    \"type\": \"outbound\",\n    \"to\": \"{{ $json.kunde_phone }}\",\n    \"from\": \"{{ $env.ELEVENLABS_PHONE_NUMBER }}\"\n  },\n  \"metadata\": {\n    \"kunde_id\": \"{{ $json.kunde_id }}\",\n    \"intent\": \"{{ $json.intent }}\"\n  },\n  \"webhook_url\": \"{{ $env.N8N_WEBHOOK_URL }}/elevenlabs-callback\"\n}",
+        "options": {}
+      },
+      "id": "elevenlabs-call",
+      "name": "ElevenLabs: Conversation starten",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "elevenlabs-api",
+          "name": "ElevenLabs API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "call_logs",
+        "columns": "customer_id, call_type, call_id, status, initiated_at",
+        "values": "={{ $('Code: ElevenLabs Agent konfigurieren').first().json.kunde_id }}, '{{ $('Code: Intent parsen').first().json.intent }}', '{{ $json.conversation_id }}', 'initiated', NOW()"
+      },
+      "id": "db-log",
+      "name": "DB: Anruf protokollieren",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1780, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-voiceinvoice",
+          "name": "VoiceInvoice DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"Anruf an {{ $('Code: ElevenLabs Agent konfigurieren').first().json.kunde_name }} wird gestartet\",\n  \"conversation_id\": \"{{ $('ElevenLabs: Conversation starten').first().json.conversation_id }}\",\n  \"intent\": \"{{ $('Code: Intent parsen').first().json.intent }}\",\n  \"provider\": \"elevenlabs-conversational-ai-2.0\",\n  \"models\": {\n    \"stt\": \"elevenlabs-native\",\n    \"llm\": \"gemini-2.5-flash\",\n    \"tts\": \"eleven_turbo_v2_5\"\n  }\n}",
+        "options": {}
+      },
+      "id": "response-success",
+      "name": "Response: Erfolg",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "elevenlabs-callback",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "elevenlabs-webhook",
+      "name": "Webhook: ElevenLabs Callback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 600],
+      "webhookId": "elevenlabs-callback-webhook"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "conversation_end",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputLabel": "Conversation Ende"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "function_call",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputLabel": "Function Call"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-callback",
+      "name": "Switch: Callback-Typ",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "call_logs",
+        "columns": "status, duration_seconds, transcript, ended_at, outcome_analysis, sentiment",
+        "whereClause": "call_id = '{{ $json.conversation_id }}'",
+        "values": "'completed', {{ $json.duration_ms / 1000 }}, '{{ JSON.stringify($json.transcript) }}', NOW(), '{{ $json.outcome }}', '{{ $json.sentiment }}'"
+      },
+      "id": "db-update",
+      "name": "DB: Conversation-Ende speichern",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 500],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-voiceinvoice",
+          "name": "VoiceInvoice DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $input.first().json;\n\n// Verarbeite Function Call vom ElevenLabs Agent\nif (event.function_name === 'record_outcome') {\n  const args = event.arguments;\n  \n  return {\n    conversation_id: event.conversation_id,\n    outcome: args.outcome,\n    details: args.details,\n    follow_up_date: args.follow_up_date,\n    requires_followup: args.outcome === 'rueckruf_gewuenscht'\n  };\n}\n\nreturn { handled: false };"
+      },
+      "id": "handle-function",
+      "name": "Code: Function Call verarbeiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 700]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.requires_followup }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-followup",
+      "name": "IF: Follow-up nötig?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "channel": "#sales-notifications",
+        "text": "=:phone: *Rückruf gewünscht*\n\n*Conversation ID:* {{ $json.conversation_id }}\n*Ergebnis:* {{ $json.outcome }}\n*Details:* {{ $json.details }}\n\n*Stack:*\n- STT: ElevenLabs Native\n- LLM: Gemini 2.5 Flash\n- TTS: ElevenLabs Turbo v2.5\n- Platform: ElevenLabs Conversational AI 2.0",
+        "otherOptions": {}
+      },
+      "id": "slack-notify",
+      "name": "Slack: Team benachrichtigen",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1120, 500],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-api",
+          "name": "Slack API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: Sprachbefehl empfangen": {
+      "main": [[{"node": "Gemini 2.5 Flash: Audio → Intent", "type": "main", "index": 0}]]
+    },
+    "Gemini 2.5 Flash: Audio → Intent": {
+      "main": [[{"node": "Code: Intent parsen", "type": "main", "index": 0}]]
+    },
+    "Code: Intent parsen": {
+      "main": [[{"node": "Switch: Intent-Routing", "type": "main", "index": 0}]]
+    },
+    "Switch: Intent-Routing": {
+      "main": [
+        [{"node": "DB: Rechnungsdaten laden", "type": "main", "index": 0}],
+        [{"node": "DB: Termindaten laden", "type": "main", "index": 0}]
+      ]
+    },
+    "DB: Rechnungsdaten laden": {
+      "main": [[{"node": "Code: ElevenLabs Agent konfigurieren", "type": "main", "index": 0}]]
+    },
+    "DB: Termindaten laden": {
+      "main": [[{"node": "Code: ElevenLabs Agent konfigurieren", "type": "main", "index": 0}]]
+    },
+    "Code: ElevenLabs Agent konfigurieren": {
+      "main": [[{"node": "ElevenLabs: Conversation starten", "type": "main", "index": 0}]]
+    },
+    "ElevenLabs: Conversation starten": {
+      "main": [[{"node": "DB: Anruf protokollieren", "type": "main", "index": 0}]]
+    },
+    "DB: Anruf protokollieren": {
+      "main": [[{"node": "Response: Erfolg", "type": "main", "index": 0}]]
+    },
+    "Webhook: ElevenLabs Callback": {
+      "main": [[{"node": "Switch: Callback-Typ", "type": "main", "index": 0}]]
+    },
+    "Switch: Callback-Typ": {
+      "main": [
+        [{"node": "DB: Conversation-Ende speichern", "type": "main", "index": 0}],
+        [{"node": "Code: Function Call verarbeiten", "type": "main", "index": 0}]
+      ]
+    },
+    "DB: Conversation-Ende speichern": {
+      "main": [[{"node": "IF: Follow-up nötig?", "type": "main", "index": 0}]]
+    },
+    "Code: Function Call verarbeiten": {
+      "main": [[{"node": "IF: Follow-up nötig?", "type": "main", "index": 0}]]
+    },
+    "IF: Follow-up nötig?": {
+      "main": [[{"node": "Slack: Team benachrichtigen", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {"name": "gemini-2.5-flash"},
+    {"name": "elevenlabs"},
+    {"name": "voice-agent"},
+    {"name": "conversational-ai-2.0"}
+  ]
+}

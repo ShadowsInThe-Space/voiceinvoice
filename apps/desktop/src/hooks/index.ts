@@ -23,3 +23,10 @@ export {
   type TimelineInvoice,
   type TopCustomer,
 } from './use-invoice-timeline';
+
+export {
+  usePhoneAgent,
+  type PhoneAgentState,
+  type UsePhoneAgentOptions,
+  type UsePhoneAgentReturn,
+} from './use-phone-agent';
