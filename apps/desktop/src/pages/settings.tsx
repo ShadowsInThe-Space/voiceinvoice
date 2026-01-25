@@ -10,6 +10,7 @@
 import React, { useState, useEffect, useCallback, FormEvent } from 'react';
 import { isValidWebhookUrl, WEBHOOK_STORAGE_KEYS } from '../lib/webhook';
 import { LogoUpload, LOGO_STORAGE_KEY } from '../components/LogoUpload';
+import Link from 'next/link';
 
 /**
  * Available locale options.
@@ -314,6 +315,12 @@ export default function SettingsPage(): React.ReactElement {
           </h2>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
             <div>
+              <Link
+                href="/settings/license"
+                className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+              >
+                Verwalten
+              </Link>
               <label
                 htmlFor="ttsVoice"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
