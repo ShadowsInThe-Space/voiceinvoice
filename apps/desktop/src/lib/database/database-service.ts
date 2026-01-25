@@ -483,29 +483,41 @@ export class DatabaseService {
    * @param customerId
    */
   async getInvoicesByCustomer(customerId: string): Promise<InvoiceWithRelations[]> {
+    const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
+      'SELECT * FROM Customer WHERE id = ?',
+      customerId
+    );
+    const customer = customers[0];
+
     const invoices = await this.prisma.$queryRawUnsafe<Invoice[]>(
       'SELECT * FROM Invoice WHERE customerId = ? AND deletedAt IS NULL ORDER BY createdAt DESC',
       customerId
     );
 
-    const result: InvoiceWithRelations[] = [];
-    for (const invoice of invoices) {
-      const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
-        'SELECT * FROM InvoiceItem WHERE invoiceId = ?',
-        invoice.id
-      );
-      const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
-        'SELECT * FROM Customer WHERE id = ?',
-        invoice.customerId
-      );
-      result.push({
-        ...invoice,
-        items,
-        customer: customers[0],
-      });
+    if (invoices.length === 0) {
+      return [];
     }
 
-    return result;
+    const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
+      `SELECT ii.* FROM InvoiceItem ii
+       JOIN Invoice i ON ii.invoiceId = i.id
+       WHERE i.customerId = ? AND i.deletedAt IS NULL`,
+      customerId
+    );
+
+    const itemsMap = new Map<string, InvoiceItem[]>();
+    for (const item of items) {
+      if (!itemsMap.has(item.invoiceId)) {
+        itemsMap.set(item.invoiceId, []);
+      }
+      itemsMap.get(item.invoiceId)!.push(item);
+    }
+
+    return invoices.map((invoice) => ({
+      ...invoice,
+      items: itemsMap.get(invoice.id) || [],
+      customer,
+    }));
   }
 
   // ==================== Settings Operations ====================
