@@ -36,6 +36,14 @@ const STORAGE_KEYS = {
   locale: 'voiceinvoice_locale',
   ttsVoice: 'voiceinvoice_tts_voice',
   ttsRate: 'voiceinvoice_tts_rate',
+  companyName: 'voiceinvoice_company_name',
+  companyAddress: 'voiceinvoice_company_address',
+  companyTaxId: 'voiceinvoice_company_tax_id',
+  companyBankInfo: 'voiceinvoice_company_bank_info',
+  companyPhone: 'voiceinvoice_company_phone',
+  companyEmail: 'voiceinvoice_company_email',
+  companyWebsite: 'voiceinvoice_company_website',
+  companyLogo: 'voiceinvoice_company_logo',
 };
 
 /**
@@ -48,6 +56,16 @@ export default function SettingsPage(): React.ReactElement {
   const [ttsVoice, setTtsVoice] = useState('de-DE-Wavenet-C');
   const [ttsRate, setTtsRate] = useState(1.0);
   const [showApiKey, setShowApiKey] = useState(false);
+
+  // Company Info State
+  const [companyName, setCompanyName] = useState('');
+  const [companyAddress, setCompanyAddress] = useState('');
+  const [companyTaxId, setCompanyTaxId] = useState('');
+  const [companyBankInfo, setCompanyBankInfo] = useState('');
+  const [companyPhone, setCompanyPhone] = useState('');
+  const [companyEmail, setCompanyEmail] = useState('');
+  const [companyWebsite, setCompanyWebsite] = useState('');
+  const [companyLogo, setCompanyLogo] = useState('');
 
   // UI state
   const [isSaving, setIsSaving] = useState(false);
@@ -62,10 +80,29 @@ export default function SettingsPage(): React.ReactElement {
     const savedVoice = localStorage.getItem(STORAGE_KEYS.ttsVoice);
     const savedRate = localStorage.getItem(STORAGE_KEYS.ttsRate);
 
+    // Load company info
+    const savedCompanyName = localStorage.getItem(STORAGE_KEYS.companyName);
+    const savedCompanyAddress = localStorage.getItem(STORAGE_KEYS.companyAddress);
+    const savedCompanyTaxId = localStorage.getItem(STORAGE_KEYS.companyTaxId);
+    const savedCompanyBankInfo = localStorage.getItem(STORAGE_KEYS.companyBankInfo);
+    const savedCompanyPhone = localStorage.getItem(STORAGE_KEYS.companyPhone);
+    const savedCompanyEmail = localStorage.getItem(STORAGE_KEYS.companyEmail);
+    const savedCompanyWebsite = localStorage.getItem(STORAGE_KEYS.companyWebsite);
+    const savedCompanyLogo = localStorage.getItem(STORAGE_KEYS.companyLogo);
+
     if (savedApiKey) setApiKey(savedApiKey);
     if (savedLocale) setLocale(savedLocale);
     if (savedVoice) setTtsVoice(savedVoice);
     if (savedRate) setTtsRate(parseFloat(savedRate));
+
+    if (savedCompanyName) setCompanyName(savedCompanyName);
+    if (savedCompanyAddress) setCompanyAddress(savedCompanyAddress);
+    if (savedCompanyTaxId) setCompanyTaxId(savedCompanyTaxId);
+    if (savedCompanyBankInfo) setCompanyBankInfo(savedCompanyBankInfo);
+    if (savedCompanyPhone) setCompanyPhone(savedCompanyPhone);
+    if (savedCompanyEmail) setCompanyEmail(savedCompanyEmail);
+    if (savedCompanyWebsite) setCompanyWebsite(savedCompanyWebsite);
+    if (savedCompanyLogo) setCompanyLogo(savedCompanyLogo);
   }, []);
 
   /**
@@ -73,6 +110,36 @@ export default function SettingsPage(): React.ReactElement {
    */
   const toggleApiKeyVisibility = useCallback(() => {
     setShowApiKey((prev) => !prev);
+  }, []);
+
+  /**
+   * Handle logo upload
+   */
+  const handleLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit
+        setErrorMessage('Logo-Datei darf maximal 2MB groß sein');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCompanyLogo(reader.result as string);
+        setErrorMessage('');
+      };
+      reader.onerror = () => {
+        setErrorMessage('Fehler beim Laden der Bilddatei');
+      };
+      reader.readAsDataURL(file);
+    }
+  }, []);
+
+  /**
+   * Remove logo
+   */
+  const handleRemoveLogo = useCallback(() => {
+    setCompanyLogo('');
   }, []);
 
   /**
@@ -107,6 +174,15 @@ export default function SettingsPage(): React.ReactElement {
         localStorage.setItem(STORAGE_KEYS.ttsVoice, ttsVoice);
         localStorage.setItem(STORAGE_KEYS.ttsRate, ttsRate.toString());
 
+        localStorage.setItem(STORAGE_KEYS.companyName, companyName);
+        localStorage.setItem(STORAGE_KEYS.companyAddress, companyAddress);
+        localStorage.setItem(STORAGE_KEYS.companyTaxId, companyTaxId);
+        localStorage.setItem(STORAGE_KEYS.companyBankInfo, companyBankInfo);
+        localStorage.setItem(STORAGE_KEYS.companyPhone, companyPhone);
+        localStorage.setItem(STORAGE_KEYS.companyEmail, companyEmail);
+        localStorage.setItem(STORAGE_KEYS.companyWebsite, companyWebsite);
+        localStorage.setItem(STORAGE_KEYS.companyLogo, companyLogo);
+
         setSaveStatus('success');
 
         // Clear success message after 3 seconds
@@ -120,7 +196,11 @@ export default function SettingsPage(): React.ReactElement {
         setIsSaving(false);
       }
     },
-    [apiKey, locale, ttsVoice, ttsRate, validateForm]
+    [
+      apiKey, locale, ttsVoice, ttsRate, validateForm,
+      companyName, companyAddress, companyTaxId, companyBankInfo,
+      companyPhone, companyEmail, companyWebsite, companyLogo
+    ]
   );
 
   /**
@@ -146,23 +226,193 @@ export default function SettingsPage(): React.ReactElement {
     localStorage.removeItem(STORAGE_KEYS.ttsVoice);
     localStorage.removeItem(STORAGE_KEYS.ttsRate);
 
+    localStorage.removeItem(STORAGE_KEYS.companyName);
+    localStorage.removeItem(STORAGE_KEYS.companyAddress);
+    localStorage.removeItem(STORAGE_KEYS.companyTaxId);
+    localStorage.removeItem(STORAGE_KEYS.companyBankInfo);
+    localStorage.removeItem(STORAGE_KEYS.companyPhone);
+    localStorage.removeItem(STORAGE_KEYS.companyEmail);
+    localStorage.removeItem(STORAGE_KEYS.companyWebsite);
+    localStorage.removeItem(STORAGE_KEYS.companyLogo);
+
     // Reset form to defaults
     setApiKey('');
     setLocale('de-DE');
     setTtsVoice('de-DE-Wavenet-C');
     setTtsRate(1.0);
+
+    setCompanyName('');
+    setCompanyAddress('');
+    setCompanyTaxId('');
+    setCompanyBankInfo('');
+    setCompanyPhone('');
+    setCompanyEmail('');
+    setCompanyWebsite('');
+    setCompanyLogo('');
+
     setShowResetDialog(false);
     setSaveStatus(null);
     setErrorMessage('');
   }, []);
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl mx-auto pb-10">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
         Einstellungen
       </h1>
 
       <form role="form" onSubmit={handleSave} className="space-y-8">
+
+        {/* Company Info Section */}
+        <section role="group" aria-labelledby="company-section">
+          <h2 id="company-section" className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+            Firmendaten
+          </h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Firmenlogo
+                </label>
+                <div className="flex items-center space-x-6">
+                  <div className="shrink-0">
+                    {companyLogo ? (
+                      <img
+                        src={companyLogo}
+                        alt="Firmenlogo"
+                        className="h-20 w-auto object-contain border rounded p-1 bg-white"
+                      />
+                    ) : (
+                      <div className="h-20 w-32 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
+                        Kein Logo
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block">
+                      <span className="sr-only">Logo wählen</span>
+                      <input
+                        type="file"
+                        accept="image/png, image/jpeg"
+                        onChange={handleLogoUpload}
+                        className="block w-full text-sm text-slate-500
+                          file:mr-4 file:py-2 file:px-4
+                          file:rounded-full file:border-0
+                          file:text-sm file:font-semibold
+                          file:bg-blue-50 file:text-blue-700
+                          hover:file:bg-blue-100
+                        "
+                      />
+                    </label>
+                    <p className="mt-1 text-xs text-gray-500">PNG oder JPG, max 2MB</p>
+                    {companyLogo && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="mt-2 text-xs text-red-600 hover:text-red-800"
+                      >
+                        Logo entfernen
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Firmenname
+                </label>
+                <input
+                  type="text"
+                  id="companyName"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label htmlFor="companyAddress" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Adresse (mit Zeilenumbrüchen)
+                </label>
+                <textarea
+                  id="companyAddress"
+                  value={companyAddress}
+                  onChange={(e) => setCompanyAddress(e.target.value)}
+                  rows={3}
+                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="companyPhone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Telefon
+                </label>
+                <input
+                  type="text"
+                  id="companyPhone"
+                  value={companyPhone}
+                  onChange={(e) => setCompanyPhone(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="companyEmail" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  E-Mail
+                </label>
+                <input
+                  type="email"
+                  id="companyEmail"
+                  value={companyEmail}
+                  onChange={(e) => setCompanyEmail(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="companyWebsite" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Webseite
+                </label>
+                <input
+                  type="text"
+                  id="companyWebsite"
+                  value={companyWebsite}
+                  onChange={(e) => setCompanyWebsite(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="companyTaxId" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  USt-IdNr. / Steuernummer
+                </label>
+                <input
+                  type="text"
+                  id="companyTaxId"
+                  value={companyTaxId}
+                  onChange={(e) => setCompanyTaxId(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label htmlFor="companyBankInfo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Bankverbindung (mit Zeilenumbrüchen)
+                </label>
+                <textarea
+                  id="companyBankInfo"
+                  value={companyBankInfo}
+                  onChange={(e) => setCompanyBankInfo(e.target.value)}
+                  rows={2}
+                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="Bankname&#10;IBAN: DE..."
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* API Configuration Section */}
         <section role="group" aria-labelledby="api-section">
           <h2 id="api-section" className="text-lg font-medium text-gray-900 dark:text-white mb-4">
