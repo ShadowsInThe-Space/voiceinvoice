@@ -635,4 +635,59 @@ describe('VoiceInvoicePipeline', () => {
       );
     });
   });
+
+  describe('confidence-based routing', () => {
+    it('should save invoice automatically when confidence is high (>= 0.85)', async () => {
+      // Arrange
+      const transcription = 'Clear invoice data';
+      const parseResult: InvoiceParseResult = {
+        success: true,
+        invoice: {
+          customerName: 'High Conf Customer',
+          items: [{ description: 'Item', quantity: 1, unitPrice: 100 }],
+        },
+        confidence: 0.85, // Threshold is 0.85 inclusive
+      };
+
+      mockGeminiClient.parseInvoice.mockResolvedValue(parseResult);
+      mockDatabaseService.searchCustomers.mockResolvedValue([]);
+      mockDatabaseService.createCustomer.mockResolvedValue({ id: 'cust-1' });
+      mockDatabaseService.createInvoice.mockResolvedValue({ id: 'inv-1', status: 'DRAFT' });
+
+      // Act
+      const result = await pipeline.processTranscription(transcription);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.requiresReview).toBe(false);
+      expect(result.invoice).toBeDefined();
+      expect(mockDatabaseService.createInvoice).toHaveBeenCalled();
+    });
+
+    it('should NOT save invoice and return parsed data when confidence is low (< 0.85)', async () => {
+      // Arrange
+      const transcription = 'Ambiguous invoice data';
+      const parseResult: InvoiceParseResult = {
+        success: true,
+        invoice: {
+          customerName: 'Low Conf Customer',
+          items: [{ description: 'Item', quantity: 1, unitPrice: 100 }],
+        },
+        confidence: 0.84, // Below threshold
+      };
+
+      mockGeminiClient.parseInvoice.mockResolvedValue(parseResult);
+
+      // Act
+      const result = await pipeline.processTranscription(transcription);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.requiresReview).toBe(true);
+      expect(result.invoice).toBeUndefined();
+      expect(result.parsedInvoice).toEqual(parseResult.invoice);
+      expect(mockDatabaseService.createInvoice).not.toHaveBeenCalled();
+      expect(mockDatabaseService.createCustomer).not.toHaveBeenCalled();
+    });
+  });
 });
