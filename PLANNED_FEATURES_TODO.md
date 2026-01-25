@@ -28,9 +28,7 @@ Dieses Dokument listet alle noch nicht implementierten Features und Platzhalter 
 ## 🔗 Integrationen & Automatisierung
 
 - [x] **n8n Integration**: Webhook-URLs in Settings, Retry-Logik mit exponential backoff, Backup-URL Support (28 Tests).
-- [ ] **Bank-Synchronisation**:
-  - [ ] Import-Funktion für Kontoauszüge (CSV/MT940).
-  - [ ] Matching-Algorithmus zum Abgleich von Zahlungen mit offenen Rechnungen.
+- [x] **Bank-Synchronisation**: CSV-Parser (Sparkasse, Deutsche Bank, Volksbank), Invoice-Matching mit Confidence-Scoring (48 Tests).
 
 ## 🖥️ Desktop-App Verfeinerungen
 
@@ -40,4 +38,4 @@ Dieses Dokument listet alle noch nicht implementierten Features und Platzhalter 
 
 ---
 
-_Status: Stand 24. Januar 2026 - Core-Features implementiert (560 Tests bestanden)._
+_Status: Stand 25. Januar 2026 - Core-Features implementiert (608 Tests bestanden)._
