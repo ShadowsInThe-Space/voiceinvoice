@@ -13,6 +13,7 @@ export interface GeminiClientConfig {
   apiKey: string;
   projectId?: string;
   location?: string;
+  recognizer?: string;
   locale?: 'de' | 'en';
   maxRetries?: number;
 }
@@ -169,6 +170,9 @@ Existing data: {invoice}`,
  */
 export class GeminiClient {
   private apiKey: string;
+  private projectId?: string;
+  private location?: string;
+  private recognizer?: string;
   private locale: 'de' | 'en';
   private maxRetries: number;
 
@@ -188,6 +192,9 @@ export class GeminiClient {
    */
   constructor(config: GeminiClientConfig) {
     this.apiKey = config.apiKey;
+    this.projectId = config.projectId;
+    this.location = config.location;
+    this.recognizer = config.recognizer;
     this.locale = config.locale ?? 'de';
     this.maxRetries = config.maxRetries ?? 3;
   }
@@ -210,12 +217,12 @@ export class GeminiClient {
     // Map MIME type to encoding
     const encoding = this.getEncodingFromMimeType(mimeType);
 
-    const requestBody = {
+    // Build request body with custom recognizer if available
+    const requestBody: Record<string, unknown> = {
       config: {
         encoding,
         sampleRateHertz: 48000,
         languageCode,
-        model: 'chirp_2', // Latest Chirp model available via API
         enableAutomaticPunctuation: true,
         useEnhanced: true,
       },
@@ -223,6 +230,16 @@ export class GeminiClient {
         content: audioBase64,
       },
     };
+
+    // Add custom recognizer if configured (Chirp 3)
+    if (this.recognizer && this.projectId && this.location) {
+      // Use custom recognizer format: projects/{project}/locations/{location}/recognizers/{recognizer}
+      const recognizerPath = `projects/${this.projectId}/locations/${this.location}/recognizers/${this.recognizer}`;
+      (requestBody.config as Record<string, unknown>).model = recognizerPath;
+    } else {
+      // Fallback to chirp_2
+      (requestBody.config as Record<string, unknown>).model = 'chirp_2';
+    }
 
     const response = await this.makeChirpRequest(requestBody);
 
@@ -260,7 +277,11 @@ export class GeminiClient {
     const response = await this.makeGeminiRequest(prompt);
 
     if (!response.success) {
-      return { success: false, confidence: 0, error: response.error ?? 'Unknown error during invoice parsing' };
+      return {
+        success: false,
+        confidence: 0,
+        error: response.error ?? 'Unknown error during invoice parsing',
+      };
     }
 
     const responseText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
