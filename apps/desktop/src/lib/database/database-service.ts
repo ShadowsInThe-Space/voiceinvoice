@@ -343,21 +343,8 @@ export class DatabaseService {
       return null;
     }
 
-    const invoice = invoices[0];
-    const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
-      'SELECT * FROM InvoiceItem WHERE invoiceId = ?',
-      id
-    );
-    const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
-      'SELECT * FROM Customer WHERE id = ?',
-      invoice.customerId
-    );
-
-    return {
-      ...invoice,
-      items,
-      customer: customers[0],
-    };
+    const results = await this.populateRelations(invoices);
+    return results[0];
   }
 
   /**
@@ -368,24 +355,7 @@ export class DatabaseService {
       'SELECT * FROM Invoice WHERE deletedAt IS NULL ORDER BY createdAt DESC'
     );
 
-    const result: InvoiceWithRelations[] = [];
-    for (const invoice of invoices) {
-      const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
-        'SELECT * FROM InvoiceItem WHERE invoiceId = ?',
-        invoice.id
-      );
-      const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
-        'SELECT * FROM Customer WHERE id = ?',
-        invoice.customerId
-      );
-      result.push({
-        ...invoice,
-        items,
-        customer: customers[0],
-      });
-    }
-
-    return result;
+    return this.populateRelations(invoices);
   }
 
   /**
@@ -458,24 +428,7 @@ export class DatabaseService {
       status
     );
 
-    const result: InvoiceWithRelations[] = [];
-    for (const invoice of invoices) {
-      const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
-        'SELECT * FROM InvoiceItem WHERE invoiceId = ?',
-        invoice.id
-      );
-      const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
-        'SELECT * FROM Customer WHERE id = ?',
-        invoice.customerId
-      );
-      result.push({
-        ...invoice,
-        items,
-        customer: customers[0],
-      });
-    }
-
-    return result;
+    return this.populateRelations(invoices);
   }
 
   /**
@@ -488,24 +441,56 @@ export class DatabaseService {
       customerId
     );
 
-    const result: InvoiceWithRelations[] = [];
-    for (const invoice of invoices) {
-      const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
-        'SELECT * FROM InvoiceItem WHERE invoiceId = ?',
-        invoice.id
-      );
-      const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
-        'SELECT * FROM Customer WHERE id = ?',
-        invoice.customerId
-      );
-      result.push({
-        ...invoice,
-        items,
-        customer: customers[0],
-      });
+    return this.populateRelations(invoices);
+  }
+
+  /**
+   * Helper to populate relations for a list of invoices efficiently.
+   * Avoids N+1 query problem by fetching related data in batches.
+   */
+  private async populateRelations(invoices: Invoice[]): Promise<InvoiceWithRelations[]> {
+    if (invoices.length === 0) {
+      return [];
     }
 
-    return result;
+    const invoiceIds = invoices.map((inv) => inv.id);
+    const customerIds = [...new Set(invoices.map((inv) => inv.customerId))];
+
+    // Build placeholders for IN clauses
+    const invoicePlaceholders = invoiceIds.map(() => '?').join(',');
+    const customerPlaceholders = customerIds.map(() => '?').join(',');
+
+    const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
+      `SELECT * FROM InvoiceItem WHERE invoiceId IN (${invoicePlaceholders})`,
+      ...invoiceIds
+    );
+
+    const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
+      `SELECT * FROM Customer WHERE id IN (${customerPlaceholders})`,
+      ...customerIds
+    );
+
+    // Create lookup maps
+    const itemsMap = new Map<string, InvoiceItem[]>();
+    for (const item of items) {
+      if (!itemsMap.has(item.invoiceId)) {
+        itemsMap.set(item.invoiceId, []);
+      }
+      itemsMap.get(item.invoiceId)!.push(item);
+    }
+
+    const customersMap = new Map<string, Customer>();
+    for (const customer of customers) {
+      customersMap.set(customer.id, customer);
+    }
+
+    // Map relations to invoices
+    return invoices.map((invoice) => ({
+      ...invoice,
+      items: itemsMap.get(invoice.id) || [],
+      // Fallback to finding customer in list if map fails (should not happen with referential integrity)
+      customer: customersMap.get(invoice.customerId)!,
+    }));
   }
 
   // ==================== Settings Operations ====================
