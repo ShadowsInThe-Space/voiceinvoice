@@ -1,0 +1,362 @@
+// Server-side PostgreSQL schema for VoiceInvoice Enterprise
+// Multi-tenant database with tenantId for data isolation
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/server"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Customer or supplier entity for invoice management.
+/// Supports German accounting requirements with tax IDs and VAT numbers.
+model Customer {
+  id              String    @id @default(uuid())
+  /// Tenant identifier for multi-tenant isolation
+  tenantId        String
+  /// Classification: CUSTOMER, SUPPLIER, or BOTH
+  type            String
+
+  /// Legal company name
+  companyName     String
+  contactPerson   String?
+  email           String?
+  phone           String?
+
+  /// German tax number (Steuernummer)
+  taxNumber       String?
+  /// EU VAT identification number
+  vatId           String?
+  /// Bank account IBAN
+  iban            String?
+  /// Bank identifier code
+  bic             String?
+
+  street          String?
+  zip             String?
+  city            String?
+  /// ISO 3166-1 alpha-2 country code
+  country         String    @default("DE")
+
+  /// Privacy token for anonymized references
+  anonymizedToken String?   @unique
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  /// Invoices associated with this customer
+  invoices        Invoice[]
+
+  @@index([tenantId])
+  @@index([tenantId, companyName])
+  @@index([tenantId, email])
+  @@index([tenantId, type])
+}
+
+/// Invoice document for billing customers.
+/// Supports German invoice requirements (Rechnung).
+model Invoice {
+  id              String        @id @default(uuid())
+  /// Tenant identifier for multi-tenant isolation
+  tenantId        String
+
+  /// Sequential invoice number (Rechnungsnummer)
+  invoiceNumber   String
+
+  /// Invoice status: DRAFT, SENT, PAID, OVERDUE, CANCELLED
+  status          String        @default("DRAFT")
+
+  /// Invoice date (Rechnungsdatum)
+  invoiceDate     DateTime      @default(now())
+
+  /// Payment due date (Faelligkeitsdatum)
+  dueDate         DateTime
+
+  /// Invoice currency (ISO 4217)
+  currency        String        @default("EUR")
+
+  /// Net amount before tax (Nettobetrag)
+  netAmount       Float         @default(0)
+
+  /// Tax amount (Steuerbetrag)
+  taxAmount       Float         @default(0)
+
+  /// Gross amount including tax (Bruttobetrag)
+  grossAmount     Float         @default(0)
+
+  /// Optional notes or payment terms
+  notes           String?
+
+  /// Reference to customer
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id])
+
+  /// Line items on this invoice
+  items           InvoiceItem[]
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  /// Unique invoice number per tenant
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, customerId])
+  @@index([tenantId, invoiceDate])
+  @@index([tenantId, dueDate])
+}
+
+/// Individual line item on an invoice.
+model InvoiceItem {
+  id              String   @id @default(uuid())
+  /// Tenant identifier for multi-tenant isolation
+  tenantId        String
+
+  /// Item description
+  description     String
+
+  /// Quantity of items
+  quantity        Float    @default(1)
+
+  /// Unit of measurement (e.g., "hours", "pieces", "kg")
+  unit            String   @default("pcs")
+
+  /// Price per unit (Einzelpreis)
+  unitPrice       Float
+
+  /// Tax rate as percentage (e.g., 19 for 19%)
+  taxRate         Float    @default(19)
+
+  /// Net amount for this item (quantity * unitPrice)
+  netAmount       Float
+
+  /// Tax amount for this item
+  taxAmount       Float
+
+  /// Gross amount for this item
+  grossAmount     Float
+
+  /// Sort order within the invoice
+  sortOrder       Int      @default(0)
+
+  /// Reference to parent invoice
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, sortOrder])
+}
+
+/// Voice recording for invoice creation via speech-to-text.
+model Recording {
+  id              String    @id @default(uuid())
+  /// Tenant identifier for multi-tenant isolation
+  tenantId        String
+
+  /// Original audio file path or URL
+  audioUrl        String?
+
+  /// Transcribed text from speech recognition
+  transcription   String?
+
+  /// Extracted entities from AI processing
+  extractedData   String?   @db.Text
+
+  /// Processing status: PENDING, PROCESSING, COMPLETED, FAILED
+  status          String    @default("PENDING")
+
+  /// Error message if processing failed
+  errorMessage    String?
+
+  /// Duration of recording in seconds
+  durationSeconds Float?
+
+  /// File size in bytes
+  fileSizeBytes   Int?
+
+  /// Audio format (e.g., "webm", "wav", "mp3")
+  audioFormat     String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+}
+
+/// Category for organizing invoices and expenses.
+model Category {
+  id              String    @id @default(uuid())
+  /// Tenant identifier for multi-tenant isolation
+  tenantId        String
+
+  /// Category name
+  name            String
+
+  /// Category description
+  description     String?
+
+  /// Category type: INCOME, EXPENSE, BOTH
+  type            String    @default("BOTH")
+
+  /// Color for UI display (hex format)
+  color           String?
+
+  /// Icon name for UI display
+  icon            String?
+
+  /// Parent category for hierarchical structure
+  parentId        String?
+
+  /// Sort order for display
+  sortOrder       Int       @default(0)
+
+  /// Whether category is active
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  /// Unique category name per tenant
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([tenantId, type])
+  @@index([tenantId, parentId])
+  @@index([tenantId, isActive])
+}
+
+/// Bank transaction for matching with invoices.
+model BankTransaction {
+  id              String    @id @default(uuid())
+  /// Tenant identifier for multi-tenant isolation
+  tenantId        String
+
+  /// Bank account identifier
+  accountId       String?
+
+  /// Transaction reference from bank
+  reference       String?
+
+  /// Transaction description
+  description     String?
+
+  /// Transaction amount (positive for credit, negative for debit)
+  amount          Float
+
+  /// Transaction currency
+  currency        String    @default("EUR")
+
+  /// Transaction date
+  transactionDate DateTime
+
+  /// Booking date
+  bookingDate     DateTime?
+
+  /// Counter party name
+  counterPartyName String?
+
+  /// Counter party IBAN
+  counterPartyIban String?
+
+  /// Matched invoice ID
+  matchedInvoiceId String?
+
+  /// Match confidence (0-1)
+  matchConfidence Float?
+
+  /// Match status: PENDING, MATCHED, UNMATCHED, MANUAL
+  matchStatus     String    @default("PENDING")
+
+  /// Raw transaction data from bank API
+  rawData         String?   @db.Text
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, accountId])
+  @@index([tenantId, transactionDate])
+  @@index([tenantId, matchStatus])
+  @@index([tenantId, matchedInvoiceId])
+}
+
+/// Application settings per tenant.
+model AppSettings {
+  id              String    @id @default(uuid())
+  /// Tenant identifier for multi-tenant isolation
+  tenantId        String
+
+  /// Setting key
+  key             String
+
+  /// Setting value (JSON string)
+  value           String    @db.Text
+
+  /// Setting description
+  description     String?
+
+  /// Setting category for grouping
+  category        String?
+
+  /// Whether setting is sensitive (should be encrypted)
+  isSensitive     Boolean   @default(false)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  /// Unique setting key per tenant
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@index([tenantId, category])
+}
+
+/// Audit log for tracking changes and actions.
+model AuditLog {
+  id              String    @id @default(uuid())
+  /// Tenant identifier for multi-tenant isolation
+  tenantId        String
+
+  /// User who performed the action
+  userId          String?
+
+  /// Action type: CREATE, UPDATE, DELETE, LOGIN, EXPORT, etc.
+  action          String
+
+  /// Entity type affected
+  entityType      String
+
+  /// Entity ID affected
+  entityId        String?
+
+  /// Previous values (JSON string)
+  previousValues  String?   @db.Text
+
+  /// New values (JSON string)
+  newValues       String?   @db.Text
+
+  /// IP address of the request
+  ipAddress       String?
+
+  /// User agent string
+  userAgent       String?
+
+  /// Additional metadata
+  metadata        String?   @db.Text
+
+  createdAt       DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, userId])
+  @@index([tenantId, action])
+  @@index([tenantId, entityType])
+  @@index([tenantId, entityId])
+  @@index([tenantId, createdAt])
+}

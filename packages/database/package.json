@@ -15,17 +15,25 @@
     "./client": {
       "types": "./generated/client/index.d.ts",
       "import": "./generated/client/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.mjs",
+      "require": "./dist/server/index.js"
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/index.ts src/server/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts src/server/index.ts --format cjs,esm --dts --watch",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "prisma generate --schema=prisma/schema-client.prisma",
+    "db:generate:server": "prisma generate --schema=prisma/schema-server.prisma",
     "db:migrate": "prisma migrate dev --schema=prisma/schema-client.prisma",
-    "db:push": "prisma db push --schema=prisma/schema-client.prisma"
+    "db:migrate:server": "prisma migrate dev --schema=prisma/schema-server.prisma",
+    "db:push": "prisma db push --schema=prisma/schema-client.prisma",
+    "db:push:server": "prisma db push --schema=prisma/schema-server.prisma"
   },
   "dependencies": {
     "@prisma/client": "^5.9.0"
