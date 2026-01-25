@@ -150,3 +150,53 @@ model ConsentRecord {
 }
 
 // Invoice status values: DRAFT, SENT, PAID, OVERDUE, CANCELLED
+
+// ============================================
+// Workflow Analytics Models
+// ============================================
+
+// Stores each workflow execution with full details
+model WorkflowExecution {
+  id              String   @id @default(cuid())
+  workflowIntent  String   // e.g., "WORKFLOW_MAHNWESEN"
+  workflowName    String   // e.g., "Mahnwesen-Agent"
+  triggeredAt     DateTime @default(now())
+  executionTimeMs Int
+  success         Boolean
+  errorType       String?  // CREDENTIALS_MISSING, TIMEOUT, etc.
+  errorMessage    String?
+  params          String?  // JSON: Input parameters
+  responseData    String?  // JSON: Workflow response
+
+  @@index([workflowIntent, triggeredAt])
+  @@index([success])
+}
+
+// Workflow-specific KPIs extracted from responses
+model WorkflowKPI {
+  id             String   @id @default(cuid())
+  workflowIntent String
+  recordedAt     DateTime @default(now())
+  metricName     String   // e.g., "offene_mahnungen_euro"
+  metricValue    Float
+  metricUnit     String?  // "EUR", "count", "percent"
+  metadata       String?  // JSON: Additional info
+
+  @@index([workflowIntent, metricName, recordedAt])
+  @@index([metricName])
+}
+
+// Aggregated statistics per time period
+model WorkflowAggregation {
+  id                 String   @id @default(cuid())
+  workflowIntent     String
+  periodType         String   // "daily", "weekly", "monthly"
+  periodStart        DateTime
+  executionCount     Int
+  successCount       Int
+  failureCount       Int
+  avgExecutionTimeMs Float
+
+  @@unique([workflowIntent, periodType, periodStart])
+  @@index([periodType, periodStart])
+}

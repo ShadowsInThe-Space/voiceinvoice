@@ -466,3 +466,55 @@ export function getWorkflowDescription(intent: WorkflowIntent): string {
   const webhook = config.webhooks.find((w) => w.intent === intent);
   return webhook?.description ?? '';
 }
+
+/**
+ * Callback type for recording workflow executions.
+ * This allows decoupling from the database service.
+ */
+export type WorkflowRecordCallback = (
+  intent: WorkflowIntent,
+  workflowName: string,
+  result: WorkflowResult,
+  params?: WorkflowParams
+) => Promise<void>;
+
+/**
+ * Global callback for recording workflow executions.
+ * Set this from the app initialization to enable automatic recording.
+ */
+let recordCallback: WorkflowRecordCallback | null = null;
+
+/**
+ * Sets the callback for recording workflow executions.
+ *
+ * @param callback - The callback function to use for recording
+ */
+export function setWorkflowRecordCallback(callback: WorkflowRecordCallback | null): void {
+  recordCallback = callback;
+}
+
+/**
+ * Triggers a workflow and automatically records the execution.
+ *
+ * @param intent - The workflow intent to trigger
+ * @param params - Parameters to pass to the workflow
+ * @returns Workflow execution result
+ */
+export async function triggerWorkflowWithRecording(
+  intent: WorkflowIntent,
+  params: WorkflowParams = {}
+): Promise<WorkflowResult> {
+  const result = await triggerWorkflow(intent, params);
+  const workflowName = getWorkflowName(intent);
+
+  // Record the execution if callback is set
+  if (recordCallback) {
+    try {
+      await recordCallback(intent, workflowName, result, params);
+    } catch (error) {
+      console.error('[Workflow] Failed to record execution:', error);
+    }
+  }
+
+  return result;
+}
