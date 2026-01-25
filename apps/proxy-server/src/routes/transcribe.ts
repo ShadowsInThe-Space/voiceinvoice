@@ -82,16 +82,8 @@ export async function registerTranscribeRoutes(server: FastifyInstance): Promise
 
         return reply.status(200).send(response);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
         server.log.error({ err: error }, 'Transcription failed');
-
-        const errorResponse: ErrorResponse = {
-          error: `Transcription failed: ${errorMessage}`,
-          statusCode: 500,
-        };
-
-        return reply.status(500).send(errorResponse);
+        throw error;
       }
     }
   );
