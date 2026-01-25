@@ -31,6 +31,7 @@ vi.mock('jspdf', () => {
     setLineDashPattern: vi.fn().mockReturnThis(),
     splitTextToSize: vi.fn().mockImplementation((text: string) => [text]),
     addPage: vi.fn().mockReturnThis(),
+    addImage: vi.fn().mockReturnThis(),
     getTextWidth: vi.fn().mockReturnValue(50),
     internal: {
       pageSize: {
@@ -399,7 +400,7 @@ describe('PDFExporter', () => {
       expect(jsPDF).toHaveBeenCalled();
     });
 
-    it('should include company logo placeholder', async () => {
+    it('should include company logo placeholder when no logo provided', async () => {
       const options: PDFExportOptions = {
         invoice: createTestInvoice(),
         customer: createTestCustomer(),
@@ -409,6 +410,61 @@ describe('PDFExporter', () => {
       // PDF should be generated with logo placeholder area
       const result = await exporter.generateInvoicePDF(options);
       expect(result).toBeInstanceOf(Blob);
+    });
+
+    it('should render logo if logoBase64 is provided', async () => {
+      const { jsPDF } = await import('jspdf');
+      const mockJsPDFInstance = new jsPDF();
+      (jsPDF as unknown as ReturnType<typeof vi.fn>).mockReturnValue(mockJsPDFInstance);
+
+      const options: PDFExportOptions = {
+        invoice: createTestInvoice(),
+        customer: createTestCustomer(),
+        companyInfo: createTestCompanyInfo({
+          logoBase64:
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        }),
+      };
+
+      await exporter.generateInvoicePDF(options);
+
+      expect(mockJsPDFInstance.addImage).toHaveBeenCalledWith(
+        expect.stringContaining('data:image/png'),
+        'PNG',
+        expect.any(Number),
+        expect.any(Number),
+        expect.any(Number),
+        expect.any(Number),
+        undefined,
+        'FAST'
+      );
+    });
+
+    it('should detect JPEG format from base64', async () => {
+      const { jsPDF } = await import('jspdf');
+      const mockJsPDFInstance = new jsPDF();
+      (jsPDF as unknown as ReturnType<typeof vi.fn>).mockReturnValue(mockJsPDFInstance);
+
+      const options: PDFExportOptions = {
+        invoice: createTestInvoice(),
+        customer: createTestCustomer(),
+        companyInfo: createTestCompanyInfo({
+          logoBase64: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD...',
+        }),
+      };
+
+      await exporter.generateInvoicePDF(options);
+
+      expect(mockJsPDFInstance.addImage).toHaveBeenCalledWith(
+        expect.stringContaining('data:image/jpeg'),
+        'JPEG',
+        expect.any(Number),
+        expect.any(Number),
+        expect.any(Number),
+        expect.any(Number),
+        undefined,
+        'FAST'
+      );
     });
 
     it('should properly position customer address', async () => {

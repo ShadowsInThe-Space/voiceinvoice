@@ -85,6 +85,15 @@ interface InvoiceWithCustomer extends Invoice {
 }
 
 /**
+ * Cached data for analytics calculations to avoid redundant DB queries.
+ */
+interface AnalyticsCache {
+  invoices: InvoiceWithCustomer[];
+  customers: Customer[];
+  items: InvoiceItem[];
+}
+
+/**
  * Analytics service providing dashboard metrics.
  */
 export class AnalyticsService {
@@ -104,9 +113,12 @@ export class AnalyticsService {
   /**
    * Gets revenue statistics with optional date range filter.
    * @param range - Optional date range to filter data
+   * @param cache - Optional cached data to use instead of querying DB
    */
-  async getRevenueStats(range?: DateRange): Promise<RevenueStats> {
-    const invoices = await this.getPaidInvoicesInRange(range);
+  async getRevenueStats(range?: DateRange, cache?: AnalyticsCache): Promise<RevenueStats> {
+    const invoices = cache
+      ? this.filterPaidInvoicesFromCache(cache.invoices, range)
+      : await this.getPaidInvoicesInRange(range);
 
     if (invoices.length === 0) {
       return {
@@ -133,7 +145,10 @@ export class AnalyticsService {
       .sort((a, b) => a.month.localeCompare(b.month));
 
     // Group by customer
-    const byCustomerMap = new Map<string, { customerId: string; customerName: string; amount: number }>();
+    const byCustomerMap = new Map<
+      string,
+      { customerId: string; customerName: string; amount: number }
+    >();
     for (const inv of invoices) {
       const existing = byCustomerMap.get(inv.customerId);
       if (existing) {
@@ -146,11 +161,12 @@ export class AnalyticsService {
         });
       }
     }
-    const byCustomer = Array.from(byCustomerMap.values())
-      .sort((a, b) => b.amount - a.amount);
+    const byCustomer = Array.from(byCustomerMap.values()).sort((a, b) => b.amount - a.amount);
 
     // Calculate trend
-    const { trend, trendPercent } = await this.calculateTrend(range);
+    const { trend, trendPercent } = cache
+      ? this.calculateTrendFromCache(cache.invoices, range)
+      : await this.calculateTrend(range);
 
     return {
       total,
@@ -164,20 +180,29 @@ export class AnalyticsService {
   /**
    * Gets customer insights with optional date range filter.
    * @param range - Optional date range to filter data
+   * @param cache - Optional cached data to use instead of querying DB
    */
-  async getCustomerInsights(range?: DateRange): Promise<CustomerInsights> {
-    const customers = await this.getCustomersInRange(range);
-    const invoices = await this.getPaidInvoicesInRange(range);
+  async getCustomerInsights(range?: DateRange, cache?: AnalyticsCache): Promise<CustomerInsights> {
+    const customers = cache
+      ? this.filterCustomersFromCache(cache.customers, range)
+      : await this.getCustomersInRange(range);
+
+    const invoices = cache
+      ? this.filterPaidInvoicesFromCache(cache.invoices, range)
+      : await this.getPaidInvoicesInRange(range);
 
     // Count new customers in range
     const newCustomers = customers.length;
 
     // Calculate active customers (those with paid invoices)
-    const activeCustomerIds = new Set(invoices.map(inv => inv.customerId));
+    const activeCustomerIds = new Set(invoices.map((inv) => inv.customerId));
     const activeCustomers = activeCustomerIds.size;
 
     // Calculate top customers
-    const customerStatsMap = new Map<string, { customer: Customer; totalRevenue: number; invoiceCount: number }>();
+    const customerStatsMap = new Map<
+      string,
+      { customer: Customer; totalRevenue: number; invoiceCount: number }
+    >();
 
     for (const inv of invoices) {
       const existing = customerStatsMap.get(inv.customerId);
@@ -207,9 +232,12 @@ export class AnalyticsService {
   /**
    * Gets invoice insights with optional date range filter.
    * @param range - Optional date range to filter data
+   * @param cache - Optional cached data to use instead of querying DB
    */
-  async getInvoiceInsights(range?: DateRange): Promise<InvoiceInsights> {
-    const invoices = await this.getInvoicesInRange(range);
+  async getInvoiceInsights(range?: DateRange, cache?: AnalyticsCache): Promise<InvoiceInsights> {
+    const invoices = cache
+      ? this.filterInvoicesFromCache(cache.invoices, range)
+      : await this.getInvoicesInRange(range);
 
     if (invoices.length === 0) {
       return {
@@ -225,8 +253,15 @@ export class AnalyticsService {
     const averageValue = totalValue / invoices.length;
 
     // Get all items for invoices
-    const invoiceIds = invoices.map(inv => inv.id);
-    const items = await this.getItemsForInvoices(invoiceIds);
+    const invoiceIds = new Set(invoices.map((inv) => inv.id));
+    let items: InvoiceItem[] = [];
+
+    if (cache) {
+      // In-memory filter of items
+      items = cache.items.filter((item) => invoiceIds.has(item.invoiceId));
+    } else {
+      items = await this.getItemsForInvoices(Array.from(invoiceIds));
+    }
 
     // Calculate average item count
     const itemCountMap = new Map<string, number>();
@@ -239,7 +274,10 @@ export class AnalyticsService {
     // Find most common items
     const descriptionCountMap = new Map<string, number>();
     for (const item of items) {
-      descriptionCountMap.set(item.description, (descriptionCountMap.get(item.description) || 0) + 1);
+      descriptionCountMap.set(
+        item.description,
+        (descriptionCountMap.get(item.description) || 0) + 1
+      );
     }
     const mostCommonItems = Array.from(descriptionCountMap.entries())
       .map(([description, count]) => ({ description, count }))
@@ -261,11 +299,29 @@ export class AnalyticsService {
    * Gets combined dashboard summary.
    */
   async getDashboardSummary(): Promise<DashboardSummary> {
-    const [revenue, customers, invoices, basicStats] = await Promise.all([
-      this.getRevenueStats(),
-      this.getCustomerInsights(),
-      this.getInvoiceInsights(),
-      this.db.getInvoiceStatistics(),
+    // Optimized: Fetch all data once using clean Prisma queries
+    // NOTE: For very large datasets, fetching all items might be heavy.
+    // Ideally, we would use database-level aggregation, but that requires
+    // extensive refactoring of the insights logic.
+    const [allInvoices, allCustomers, allItems] = await Promise.all([
+      this.getAllInvoicesWithCustomers(),
+      this.getAllCustomers(),
+      this.getAllInvoiceItems(),
+    ]);
+
+    const cache: AnalyticsCache = {
+      invoices: allInvoices,
+      customers: allCustomers,
+      items: allItems,
+    };
+
+    // Calculate basic stats in memory to avoid another DB call
+    const basicStats = this.calculateBasicStats(allInvoices);
+
+    const [revenue, customers, invoices] = await Promise.all([
+      this.getRevenueStats(undefined, cache),
+      this.getCustomerInsights(undefined, cache),
+      this.getInvoiceInsights(undefined, cache),
     ]);
 
     return {
@@ -279,7 +335,163 @@ export class AnalyticsService {
   // ==================== Private Helper Methods ====================
 
   /**
+   * Fetches all invoices with customer data.
+   */
+  private async getAllInvoicesWithCustomers(): Promise<InvoiceWithCustomer[]> {
+    return this.prisma.invoice.findMany({
+      where: { deletedAt: null },
+      include: { customer: true },
+      orderBy: { createdAt: 'desc' },
+    }) as unknown as InvoiceWithCustomer[];
+  }
+
+  /**
+   * Fetches all customers.
+   */
+  private async getAllCustomers(): Promise<Customer[]> {
+    return this.prisma.customer.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Fetches all invoice items.
+   */
+  private async getAllInvoiceItems(): Promise<InvoiceItem[]> {
+    return this.prisma.invoiceItem.findMany();
+  }
+
+  private filterPaidInvoicesFromCache(
+    invoices: InvoiceWithCustomer[],
+    range?: DateRange
+  ): InvoiceWithCustomer[] {
+    return invoices.filter((inv) => {
+      if (inv.status !== 'PAID') return false;
+      if (!range) return true;
+      const paidAt = inv.paidAt ? new Date(inv.paidAt) : null;
+      if (!paidAt) return false;
+      return paidAt >= range.from && paidAt <= range.to;
+    });
+  }
+
+  private filterInvoicesFromCache(invoices: InvoiceWithCustomer[], range?: DateRange): Invoice[] {
+    if (!range) return invoices;
+    return invoices.filter((inv) => {
+      const createdAt = new Date(inv.createdAt);
+      return createdAt >= range.from && createdAt <= range.to;
+    });
+  }
+
+  private filterCustomersFromCache(customers: Customer[], range?: DateRange): Customer[] {
+    if (!range) return customers;
+    return customers.filter((c) => {
+      const createdAt = new Date(c.createdAt);
+      return createdAt >= range.from && createdAt <= range.to;
+    });
+  }
+
+  private calculateTrendFromCache(
+    invoices: InvoiceWithCustomer[],
+    range?: DateRange
+  ): { trend: 'up' | 'down' | 'stable'; trendPercent: number } {
+    const now = new Date();
+    let currentStart: Date;
+    let currentEnd: Date;
+    let previousStart: Date;
+    let previousEnd: Date;
+
+    if (range) {
+      const duration = range.to.getTime() - range.from.getTime();
+      currentStart = range.from;
+      currentEnd = range.to;
+      previousStart = new Date(range.from.getTime() - duration);
+      previousEnd = new Date(range.from.getTime() - 1);
+    } else {
+      currentStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      currentEnd = now;
+      previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      previousEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    }
+
+    const currentInvoices = this.filterPaidInvoicesFromCache(invoices, {
+      from: currentStart,
+      to: currentEnd,
+    });
+    const previousInvoices = this.filterPaidInvoicesFromCache(invoices, {
+      from: previousStart,
+      to: previousEnd,
+    });
+
+    const currentTotal = currentInvoices.reduce((sum, inv) => sum + inv.total, 0);
+    const previousTotal = previousInvoices.reduce((sum, inv) => sum + inv.total, 0);
+
+    if (previousTotal === 0 && currentTotal === 0) {
+      return { trend: 'stable', trendPercent: 0 };
+    }
+
+    if (previousTotal === 0) {
+      return { trend: 'up', trendPercent: 100 };
+    }
+
+    const percentChange = ((currentTotal - previousTotal) / previousTotal) * 100;
+
+    if (percentChange > 5) {
+      return { trend: 'up', trendPercent: Math.round(percentChange) };
+    } else if (percentChange < -5) {
+      return { trend: 'down', trendPercent: Math.round(Math.abs(percentChange)) };
+    } else {
+      return { trend: 'stable', trendPercent: Math.round(Math.abs(percentChange)) };
+    }
+  }
+
+  private calculateBasicStats(invoices: Invoice[]): InvoiceStatistics {
+    let totalRevenue = 0;
+    let totalOutstanding = 0;
+    let draftInvoices = 0;
+    let sentInvoices = 0;
+    let paidInvoices = 0;
+    let overdueInvoices = 0;
+    let cancelledInvoices = 0;
+
+    for (const invoice of invoices) {
+      switch (invoice.status) {
+        case 'DRAFT':
+          draftInvoices++;
+          break;
+        case 'SENT':
+          sentInvoices++;
+          totalOutstanding += invoice.total;
+          break;
+        case 'PAID':
+          paidInvoices++;
+          totalRevenue += invoice.total;
+          break;
+        case 'OVERDUE':
+          overdueInvoices++;
+          totalOutstanding += invoice.total;
+          break;
+        case 'CANCELLED':
+          cancelledInvoices++;
+          break;
+      }
+    }
+
+    return {
+      totalInvoices: invoices.length,
+      draftInvoices,
+      sentInvoices,
+      paidInvoices,
+      overdueInvoices,
+      cancelledInvoices,
+      totalRevenue,
+      totalOutstanding,
+    };
+  }
+
+  /**
    * Gets paid invoices within date range.
+   * @param range
    */
   private async getPaidInvoicesInRange(range?: DateRange): Promise<InvoiceWithCustomer[]> {
     let query = `
@@ -321,7 +533,7 @@ export class AnalyticsService {
       })[]
     >(query, ...params);
 
-    return results.map(row => ({
+    return results.map((row) => ({
       id: row.id,
       number: row.number,
       customerId: row.customerId,
@@ -363,6 +575,7 @@ export class AnalyticsService {
 
   /**
    * Gets all invoices within date range.
+   * @param range
    */
   private async getInvoicesInRange(range?: DateRange): Promise<Invoice[]> {
     let query = `SELECT * FROM Invoice WHERE deletedAt IS NULL`;
@@ -380,6 +593,7 @@ export class AnalyticsService {
 
   /**
    * Gets customers created within date range.
+   * @param range
    */
   private async getCustomersInRange(range?: DateRange): Promise<Customer[]> {
     let query = `SELECT * FROM Customer WHERE deletedAt IS NULL`;
@@ -397,6 +611,7 @@ export class AnalyticsService {
 
   /**
    * Gets invoice items for given invoice IDs.
+   * @param invoiceIds
    */
   private async getItemsForInvoices(invoiceIds: string[]): Promise<InvoiceItem[]> {
     if (invoiceIds.length === 0) {
@@ -411,8 +626,11 @@ export class AnalyticsService {
 
   /**
    * Calculates trend by comparing current period to previous period.
+   * @param range
    */
-  private async calculateTrend(range?: DateRange): Promise<{ trend: 'up' | 'down' | 'stable'; trendPercent: number }> {
+  private async calculateTrend(
+    range?: DateRange
+  ): Promise<{ trend: 'up' | 'down' | 'stable'; trendPercent: number }> {
     const now = new Date();
     let currentStart: Date;
     let currentEnd: Date;
@@ -434,8 +652,14 @@ export class AnalyticsService {
       previousEnd = new Date(now.getFullYear(), now.getMonth(), 0);
     }
 
-    const currentInvoices = await this.getPaidInvoicesInRange({ from: currentStart, to: currentEnd });
-    const previousInvoices = await this.getPaidInvoicesInRange({ from: previousStart, to: previousEnd });
+    const currentInvoices = await this.getPaidInvoicesInRange({
+      from: currentStart,
+      to: currentEnd,
+    });
+    const previousInvoices = await this.getPaidInvoicesInRange({
+      from: previousStart,
+      to: previousEnd,
+    });
 
     const currentTotal = currentInvoices.reduce((sum, inv) => sum + inv.total, 0);
     const previousTotal = previousInvoices.reduce((sum, inv) => sum + inv.total, 0);
@@ -461,9 +685,12 @@ export class AnalyticsService {
 
   /**
    * Calculates average payment time in days.
+   * @param invoices
    */
   private async calculateAveragePaymentTime(invoices: Invoice[]): Promise<number> {
-    const paidInvoices = invoices.filter(inv => inv.status === 'PAID' && inv.issuedAt && inv.paidAt);
+    const paidInvoices = invoices.filter(
+      (inv) => inv.status === 'PAID' && inv.issuedAt && inv.paidAt
+    );
 
     if (paidInvoices.length === 0) {
       return 0;

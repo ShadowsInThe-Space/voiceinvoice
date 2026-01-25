@@ -343,21 +343,8 @@ export class DatabaseService {
       return null;
     }
 
-    const invoice = invoices[0];
-    const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
-      'SELECT * FROM InvoiceItem WHERE invoiceId = ?',
-      id
-    );
-    const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
-      'SELECT * FROM Customer WHERE id = ?',
-      invoice.customerId
-    );
-
-    return {
-      ...invoice,
-      items,
-      customer: customers[0],
-    };
+    const results = await this.populateRelations(invoices);
+    return results[0];
   }
 
   /**
@@ -368,24 +355,7 @@ export class DatabaseService {
       'SELECT * FROM Invoice WHERE deletedAt IS NULL ORDER BY createdAt DESC'
     );
 
-    const result: InvoiceWithRelations[] = [];
-    for (const invoice of invoices) {
-      const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
-        'SELECT * FROM InvoiceItem WHERE invoiceId = ?',
-        invoice.id
-      );
-      const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
-        'SELECT * FROM Customer WHERE id = ?',
-        invoice.customerId
-      );
-      result.push({
-        ...invoice,
-        items,
-        customer: customers[0],
-      });
-    }
-
-    return result;
+    return this.populateRelations(invoices);
   }
 
   /**
@@ -458,24 +428,7 @@ export class DatabaseService {
       status
     );
 
-    const result: InvoiceWithRelations[] = [];
-    for (const invoice of invoices) {
-      const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
-        'SELECT * FROM InvoiceItem WHERE invoiceId = ?',
-        invoice.id
-      );
-      const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
-        'SELECT * FROM Customer WHERE id = ?',
-        invoice.customerId
-      );
-      result.push({
-        ...invoice,
-        items,
-        customer: customers[0],
-      });
-    }
-
-    return result;
+    return this.populateRelations(invoices);
   }
 
   /**
@@ -488,24 +441,57 @@ export class DatabaseService {
       customerId
     );
 
-    const result: InvoiceWithRelations[] = [];
-    for (const invoice of invoices) {
-      const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
-        'SELECT * FROM InvoiceItem WHERE invoiceId = ?',
-        invoice.id
-      );
-      const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
-        'SELECT * FROM Customer WHERE id = ?',
-        invoice.customerId
-      );
-      result.push({
-        ...invoice,
-        items,
-        customer: customers[0],
-      });
+    return this.populateRelations(invoices);
+  }
+
+  /**
+   * Helper to populate relations for a list of invoices efficiently.
+   * Avoids N+1 query problem by fetching related data in batches.
+   * @param invoices
+   */
+  private async populateRelations(invoices: Invoice[]): Promise<InvoiceWithRelations[]> {
+    if (invoices.length === 0) {
+      return [];
     }
 
-    return result;
+    const invoiceIds = invoices.map((inv) => inv.id);
+    const customerIds = [...new Set(invoices.map((inv) => inv.customerId))];
+
+    // Build placeholders for IN clauses
+    const invoicePlaceholders = invoiceIds.map(() => '?').join(',');
+    const customerPlaceholders = customerIds.map(() => '?').join(',');
+
+    const items = await this.prisma.$queryRawUnsafe<InvoiceItem[]>(
+      `SELECT * FROM InvoiceItem WHERE invoiceId IN (${invoicePlaceholders})`,
+      ...invoiceIds
+    );
+
+    const customers = await this.prisma.$queryRawUnsafe<Customer[]>(
+      `SELECT * FROM Customer WHERE id IN (${customerPlaceholders})`,
+      ...customerIds
+    );
+
+    // Create lookup maps
+    const itemsMap = new Map<string, InvoiceItem[]>();
+    for (const item of items) {
+      if (!itemsMap.has(item.invoiceId)) {
+        itemsMap.set(item.invoiceId, []);
+      }
+      itemsMap.get(item.invoiceId)!.push(item);
+    }
+
+    const customersMap = new Map<string, Customer>();
+    for (const customer of customers) {
+      customersMap.set(customer.id, customer);
+    }
+
+    // Map relations to invoices
+    return invoices.map((invoice) => ({
+      ...invoice,
+      items: itemsMap.get(invoice.id) || [],
+      // Fallback to finding customer in list if map fails (should not happen with referential integrity)
+      customer: customersMap.get(invoice.customerId)!,
+    }));
   }
 
   // ==================== Settings Operations ====================
@@ -584,43 +570,57 @@ export class DatabaseService {
    * Gets invoice statistics.
    */
   async getInvoiceStatistics(): Promise<InvoiceStatistics> {
-    const invoices = await this.prisma.$queryRawUnsafe<Invoice[]>(
-      'SELECT * FROM Invoice WHERE deletedAt IS NULL'
+    const results = await this.prisma.$queryRawUnsafe<
+      Array<{ status: string; count: bigint; totalSum: number | null }>
+    >(
+      `SELECT
+         status,
+         COUNT(*) as count,
+         SUM(total) as totalSum
+       FROM Invoice
+       WHERE deletedAt IS NULL
+       GROUP BY status`
     );
 
-    let totalRevenue = 0;
-    let totalOutstanding = 0;
+    let totalInvoices = 0;
     let draftInvoices = 0;
     let sentInvoices = 0;
     let paidInvoices = 0;
     let overdueInvoices = 0;
     let cancelledInvoices = 0;
+    let totalRevenue = 0;
+    let totalOutstanding = 0;
 
-    for (const invoice of invoices) {
-      switch (invoice.status) {
+    for (const row of results) {
+      const count = Number(row.count);
+      const totalSum = row.totalSum ?? 0;
+
+      totalInvoices += count;
+
+      switch (row.status) {
         case 'DRAFT':
-          draftInvoices++;
+          draftInvoices = count;
           break;
         case 'SENT':
-          sentInvoices++;
-          totalOutstanding += invoice.total;
+          sentInvoices = count;
+          totalOutstanding += totalSum;
           break;
         case 'PAID':
-          paidInvoices++;
-          totalRevenue += invoice.total;
+          paidInvoices = count;
+          totalRevenue += totalSum;
           break;
         case 'OVERDUE':
-          overdueInvoices++;
-          totalOutstanding += invoice.total;
+          overdueInvoices = count;
+          totalOutstanding += totalSum;
           break;
         case 'CANCELLED':
-          cancelledInvoices++;
+          cancelledInvoices = count;
           break;
       }
     }
 
     return {
-      totalInvoices: invoices.length,
+      totalInvoices,
       draftInvoices,
       sentInvoices,
       paidInvoices,
