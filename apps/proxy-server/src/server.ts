@@ -17,6 +17,7 @@ import { registerHealthRoutes } from './routes/health';
 import { registerTranscribeRoutes } from './routes/transcribe';
 import { registerEnrichRoutes } from './routes/enrich';
 import { registerLicenseRoutes } from './routes/license';
+import { registerSyncRoutes } from './routes/sync';
 
 /**
  * Server build options.
@@ -107,6 +108,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   await registerTranscribeRoutes(server);
   await registerEnrichRoutes(server);
   await registerLicenseRoutes(server);
+  await registerSyncRoutes(server);
 
   // Global error handler
   server.setErrorHandler((error: FastifyError, _request, reply) => {

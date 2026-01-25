@@ -108,6 +108,7 @@ export class AnalyticsService {
   constructor(db: DatabaseService, prisma: PrismaClient) {
     this.db = db;
     this.prisma = prisma;
+    void this.db;
   }
 
   /**

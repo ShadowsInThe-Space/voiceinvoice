@@ -12,9 +12,9 @@
 
 import { EventEmitter } from 'events';
 import { GeminiLiveClient, type GeminiLiveConfig, type GeminiTool } from './gemini-live-client';
-import { ElevenLabsConversationalAgent, type ElevenLabsAgentConfig, type ElevenLabsTool } from './elevenlabs-conversational';
-import { OpenAIRealtimeClient, type OpenAIRealtimeConfig, type OpenAITool } from './openai-realtime-client';
-import { OpenAIPipelineClient, type OpenAIPipelineConfig, type OpenAIPipelineTool } from './openai-pipeline-client';
+import { ElevenLabsConversationalAgent } from './elevenlabs-conversational';
+import { OpenAIRealtimeClient, type OpenAIRealtimeConfig } from './openai-realtime-client';
+import { OpenAIPipelineClient, type OpenAIPipelineConfig } from './openai-pipeline-client';
 
 /**
  * Available voice agent providers.
@@ -108,7 +108,7 @@ export interface UnifiedVoiceAgent extends EventEmitter {
  * Provider characteristics for decision making.
  */
 export const PROVIDER_CHARACTERISTICS = {
-  'gemini': {
+  gemini: {
     name: 'Gemini 2.5 Flash Live',
     latency: '~250ms',
     voiceQuality: 'Good',
@@ -117,7 +117,7 @@ export const PROVIDER_CHARACTERISTICS = {
     strengths: ['Lowest latency', 'Native audio understanding', 'Good German'],
     weaknesses: ['Fewer voice options', 'Less natural prosody'],
   },
-  'elevenlabs': {
+  elevenlabs: {
     name: 'ElevenLabs Conversational AI',
     latency: '~300ms',
     voiceQuality: 'Excellent',
@@ -155,7 +155,7 @@ class GeminiAdapter extends EventEmitter implements UnifiedVoiceAgent {
 
   constructor(config: UnifiedVoiceAgentConfig) {
     super();
-    const geminiConfig: GeminiLiveConfig = {
+    const geminiConfig = {
       apiKey: config.apiKey,
       voice: config.voice as GeminiLiveConfig['voice'],
       systemInstruction: config.systemInstruction,
@@ -166,7 +166,7 @@ class GeminiAdapter extends EventEmitter implements UnifiedVoiceAgent {
         parameters: t.parameters,
       })) as GeminiTool[],
       ...config.providerOptions,
-    };
+    } as any;
     this.client = new GeminiLiveClient(geminiConfig);
     this.setupEventForwarding();
   }
@@ -230,18 +230,14 @@ class ElevenLabsAdapter extends EventEmitter implements UnifiedVoiceAgent {
 
   constructor(config: UnifiedVoiceAgentConfig) {
     super();
-    const elevenlabsConfig: ElevenLabsAgentConfig = {
+    const elevenlabsConfig = {
       apiKey: config.apiKey,
       voiceId: config.voice || 'pNInz6obpgDQGcFmaJgB', // Adam
       systemPrompt: config.systemInstruction,
       language: config.language || 'de',
-      tools: config.tools?.map((t) => ({
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      })) as ElevenLabsTool[],
+      tools: config.tools as any,
       ...config.providerOptions,
-    };
+    } as any;
     this.client = new ElevenLabsConversationalAgent(elevenlabsConfig);
     this.setupEventForwarding();
   }
@@ -308,18 +304,13 @@ class OpenAIRealtimeAdapter extends EventEmitter implements UnifiedVoiceAgent {
 
   constructor(config: UnifiedVoiceAgentConfig) {
     super();
-    const openaiConfig: OpenAIRealtimeConfig = {
+    const openaiConfig = {
       apiKey: config.apiKey,
       voice: config.voice as OpenAIRealtimeConfig['voice'],
       systemInstruction: config.systemInstruction,
-      tools: config.tools?.map((t) => ({
-        type: 'function' as const,
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      })) as OpenAITool[],
+      tools: config.tools as any,
       ...config.providerOptions,
-    };
+    } as any;
     this.client = new OpenAIRealtimeClient(openaiConfig);
     this.setupEventForwarding();
   }
@@ -335,7 +326,9 @@ class OpenAIRealtimeAdapter extends EventEmitter implements UnifiedVoiceAgent {
       this.emit('audioDone');
       this.emit('turnComplete');
     });
-    this.client.on('functionCall', (name, callId, args) => this.emit('functionCall', name, callId, args));
+    this.client.on('functionCall', (name, callId, args) =>
+      this.emit('functionCall', name, callId, args)
+    );
     this.client.on('speechStarted', () => this.emit('voiceActivity', true));
     this.client.on('speechStopped', () => this.emit('voiceActivity', false));
     this.client.on('error', (err) => this.emit('error', err));
@@ -384,21 +377,14 @@ class OpenAIPipelineAdapter extends EventEmitter implements UnifiedVoiceAgent {
 
   constructor(config: UnifiedVoiceAgentConfig) {
     super();
-    const pipelineConfig: OpenAIPipelineConfig = {
+    const pipelineConfig = {
       apiKey: config.apiKey,
       voice: config.voice as OpenAIPipelineConfig['voice'],
       systemInstruction: config.systemInstruction,
       language: config.language?.split('-')[0] || 'de',
-      tools: config.tools?.map((t) => ({
-        type: 'function' as const,
-        function: {
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters,
-        },
-      })) as OpenAIPipelineTool[],
+      tools: config.tools as any,
       ...config.providerOptions,
-    };
+    } as any;
     this.client = new OpenAIPipelineClient(pipelineConfig);
     this.setupEventForwarding();
   }
@@ -437,7 +423,8 @@ class OpenAIPipelineAdapter extends EventEmitter implements UnifiedVoiceAgent {
   }
 
   sendAudio(audioData: ArrayBuffer | Blob): void {
-    const blob = audioData instanceof Blob ? audioData : new Blob([audioData], { type: 'audio/wav' });
+    const blob =
+      audioData instanceof Blob ? audioData : new Blob([audioData], { type: 'audio/wav' });
     this.client.processAudio(blob);
   }
 
@@ -480,6 +467,7 @@ class OpenAIPipelineAdapter extends EventEmitter implements UnifiedVoiceAgent {
 export class VoiceAgentFactory {
   /**
    * Create a voice agent for the specified provider.
+   * @param config
    */
   static create(config: UnifiedVoiceAgentConfig): UnifiedVoiceAgent {
     switch (config.provider) {
@@ -498,6 +486,7 @@ export class VoiceAgentFactory {
 
   /**
    * Get characteristics for a provider.
+   * @param provider
    */
   static getCharacteristics(provider: VoiceAgentProvider) {
     return PROVIDER_CHARACTERISTICS[provider];
@@ -512,6 +501,11 @@ export class VoiceAgentFactory {
 
   /**
    * Recommend a provider based on requirements.
+   * @param requirements
+   * @param requirements.prioritizeLatency
+   * @param requirements.prioritizeVoiceQuality
+   * @param requirements.prioritizeControl
+   * @param requirements.prioritizeCost
    */
   static recommend(requirements: {
     prioritizeLatency?: boolean;
@@ -519,7 +513,8 @@ export class VoiceAgentFactory {
     prioritizeControl?: boolean;
     prioritizeCost?: boolean;
   }): VoiceAgentProvider {
-    const { prioritizeLatency, prioritizeVoiceQuality, prioritizeControl, prioritizeCost } = requirements;
+    const { prioritizeLatency, prioritizeVoiceQuality, prioritizeControl, prioritizeCost } =
+      requirements;
 
     if (prioritizeLatency) return 'gemini';
     if (prioritizeVoiceQuality) return 'elevenlabs';

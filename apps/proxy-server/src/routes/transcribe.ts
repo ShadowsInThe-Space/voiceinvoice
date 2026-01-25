@@ -68,31 +68,18 @@ export async function registerTranscribeRoutes(server: FastifyInstance): Promise
 
       const { audio, language, format } = validation.data;
 
-      try {
-        // Decode base64 audio
-        const audioBuffer = Buffer.from(audio, 'base64');
+      // Decode base64 audio
+      const audioBuffer = Buffer.from(audio, 'base64');
 
-        // Transcribe the audio
-        const result = await transcribeAudio(audioBuffer, { language, format });
+      // Transcribe the audio
+      const result = await transcribeAudio(audioBuffer, { language, format });
 
-        const response: TranscribeResponse = {
-          transcript: result.transcript,
-          confidence: result.confidence,
-        };
+      const response: TranscribeResponse = {
+        transcript: result.transcript,
+        confidence: result.confidence,
+      };
 
-        return reply.status(200).send(response);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-        server.log.error({ err: error }, 'Transcription failed');
-
-        const errorResponse: ErrorResponse = {
-          error: `Transcription failed: ${errorMessage}`,
-          statusCode: 500,
-        };
-
-        return reply.status(500).send(errorResponse);
-      }
+      return reply.status(200).send(response);
     }
   );
 }

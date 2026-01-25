@@ -175,6 +175,10 @@ export class ElevenLabsConversationalAgent extends EventEmitter {
   private transcript: ConversationSummary['transcript'] = [];
   private startTime = 0;
 
+  /**
+   *
+   * @param config
+   */
   constructor(config: ElevenLabsAgentConfig) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config } as ElevenLabsAgentConfig;
@@ -187,17 +191,20 @@ export class ElevenLabsConversationalAgent extends EventEmitter {
     const { apiKey, agentId } = this.config;
 
     // Get signed URL for WebSocket connection
-    const response = await fetch('https://api.elevenlabs.io/v1/convai/conversation/get_signed_url', {
-      method: 'POST',
-      headers: {
-        'xi-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        agent_id: agentId,
-        agent_config: agentId ? undefined : this.buildAgentConfig(),
-      }),
-    });
+    const response = await fetch(
+      'https://api.elevenlabs.io/v1/convai/conversation/get_signed_url',
+      {
+        method: 'POST',
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          agent_id: agentId,
+          agent_config: agentId ? undefined : this.buildAgentConfig(),
+        }),
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to get signed URL: ${response.status}`);
@@ -238,8 +245,16 @@ export class ElevenLabsConversationalAgent extends EventEmitter {
    * Build inline agent configuration.
    */
   private buildAgentConfig(): Record<string, unknown> {
-    const { voiceId, ttsModel, llm, firstMessage, language, autoDetectLanguage, tools, knowledgeBaseIds } =
-      this.config;
+    const {
+      voiceId,
+      ttsModel,
+      llm,
+      firstMessage,
+      language,
+      autoDetectLanguage,
+      tools,
+      knowledgeBaseIds,
+    } = this.config;
 
     return {
       conversation: {
@@ -270,6 +285,7 @@ export class ElevenLabsConversationalAgent extends EventEmitter {
 
   /**
    * Handle incoming WebSocket messages.
+   * @param data
    */
   private handleMessage(data: string | Blob): void {
     // Handle binary audio data
@@ -351,6 +367,7 @@ export class ElevenLabsConversationalAgent extends EventEmitter {
 
   /**
    * Send text input (for text-based interaction).
+   * @param text
    */
   sendText(text: string): void {
     if (!this.isConnected || !this.ws) return;
@@ -365,6 +382,8 @@ export class ElevenLabsConversationalAgent extends EventEmitter {
 
   /**
    * Send function call result.
+   * @param functionName
+   * @param result
    */
   sendFunctionResult(functionName: string, result: unknown): void {
     if (!this.isConnected || !this.ws) return;
@@ -417,13 +436,13 @@ export class ElevenLabsConversationalAgent extends EventEmitter {
   }
 
   private emitConversationEnd(outcome?: string, sentiment?: string): void {
-    const summary: ConversationSummary = {
+    const summary = {
       conversationId: this.conversationId || '',
       duration: Date.now() - this.startTime,
       transcript: this.transcript,
       outcome,
       sentiment: sentiment as ConversationSummary['sentiment'],
-    };
+    } as any;
     this.emit('conversationEnd', summary);
   }
 
@@ -439,6 +458,13 @@ export class ElevenLabsConversationalAgent extends EventEmitter {
 
 /**
  * Create an ElevenLabs agent for invoice reminders.
+ * @param apiKey
+ * @param options
+ * @param options.customerName
+ * @param options.invoiceNumber
+ * @param options.amount
+ * @param options.dueDate
+ * @param options.urgency
  */
 export function createInvoiceReminderAgent(
   apiKey: string,
@@ -540,6 +566,13 @@ Wichtig:
 
 /**
  * Create an ElevenLabs agent for appointment reminders.
+ * @param apiKey
+ * @param options
+ * @param options.customerName
+ * @param options.appointmentDate
+ * @param options.appointmentTime
+ * @param options.location
+ * @param options.description
  */
 export function createAppointmentReminderAgent(
   apiKey: string,

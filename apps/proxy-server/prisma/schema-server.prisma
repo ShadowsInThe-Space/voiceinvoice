@@ -40,6 +40,41 @@ model License {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  /// Synced entities for offline-first data
+  syncedEntities  SyncedEntity[]
+
   @@index([licenseKey])
   @@index([status])
+}
+
+/// Generic storage for synced entities from desktop clients.
+/// Provides a simple key-value store per tenant (license) partitioned by entity type.
+model SyncedEntity {
+  id              String   @id @default(uuid())
+
+  /// Foreign Key to License (Tenant)
+  licenseId       String
+  license         License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  /// Type of entity (e.g., 'customer', 'invoice')
+  entityType      String
+
+  /// ID of the entity in the desktop app (client-generated UUID)
+  entityId        String
+
+  /// The actual data payload (JSON)
+  data            Json
+
+  /// Version number for conflict resolution (incremented on update)
+  version         Int      @default(1)
+
+  /// When this entity was last deleted (soft delete)
+  deletedAt       DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  /// Composite unique constraint ensures one entity ID per type per tenant
+  @@unique([licenseId, entityType, entityId])
+  @@index([licenseId, entityType, updatedAt])
 }

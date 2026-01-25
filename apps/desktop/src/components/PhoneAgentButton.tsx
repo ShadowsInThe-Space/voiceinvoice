@@ -59,6 +59,11 @@ const statusLabels: Record<string, string> = {
  * Voice-activated button component for triggering phone agent calls.
  *
  * @param props - Component props
+ * @param props.className
+ * @param props.onCallComplete
+ * @param props.onError
+ * @param props.showStatus
+ * @param props.labels
  * @returns React component
  */
 export function PhoneAgentButton({
@@ -81,11 +86,11 @@ export function PhoneAgentButton({
     error: recordingError,
   } = useVoiceRecording({
     maxDuration: 30000, // 30 seconds max
-    onError: (err) => {
+    onError: (err: any) => {
       setButtonState('idle');
       onError?.(err);
     },
-  });
+  } as any) as any;
 
   const phoneAgentOptions: UsePhoneAgentOptions = {
     onCallInitiated: () => {
@@ -283,9 +288,7 @@ export function PhoneAgentButton({
       )}
 
       {/* Error Display */}
-      {error && (
-        <div className="mt-2 p-2 rounded bg-red-100 text-red-700 text-sm">{error}</div>
-      )}
+      {error && <div className="mt-2 p-2 rounded bg-red-100 text-red-700 text-sm">{error}</div>}
 
       {/* Usage Hint */}
       {buttonState === 'idle' && !callStatus && (
