@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { AgentOrchestrator } from '../src/index';
+import { describe, it, expect, vi } from 'vitest';
+import { AgentOrchestrator, EntityExtractor } from '../src/index';
 
 describe('AgentOrchestrator', () => {
   describe('constructor', () => {
@@ -98,6 +98,70 @@ describe('AgentOrchestrator', () => {
 
       expect(config1).toEqual(config2);
       expect(config1).not.toBe(config2);
+    });
+  });
+
+  describe('process with EntityExtractor', () => {
+    const mockExtractor: EntityExtractor = {
+      extract: async () => ({
+        customerName: 'Test Customer',
+        netAmount: 100,
+        taxAmount: 19,
+        grossAmount: 119,
+        currency: 'EUR',
+        confidence: 0.95,
+      }),
+    };
+
+    it('should extract entity data when intent is INVOICE', async () => {
+      const orchestrator = new AgentOrchestrator({
+        entityExtractor: mockExtractor,
+      });
+
+      const result = await orchestrator.process('Rechnung an Test Customer');
+
+      expect(result.intent.intent).toBe('INVOICE');
+      expect(result.invoiceData).toBeDefined();
+      expect(result.invoiceData?.customerName).toBe('Test Customer');
+      expect(result.requiresPreview).toBe(false); // 0.95 > 0.85
+    });
+
+    it('should handle extraction errors gracefully', async () => {
+      const failingExtractor: EntityExtractor = {
+        extract: async () => {
+          throw new Error('Extraction failed');
+        },
+      };
+      // Suppress console.error for this test
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const orchestrator = new AgentOrchestrator({
+        entityExtractor: failingExtractor,
+      });
+
+      const result = await orchestrator.process('Rechnung an Test Customer');
+
+      expect(result.intent.intent).toBe('INVOICE');
+      expect(result.invoiceData).toBeUndefined();
+      expect(result.requiresPreview).toBe(true);
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should require preview if confidence is low', async () => {
+      const lowConfidenceExtractor: EntityExtractor = {
+        extract: async () => ({
+          customerName: 'Maybe Customer',
+          confidence: 0.5,
+        }),
+      };
+      const orchestrator = new AgentOrchestrator({
+        entityExtractor: lowConfidenceExtractor,
+      });
+
+      const result = await orchestrator.process('Rechnung an Maybe Customer');
+
+      expect(result.requiresPreview).toBe(true);
     });
   });
 });

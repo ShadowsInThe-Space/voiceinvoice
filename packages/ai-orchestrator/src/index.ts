@@ -14,6 +14,8 @@
  * @module @voiceinvoice/ai-orchestrator
  */
 
+import type { TaxRate } from '@voiceinvoice/shared-types';
+
 /**
  * Detected intent from voice input.
  *
@@ -53,20 +55,58 @@ export interface ExtractedInvoiceData {
   /** Extracted customer name */
   customerName?: string;
 
-  /** Extracted amount in EUR */
-  amount?: number;
+  /** Contact person name if mentioned */
+  contactPerson?: string;
+
+  /** Line items */
+  items?: Array<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+  }>;
+
+  /** Net amount before tax */
+  netAmount?: number;
 
   /** Extracted or default tax rate */
-  taxRate?: number;
+  taxRate?: TaxRate;
+
+  /** Calculated tax amount */
+  taxAmount?: number;
+
+  /** Total amount including tax */
+  grossAmount?: number;
+
+  /** Currency code (default: EUR) */
+  currency?: string;
 
   /** Extracted description/notes */
   description?: string;
+
+  /** Payment due date in ISO format */
+  dueDate?: string;
+
+  /** Invoice date in ISO format */
+  invoiceDate?: string;
 
   /** Overall extraction confidence */
   confidence: number;
 
   /** Per-field confidence scores */
-  fieldConfidences: Record<string, number>;
+  fieldConfidences?: Record<string, number>;
+}
+
+/**
+ * Interface for entity extraction service.
+ */
+export interface EntityExtractor {
+  /**
+   * Extracts structured data from transcription.
+   * @param transcription Voice transcription text
+   * @returns Promise resolving to extracted invoice data
+   */
+  extract(transcription: string): Promise<ExtractedInvoiceData>;
 }
 
 /**
@@ -105,6 +145,9 @@ export interface OrchestratorConfig {
 
   /** Maximum latency budget in ms (default: 2000) */
   maxLatencyMs: number;
+
+  /** Optional entity extractor implementation */
+  entityExtractor?: EntityExtractor;
 }
 
 /**
@@ -205,6 +248,7 @@ const ANALYTICS_PATTERNS = {
  */
 export class AgentOrchestrator {
   private readonly config: OrchestratorConfig;
+  private readonly entityExtractor?: EntityExtractor;
 
   /**
    * Creates a new AgentOrchestrator instance.
@@ -217,6 +261,7 @@ export class AgentOrchestrator {
       useGeminiFallback: config.useGeminiFallback ?? true,
       maxLatencyMs: config.maxLatencyMs ?? 2000,
     };
+    this.entityExtractor = config.entityExtractor;
   }
 
   /**
@@ -240,10 +285,29 @@ export class AgentOrchestrator {
     // Classify intent using rule-based heuristics
     const intentResult = await this.classifyIntent(transcription);
 
+    let invoiceData: ExtractedInvoiceData | undefined;
+    let requiresPreview = true;
+
+    // Perform entity extraction if intent is INVOICE and extractor is available
+    if (intentResult.intent === 'INVOICE' && this.entityExtractor) {
+      try {
+        invoiceData = await this.entityExtractor.extract(transcription);
+
+        // Determine if we can save directly based on confidence
+        if (invoiceData.confidence >= this.config.directSaveThreshold) {
+          requiresPreview = false;
+        }
+      } catch (error) {
+        console.error('Entity extraction failed:', error);
+        // Fallback: continue without extracted data, forcing manual entry
+      }
+    }
+
     return {
       transcription,
       intent: intentResult,
-      requiresPreview: true,
+      invoiceData,
+      requiresPreview,
       totalLatencyMs: Date.now() - startTime,
     };
   }
