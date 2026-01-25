@@ -1,0 +1,849 @@
+{
+  "name": "VoiceInvoice - Phone Agent (OpenAI Stack)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice-command-openai",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Voice Command Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "voice-command-openai"
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.OPENAI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "value": "={{ $binary.audio }}"
+            },
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "language",
+              "value": "de"
+            },
+            {
+              "name": "response_format",
+              "value": "verbose_json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "whisper-stt",
+      "name": "Whisper STT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.OPENAI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Du bist ein Assistent für VoiceInvoice. Analysiere Sprachbefehle und extrahiere:\\n1. intent: 'invoice_reminder' oder 'appointment_reminder'\\n2. customer_name: Name des Kunden\\n3. invoice_number: Rechnungsnummer (falls vorhanden)\\n4. urgency: 'low', 'medium', 'high'\\n5. appointment_date: Datum (falls Terminanfrage)\\n\\nAntworte NUR mit validem JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.text }}\"\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" },\n  \"temperature\": 0.1\n}",
+        "options": {}
+      },
+      "id": "gpt4o-intent",
+      "name": "GPT-4o Intent Classification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst content = response.choices[0].message.content;\n\ntry {\n  const parsed = JSON.parse(content);\n  return {\n    intent: parsed.intent || 'unknown',\n    customer_name: parsed.customer_name || null,\n    invoice_number: parsed.invoice_number || null,\n    urgency: parsed.urgency || 'medium',\n    appointment_date: parsed.appointment_date || null,\n    original_text: $('Whisper STT').first().json.text,\n    confidence: response.choices[0].finish_reason === 'stop' ? 0.95 : 0.7\n  };\n} catch (e) {\n  return {\n    intent: 'unknown',\n    error: 'Failed to parse intent',\n    original_text: $('Whisper STT').first().json.text\n  };\n}"
+      },
+      "id": "parse-intent",
+      "name": "Parse Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "invoice-reminder",
+              "leftValue": "={{ $json.intent }}",
+              "rightValue": "invoice_reminder",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "route-intent",
+      "name": "Route by Intent",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "invoices",
+          "mode": "list"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "customer_name",
+              "operator": "ILIKE",
+              "value": "=%{{ $json.customer_name }}%"
+            }
+          ]
+        },
+        "combineConditions": "AND",
+        "returnAll": false,
+        "limit": 1,
+        "options": {}
+      },
+      "id": "lookup-invoice",
+      "name": "Lookup Invoice",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1340, 200],
+      "credentials": {
+        "postgres": {
+          "id": "voiceinvoice-db",
+          "name": "VoiceInvoice Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "customers",
+          "mode": "list"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "name",
+              "operator": "ILIKE",
+              "value": "=%{{ $json.customer_name }}%"
+            }
+          ]
+        },
+        "combineConditions": "AND",
+        "returnAll": false,
+        "limit": 1,
+        "options": {}
+      },
+      "id": "lookup-customer",
+      "name": "Lookup Customer",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1340, 400],
+      "credentials": {
+        "postgres": {
+          "id": "voiceinvoice-db",
+          "name": "VoiceInvoice Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const invoice = $('Lookup Invoice').first()?.json || null;\nconst customer = $('Lookup Customer').first()?.json || null;\nconst intent = $('Parse Intent').first().json;\n\nif (!customer) {\n  return {\n    success: false,\n    error: 'customer_not_found',\n    message: `Kunde \"${intent.customer_name}\" wurde nicht gefunden.`\n  };\n}\n\nif (intent.intent === 'invoice_reminder' && !invoice) {\n  return {\n    success: false,\n    error: 'invoice_not_found',\n    message: `Keine offene Rechnung für ${customer.name} gefunden.`\n  };\n}\n\nconst callScript = intent.intent === 'invoice_reminder'\n  ? `Guten Tag, hier ist VoiceInvoice. Ich rufe an bezüglich der offenen Rechnung ${invoice.invoice_number} über ${invoice.amount}€. Die Rechnung ist seit dem ${invoice.due_date} fällig. Können wir eine Zahlung besprechen?`\n  : `Guten Tag, hier ist VoiceInvoice. Ich möchte Sie an Ihren Termin am ${intent.appointment_date} erinnern. Ist dieser Termin noch passend für Sie?`;\n\nreturn {\n  success: true,\n  customer_id: customer.id,\n  customer_name: customer.name,\n  customer_phone: customer.phone,\n  invoice_id: invoice?.id || null,\n  invoice_number: invoice?.invoice_number || null,\n  invoice_amount: invoice?.amount || null,\n  intent: intent.intent,\n  urgency: intent.urgency,\n  call_script: callScript\n};"
+      },
+      "id": "prepare-call",
+      "name": "Prepare Call Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "success-check",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-ready",
+      "name": "Check Ready to Call",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/realtime/sessions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.OPENAI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-realtime-preview\",\n  \"voice\": \"nova\",\n  \"instructions\": \"{{ $json.call_script.replace(/\"/g, '\\\\\"') }}\\n\\nDu bist ein professioneller Telefonagent für VoiceInvoice. Sprich auf Deutsch.\\n\\nWichtige Regeln:\\n1. Sei höflich und professionell\\n2. Höre dem Kunden aktiv zu\\n3. Notiere Zahlungszusagen oder Terminänderungen\\n4. Bei Problemen biete einen Rückruf an\\n5. Beende das Gespräch freundlich\",\n  \"input_audio_format\": \"pcm16\",\n  \"output_audio_format\": \"pcm16\",\n  \"input_audio_transcription\": {\n    \"model\": \"whisper-1\"\n  },\n  \"turn_detection\": {\n    \"type\": \"server_vad\",\n    \"threshold\": 0.5,\n    \"prefix_padding_ms\": 300,\n    \"silence_duration_ms\": 500\n  },\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"name\": \"record_outcome\",\n      \"description\": \"Zeichnet das Ergebnis des Anrufs auf\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"outcome\": {\n            \"type\": \"string\",\n            \"enum\": [\"payment_promised\", \"callback_requested\", \"dispute\", \"no_answer\", \"wrong_number\", \"appointment_confirmed\", \"appointment_rescheduled\"]\n          },\n          \"notes\": { \"type\": \"string\" },\n          \"callback_date\": { \"type\": \"string\" },\n          \"payment_date\": { \"type\": \"string\" }\n        },\n        \"required\": [\"outcome\"]\n      }\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "create-realtime-session",
+      "name": "Create OpenAI Realtime Session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ $env.TWILIO_ACCOUNT_SID }}/Calls.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{ $('Prepare Call Data').first().json.customer_phone }}"
+            },
+            {
+              "name": "From",
+              "value": "={{ $env.TWILIO_PHONE_NUMBER }}"
+            },
+            {
+              "name": "Url",
+              "value": "={{ $env.N8N_WEBHOOK_URL }}/webhook/openai-realtime-twiml?session_id={{ $json.id }}&customer_id={{ $('Prepare Call Data').first().json.customer_id }}"
+            },
+            {
+              "name": "StatusCallback",
+              "value": "={{ $env.N8N_WEBHOOK_URL }}/webhook/call-status-openai"
+            },
+            {
+              "name": "StatusCallbackEvent",
+              "value": "initiated ringing answered completed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "twilio-call",
+      "name": "Initiate Twilio Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 200],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "twilio-auth",
+          "name": "Twilio Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "call_logs",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "customer_id": "={{ $('Prepare Call Data').first().json.customer_id }}",
+            "invoice_id": "={{ $('Prepare Call Data').first().json.invoice_id }}",
+            "call_type": "={{ $('Parse Intent').first().json.intent }}",
+            "call_sid": "={{ $json.sid }}",
+            "status": "initiated",
+            "provider": "openai-realtime",
+            "session_id": "={{ $('Create OpenAI Realtime Session').first().json.id }}",
+            "created_at": "={{ new Date().toISOString() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-call",
+      "name": "Log Call",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2440, 200],
+      "credentials": {
+        "postgres": {
+          "id": "voiceinvoice-db",
+          "name": "VoiceInvoice Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"Anruf wird gestartet\",\n  \"call_sid\": \"{{ $('Initiate Twilio Call').first().json.sid }}\",\n  \"session_id\": \"{{ $('Create OpenAI Realtime Session').first().json.id }}\",\n  \"customer\": \"{{ $('Prepare Call Data').first().json.customer_name }}\",\n  \"provider\": \"openai-realtime\"\n}",
+        "options": {}
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2660, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": \"{{ $('Prepare Call Data').first().json.error || 'unknown_error' }}\",\n  \"message\": \"{{ $('Prepare Call Data').first().json.message || 'Ein Fehler ist aufgetreten' }}\"\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "openai-realtime-twiml",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "twiml-webhook",
+      "name": "TwiML Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 560],
+      "webhookId": "openai-realtime-twiml"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Response>\n  <Connect>\n    <Stream url=\"wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview\">\n      <Parameter name=\"Authorization\" value=\"Bearer {{ $env.OPENAI_API_KEY }}\" />\n      <Parameter name=\"OpenAI-Beta\" value=\"realtime=v1\" />\n    </Stream>\n  </Connect>\n</Response>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/xml"
+              }
+            ]
+          }
+        }
+      },
+      "id": "twiml-response",
+      "name": "TwiML Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 560]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "call-status-openai",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "status-webhook",
+      "name": "Call Status Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 760],
+      "webhookId": "call-status-openai"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "call_logs",
+          "mode": "list"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "call_sid",
+              "value": "={{ $json.CallSid }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.CallStatus }}",
+            "duration": "={{ $json.CallDuration || null }}",
+            "updated_at": "={{ new Date().toISOString() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "update-call-log",
+      "name": "Update Call Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 760],
+      "credentials": {
+        "postgres": {
+          "id": "voiceinvoice-db",
+          "name": "VoiceInvoice Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "openai-function-result",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "function-result-webhook",
+      "name": "Function Result Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 960],
+      "webhookId": "openai-function-result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "record-outcome",
+              "leftValue": "={{ $json.function_name }}",
+              "rightValue": "record_outcome",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-function",
+      "name": "Route Function",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 960]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "call_logs",
+          "mode": "list"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "session_id",
+              "value": "={{ $json.session_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "outcome": "={{ $json.arguments.outcome }}",
+            "notes": "={{ $json.arguments.notes || null }}",
+            "callback_date": "={{ $json.arguments.callback_date || null }}",
+            "payment_date": "={{ $json.arguments.payment_date || null }}",
+            "updated_at": "={{ new Date().toISOString() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "record-outcome",
+      "name": "Record Outcome",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [680, 860],
+      "credentials": {
+        "postgres": {
+          "id": "voiceinvoice-db",
+          "name": "VoiceInvoice Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "callback-requested",
+              "leftValue": "={{ $json.arguments.outcome }}",
+              "rightValue": "callback_requested",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-callback",
+      "name": "Check Callback",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 860]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "scheduled_callbacks",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "call_log_id": "={{ $('Record Outcome').first().json.id }}",
+            "scheduled_date": "={{ $json.arguments.callback_date }}",
+            "status": "pending",
+            "created_at": "={{ new Date().toISOString() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "schedule-callback",
+      "name": "Schedule Callback",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1120, 760],
+      "credentials": {
+        "postgres": {
+          "id": "voiceinvoice-db",
+          "name": "VoiceInvoice Database"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Voice Command Webhook": {
+      "main": [
+        [
+          {
+            "node": "Whisper STT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whisper STT": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o Intent Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o Intent Classification": {
+      "main": [
+        [
+          {
+            "node": "Parse Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Intent": {
+      "main": [
+        [
+          {
+            "node": "Route by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Intent": {
+      "main": [
+        [
+          {
+            "node": "Lookup Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lookup Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Invoice": {
+      "main": [
+        [
+          {
+            "node": "Prepare Call Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Customer": {
+      "main": [
+        [
+          {
+            "node": "Prepare Call Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Call Data": {
+      "main": [
+        [
+          {
+            "node": "Check Ready to Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Ready to Call": {
+      "main": [
+        [
+          {
+            "node": "Create OpenAI Realtime Session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create OpenAI Realtime Session": {
+      "main": [
+        [
+          {
+            "node": "Initiate Twilio Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initiate Twilio Call": {
+      "main": [
+        [
+          {
+            "node": "Log Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Call": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TwiML Webhook": {
+      "main": [
+        [
+          {
+            "node": "TwiML Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Status Webhook": {
+      "main": [
+        [
+          {
+            "node": "Update Call Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function Result Webhook": {
+      "main": [
+        [
+          {
+            "node": "Route Function",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Function": {
+      "main": [
+        [
+          {
+            "node": "Record Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Outcome": {
+      "main": [
+        [
+          {
+            "node": "Check Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Callback": {
+      "main": [
+        [
+          {
+            "node": "Schedule Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "voice-agent"
+    },
+    {
+      "name": "phone-automation"
+    },
+    {
+      "name": "openai"
+    }
+  ],
+  "triggerCount": 4,
+  "updatedAt": "2026-01-25T12:00:00.000Z",
+  "versionId": "1"
+}

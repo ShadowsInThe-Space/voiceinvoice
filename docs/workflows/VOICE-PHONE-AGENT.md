@@ -4,13 +4,29 @@ Sprachgesteuerter Telefon-Agent für Kunden-Erinnerungen (Rechnungen & Termine).
 
 ## Stack-Optionen
 
-| Option | STT | LLM | TTS | Latenz | Kosten |
-|--------|-----|-----|-----|--------|--------|
-| **Gemini + ElevenLabs (empfohlen)** | Gemini 2.5 Native | Gemini 2.5 Flash | ElevenLabs Turbo v2.5 | ~300ms | ~€0.07/min |
-| OpenAI + VAPI | Whisper | GPT-4o | VAPI/ElevenLabs | ~500ms | ~€0.09/min |
-| Full ElevenLabs | ElevenLabs Native | Gemini/GPT | ElevenLabs | ~250ms | ~€0.08/min |
+| Option | STT | LLM | TTS | Latenz | Kosten | Workflow-Datei |
+|--------|-----|-----|-----|--------|--------|----------------|
+| **Gemini + ElevenLabs (empfohlen)** | Gemini 2.5 Native | Gemini 2.5 Flash | ElevenLabs Turbo v2.5 | ~300ms | ~€0.07/min | `voice-phone-agent-gemini-elevenlabs.json` |
+| **OpenAI Realtime** | GPT-4o Native | GPT-4o Native | GPT-4o Native | ~400ms | ~€0.12/min | `voice-phone-agent-openai.json` |
+| OpenAI Pipeline | Whisper | GPT-4o | OpenAI TTS | ~800ms | ~€0.08/min | `voice-phone-agent-openai.json` (Pipeline-Modus) |
+| Legacy VAPI | Whisper | GPT-4o | VAPI/ElevenLabs | ~500ms | ~€0.09/min | `voice-triggered-phone-agent.json` |
 
 **Aktuelle Empfehlung:** Gemini 2.5 Flash + ElevenLabs Conversational AI 2.0
+
+### Provider-Vergleich
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           VOICE AGENT PROVIDER COMPARISON                        │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+Provider              │ Latenz    │ Voice Quality │ Control │ Preis   │ Best For
+──────────────────────┼───────────┼───────────────┼─────────┼─────────┼─────────────
+Gemini 2.5 Flash      │ ~250ms    │ ★★★☆☆         │ Medium  │ Low     │ Latency-kritisch
+ElevenLabs Conv. AI   │ ~300ms    │ ★★★★★         │ Medium  │ Medium  │ Voice Quality
+OpenAI Realtime       │ ~400ms    │ ★★★★☆         │ Medium  │ High    │ GPT-4o Reasoning
+OpenAI Pipeline       │ ~800ms    │ ★★★★☆         │ High    │ Medium  │ Max. Kontrolle
+```
 
 ### Warum diese Kombination?
 
@@ -114,10 +130,18 @@ Sprachgesteuerter Telefon-Agent für Kunden-Erinnerungen (Rechnungen & Termine).
 GOOGLE_AI_API_KEY=AIza...              # Gemini 2.5 Flash
 ELEVENLABS_API_KEY=sk_...              # ElevenLabs Conversational AI
 ELEVENLABS_PHONE_NUMBER=+49...         # ElevenLabs Telefonnummer
+
+# .env - OpenAI Stack (Alternative)
+OPENAI_API_KEY=sk-...                  # OpenAI Realtime/Whisper/GPT-4/TTS
+TWILIO_ACCOUNT_SID=AC...               # Twilio für Telefonate
+TWILIO_AUTH_TOKEN=...                  # Twilio Auth
+TWILIO_PHONE_NUMBER=+49...             # Twilio Telefonnummer
+
+# Gemeinsam
 SLACK_BOT_TOKEN=xoxb-...               # Slack Notifications
+N8N_WEBHOOK_URL=https://...            # n8n Webhook Base URL
 
 # Optional: Legacy VAPI Stack
-OPENAI_API_KEY=sk-...                  # Whisper + GPT-4
 VAPI_API_KEY=vapi-...                  # VAPI Telefon-Agent
 VAPI_PHONE_NUMBER_ID=pn-...            # VAPI Telefonnummer
 ```
@@ -384,6 +408,104 @@ Der GPT-4 Analyzer kategorisiert Anrufergebnisse:
 | GPT-4 (Analyse) | ~$0.02 | $0.02 |
 | **Gesamt** | | **~$0.09/Anruf** |
 
+## Voice Agent Factory (TypeScript)
+
+Die `VoiceAgentFactory` bietet ein einheitliches Interface für alle Provider:
+
+```typescript
+import { VoiceAgentFactory, type VoiceAgentProvider } from '@/lib/voice-agent';
+
+// Provider auswählen
+const provider: VoiceAgentProvider = 'gemini'; // oder 'elevenlabs', 'openai-realtime', 'openai-pipeline'
+
+// Agent erstellen
+const agent = VoiceAgentFactory.create({
+  provider,
+  apiKey: process.env.GOOGLE_AI_API_KEY!,
+  voice: 'Kore',
+  systemInstruction: 'Du bist ein freundlicher Telefon-Assistent für Rechnungserinnerungen.',
+  language: 'de-DE',
+  tools: [{
+    name: 'record_outcome',
+    description: 'Speichert das Ergebnis des Gesprächs',
+    parameters: {
+      type: 'object',
+      properties: {
+        outcome: { type: 'string', enum: ['payment_promised', 'callback_requested', 'dispute'] },
+        notes: { type: 'string' }
+      },
+      required: ['outcome']
+    }
+  }]
+});
+
+// Events abonnieren
+agent.on('connected', () => console.log('Verbunden'));
+agent.on('transcribed', (text, isFinal) => console.log('Kunde:', text));
+agent.on('responseText', (text) => console.log('Agent:', text));
+agent.on('responseAudio', (audio) => playAudio(audio));
+agent.on('functionCall', (name, callId, args) => {
+  // Tool-Aufruf verarbeiten
+  agent.sendFunctionResult(callId, { success: true });
+});
+
+// Verbinden und Audio senden
+await agent.connect();
+agent.sendAudio(audioBuffer);
+
+// Empfehlung basierend auf Anforderungen
+const recommended = VoiceAgentFactory.recommend({
+  prioritizeLatency: true,    // → 'gemini'
+  prioritizeVoiceQuality: true, // → 'elevenlabs'
+  prioritizeControl: true,    // → 'openai-pipeline'
+  prioritizeCost: true        // → 'gemini'
+});
+```
+
+### Provider-Charakteristiken
+
+```typescript
+const characteristics = VoiceAgentFactory.getCharacteristics('gemini');
+// {
+//   name: 'Gemini 2.5 Flash Live',
+//   latency: '~250ms',
+//   voiceQuality: 'Good',
+//   control: 'Medium',
+//   cost: 'Low',
+//   strengths: ['Lowest latency', 'Native audio understanding', 'Good German'],
+//   weaknesses: ['Fewer voice options', 'Less natural prosody']
+// }
+```
+
+## OpenAI Realtime API Details
+
+Der OpenAI Stack nutzt die GPT-4o Realtime API für native Audio-Verarbeitung:
+
+### Realtime-Modus (empfohlen)
+- WebSocket-basiert für Echtzeit-Streaming
+- Native Audio-Verständnis (kein separates STT)
+- Server-seitige VAD (Voice Activity Detection)
+- Barge-in Support durch `cancelResponse()`
+
+### Pipeline-Modus (für mehr Kontrolle)
+- Whisper STT → GPT-4o → OpenAI TTS
+- Höhere Latenz (~800-1200ms)
+- Volle Kontrolle über jeden Schritt
+- Ideal für Debugging und komplexe Logik
+
+### n8n Workflow (OpenAI)
+
+```bash
+# Import
+n8n import:workflow --input=voice-phone-agent-openai.json
+```
+
+Webhooks:
+- `POST /voice-command-openai` - Sprachbefehl empfangen
+- `POST /openai-realtime-twiml` - TwiML für Twilio
+- `POST /call-status-openai` - Anruf-Status Updates
+- `POST /openai-function-result` - Function Call Ergebnisse
+
 ## Erweiterungsmöglichkeiten
 
 1. **SMS-Fallback**: Wenn Anruf nicht angenommen, SMS senden
@@ -392,3 +514,4 @@ Der GPT-4 Analyzer kategorisiert Anrufergebnisse:
 4. **CRM-Sync**: Anrufprotokolle in HubSpot/Salesforce
 5. **Multi-Language**: Englische Scripts für internationale Kunden
 6. **Sentiment-Dashboard**: Visualisierung der Kundenstimmung über Zeit
+7. **Provider-Fallback**: Automatischer Wechsel bei Provider-Ausfall
