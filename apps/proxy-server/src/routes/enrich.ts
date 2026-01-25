@@ -62,14 +62,27 @@ export async function registerEnrichRoutes(server: FastifyInstance): Promise<voi
 
     const { transcript } = validation.data;
 
-    // Extract invoice data from transcript
-    const result = await extractInvoiceData(transcript);
+    try {
+      // Extract invoice data from transcript
+      const result = await extractInvoiceData(transcript);
 
-    const response: EnrichResponse = {
-      invoice: result.invoice,
-      confidence: result.confidence,
-    };
+      const response: EnrichResponse = {
+        invoice: result.invoice,
+        confidence: result.confidence,
+      };
 
-    return reply.status(200).send(response);
+      return reply.status(200).send(response);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      server.log.error({ err: error }, 'Invoice extraction failed');
+
+      const errorResponse: ErrorResponse = {
+        error: `Invoice extraction failed: ${errorMessage}`,
+        statusCode: 500,
+      };
+
+      return reply.status(500).send(errorResponse);
+    }
   });
 }

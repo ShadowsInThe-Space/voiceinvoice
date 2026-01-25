@@ -152,7 +152,6 @@ function setupHandlers(): void {
   );
   ipcMain.handle('voice:list-recordings', () => listRecordings());
   ipcMain.handle('voice:delete-recording', (_event, filePath) => deleteRecording(filePath));
-
   // Analytics handlers
   ipcMain.handle('analytics:getKPIs', () => getWorkflowKPIsHandler());
   ipcMain.handle('analytics:getStats', (_event, startDate, endDate, workflowIntent) =>
@@ -206,7 +205,6 @@ app.whenReady().then(() => {
       mainWindow = createMainWindow();
     }
   });
-
   // Check for updates in production
   if (!isDev) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -223,7 +221,6 @@ app.whenReady().then(() => {
     });
   }
 });
-
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();

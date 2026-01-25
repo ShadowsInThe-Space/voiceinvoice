@@ -21,6 +21,5 @@ export type { LogoUploadProps } from './LogoUpload';
 
 export { SystemAlert, SystemAlertContainer, useSystemAlerts, SYSTEM_ALERTS } from './SystemAlert';
 export type { SystemAlertConfig, AlertType } from './SystemAlert';
-
 export { PhoneAgentButton } from './PhoneAgentButton';
 export type { PhoneAgentButtonProps } from './PhoneAgentButton';
