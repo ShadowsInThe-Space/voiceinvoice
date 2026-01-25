@@ -3,8 +3,8 @@
  *
  * Handles voice-to-invoice processing:
  * 1. Receives audio blob
- * 2. Transcribes with Google Cloud Speech-to-Text Chirp 3
- * 3. Extracts entities with Gemini 2.0 Flash Experimental
+ * 2. Transcribes with Gemini 2.0 Flash (multimodal audio support)
+ * 3. Extracts entities with Gemini 2.5 Flash
  * 4. Returns invoice data
  *
  * @module api/voice/process
@@ -12,7 +12,6 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GoogleChirpClient } from '@voiceinvoice/privacy-engine';
 import formidable from 'formidable';
 import fs from 'fs';
 
@@ -90,30 +89,35 @@ export default async function handler(
       path: audioFile.filepath,
     });
 
-    // Read audio file as Buffer
+    // Read audio file as base64
     const audioBuffer = await fs.promises.readFile(audioFile.filepath);
+    const audioBase64 = audioBuffer.toString('base64');
 
-    // Step 1: Transcribe with Chirp 3
-    console.log('[Voice API] Starting Chirp 3 transcription...');
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT;
-    if (!projectId) {
-      throw new Error('Missing GOOGLE_CLOUD_PROJECT environment variable');
+    // Step 1: Transcribe with Gemini (Audio-to-Text capability)
+    console.log('[Voice API] Starting Gemini audio transcription...');
+    const geminiApiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+    if (!geminiApiKey) {
+      throw new Error('Missing Gemini API key');
     }
 
-    const chirpClient = new GoogleChirpClient({
-      projectId,
-      location: process.env.GOOGLE_CLOUD_LOCATION || 'eu',
-      recognizerId: process.env.CHIRP3_RECOGNIZER || 'chirp-german',
-    });
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    const transcriptionModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
-    const transcriptionResult = await chirpClient.transcribeWithRedaction(audioBuffer, 'de-DE', {
-      redactEmails: true,
-      redactPhoneNumbers: true,
-    });
+    const transcriptionPrompt = [
+      {
+        inlineData: {
+          mimeType: audioFile.mimetype || 'audio/webm',
+          data: audioBase64,
+        },
+      },
+      {
+        text: 'Transkribiere dieses deutsche Audio präzise. Gib nur den transkribierten Text zurück, keine Erklärungen.',
+      },
+    ];
 
-    const transcription = transcriptionResult.text;
-    console.log('[Voice API] Chirp 3 transcription:', transcription);
-    console.log('[Voice API] Redactions:', transcriptionResult.redactions.length);
+    const transcriptionResponse = await transcriptionModel.generateContent(transcriptionPrompt);
+    const transcription = transcriptionResponse.response.text().trim();
+    console.log('[Voice API] Gemini transcription:', transcription);
 
     if (!transcription || transcription.trim().length === 0) {
       res.status(400).json({
@@ -123,14 +127,8 @@ export default async function handler(
       return;
     }
 
-    // Step 2: Extract invoice data with Gemini 2.0 Flash Experimental
+    // Step 2: Extract invoice data with Gemini
     console.log('[Voice API] Extracting invoice data with Gemini...');
-    const geminiApiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
-    if (!geminiApiKey) {
-      throw new Error('Missing Gemini API key');
-    }
-
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const extractionPrompt = `Du bist ein Rechnungs-Extraktions-Assistent für deutsche Buchhaltung.
@@ -213,7 +211,7 @@ WICHTIG:
     res.status(200).json({
       success: true,
       transcription,
-      confidence: 0.95, // Chirp 3 doesn't provide per-word confidence in this API
+      confidence: 0.9, // Gemini audio transcription confidence estimate
       invoice,
     });
   } catch (error) {
