@@ -92,6 +92,19 @@ export interface FileApi {
 }
 
 /**
+ * Banking API for CSV import and invoice matching.
+ */
+export interface BankingApi {
+  selectCsvFiles: () => Promise<unknown>;
+  selectFolder: () => Promise<unknown>;
+  importCsv: (filePath: string) => Promise<unknown>;
+  getAllTransactions: () => Promise<unknown>;
+  getUnmatchedTransactions: () => Promise<unknown>;
+  findMatches: (transactionId: string) => Promise<unknown>;
+  confirmMatch: (transactionId: string, invoiceId: string, confidence: number) => Promise<unknown>;
+}
+
+/**
  * Complete Preload API interface.
  *
  * This is the full API exposed to the renderer process
@@ -105,6 +118,7 @@ export interface PreloadApi {
   app: AppApi;
   file: FileApi;
   analytics: AnalyticsApi;
+  banking: BankingApi;
 }
 
 /**
@@ -182,6 +196,17 @@ export function createPreloadApi(invoke: IpcInvoker): PreloadApi {
       getTimelineInvoices: () => invoke('analytics:getTimelineInvoices'),
       getTopCustomers: (limit?: number) => invoke('analytics:getTopCustomers', limit),
       triggerAggregation: () => invoke('analytics:triggerAggregation'),
+    },
+
+    banking: {
+      selectCsvFiles: () => invoke('banking:selectCsvFiles'),
+      selectFolder: () => invoke('banking:selectFolder'),
+      importCsv: (filePath: string) => invoke('banking:importCsv', filePath),
+      getAllTransactions: () => invoke('banking:getAllTransactions'),
+      getUnmatchedTransactions: () => invoke('banking:getUnmatchedTransactions'),
+      findMatches: (transactionId: string) => invoke('banking:findMatches', transactionId),
+      confirmMatch: (transactionId: string, invoiceId: string, confidence: number) =>
+        invoke('banking:confirmMatch', transactionId, invoiceId, confidence),
     },
   };
 }

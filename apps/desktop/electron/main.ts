@@ -11,14 +11,40 @@
  * @module electron/main
  */
 
-import { app, BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import { spawn, ChildProcess } from 'child_process';
 import { createWindowConfig } from './window-manager';
-import { registerIpcHandlers } from './ipc';
-import { context } from './context';
-import { ensureDatabaseExists, logDatabaseConfig, getDatabaseUrl } from './lib/database-path';
+import {
+  createInvoiceHandler,
+  getCustomersHandler,
+  getSettingsHandler,
+  updateSettingsHandler,
+  type IpcHandlerContext,
+} from './ipc/handlers';
+import { saveRecording, listRecordings, deleteRecording } from './ipc/voice-handlers';
+import {
+  getWorkflowKPIsHandler,
+  getExecutionStatsHandler,
+  getDailyCountsHandler,
+  getSuccessRatesHandler,
+  getErrorBreakdownHandler,
+  getRecentExecutionsHandler,
+  getTimelineInvoicesHandler,
+  getTopCustomersHandler,
+} from './ipc/analytics-handlers';
+import { PrismaClient } from '@prisma/client';
+import {
+  selectCsvFilesHandler,
+  selectFolderHandler,
+  importCsvHandler,
+  getAllTransactionsHandler,
+  getUnmatchedTransactionsHandler,
+  findMatchesHandler,
+  confirmMatchHandler,
+  BankingIpcContext,
+} from './ipc/banking-handlers';
+import { BankingService } from '../src/lib/banking/banking-service';
 
 /**
  * Main application window reference.
@@ -27,16 +53,6 @@ import { ensureDatabaseExists, logDatabaseConfig, getDatabaseUrl } from './lib/d
  * and for future use (e.g., menu bar, tray icon).
  */
 let mainWindow: BrowserWindow | null = null;
-
-/**
- * Next.js standalone server process (production only).
- */
-let nextServerProcess: ChildProcess | null = null;
-
-/**
- * Port for the Next.js server.
- */
-const NEXT_SERVER_PORT = 3000;
 
 /**
  * Returns the main window instance.
@@ -51,80 +67,6 @@ export function getMainWindow(): BrowserWindow | null {
  * Whether the app is running in development mode.
  */
 const isDev = process.env.NODE_ENV === 'development';
-
-/**
- * Starts the Next.js standalone server in production.
- *
- * @returns {Promise<void>} Resolves when server is ready
- */
-async function startNextServer(): Promise<void> {
-  if (isDev) return;
-
-  // In a monorepo, Next.js standalone preserves the directory structure
-  // Use app.getAppPath() for correct path resolution in packaged app
-  const appPath = app.getAppPath();
-  const serverPath = path.join(appPath, '.next', 'standalone', 'apps', 'desktop', 'server.js');
-
-  // Check if standalone server exists
-  if (!fs.existsSync(serverPath)) {
-    console.error('Next.js standalone server not found at:', serverPath);
-    throw new Error('Standalone server not found. Run "next build" first.');
-  }
-
-  return new Promise((resolve, reject) => {
-    console.log('Starting Next.js standalone server...');
-
-    // Get the correct writable database URL
-    const databaseUrl = getDatabaseUrl();
-    console.log('[Next.js] Using DATABASE_URL:', databaseUrl);
-
-    nextServerProcess = spawn('node', [serverPath], {
-      env: {
-        ...process.env,
-        PORT: String(NEXT_SERVER_PORT),
-        HOSTNAME: 'localhost',
-        DATABASE_URL: databaseUrl,
-      },
-      cwd: path.join(appPath, '.next', 'standalone', 'apps', 'desktop'),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    let serverReady = false;
-
-    nextServerProcess.stdout?.on('data', (data: Buffer) => {
-      const output = data.toString();
-      console.log('[Next.js]', output);
-
-      // Check if server is ready
-      if (output.includes('Ready') || output.includes('started server')) {
-        serverReady = true;
-        resolve();
-      }
-    });
-
-    nextServerProcess.stderr?.on('data', (data: Buffer) => {
-      console.error('[Next.js Error]', data.toString());
-    });
-
-    nextServerProcess.on('error', (err) => {
-      console.error('Failed to start Next.js server:', err);
-      reject(err);
-    });
-
-    nextServerProcess.on('exit', (code) => {
-      console.log('Next.js server exited with code:', code);
-      nextServerProcess = null;
-    });
-
-    // Timeout: resolve anyway after 5 seconds (server might be ready without message)
-    setTimeout(() => {
-      if (!serverReady) {
-        console.log('Server startup timeout - assuming ready');
-        resolve();
-      }
-    }, 5000);
-  });
-}
 
 /**
  * Path to the preload script.
@@ -163,14 +105,6 @@ function createMainWindow(): BrowserWindow {
     mainWindow = null;
   });
 
-  // Enable DevTools shortcut (Ctrl+Shift+I) in both dev and production
-  win.webContents.on('before-input-event', (event, input) => {
-    if (input.control && input.shift && input.key.toLowerCase() === 'i') {
-      win.webContents.toggleDevTools();
-      event.preventDefault();
-    }
-  });
-
   // Load the appropriate URL
   if (isDev) {
     // Development: Load from Next.js dev server
@@ -180,36 +114,143 @@ function createMainWindow(): BrowserWindow {
     // Open DevTools in development
     win.webContents.openDevTools();
   } else {
-    // Production: Load from Next.js standalone server
-    const serverUrl = `http://localhost:${NEXT_SERVER_PORT}`;
-    win.loadURL(serverUrl);
+    // Production: Load from exported Next.js build
+    const indexPath = path.join(__dirname, '..', 'out', 'index.html');
+    win.loadFile(indexPath);
   }
 
   return win;
 }
 
-// App lifecycle
-app.whenReady().then(async () => {
-  // Initialize database before setting up handlers
-  logDatabaseConfig();
-  await ensureDatabaseExists();
+// Mock Database Implementation for UI Demo
+// In a real app, this would import @voiceinvoice/database
+const databaseOperations = {
+  createInvoice: async (data: unknown) => {
+    console.log('Mock DB: createInvoice', data);
+    return { id: 'mock-id', ...(data as object) };
+  },
+  getCustomers: async () => {
+    return [
+      { id: 'c1', companyName: 'Acme Corp', type: 'CUSTOMER' },
+      { id: 'c2', companyName: 'Globex', type: 'SUPPLIER' },
+    ];
+  },
+  getSettings: async () => {
+    return { privacyMode: 'STRICT', n8nEnabled: false };
+  },
+  updateSettings: async (data: unknown) => {
+    console.log('Mock DB: updateSettings', data);
+    return data;
+  },
+};
 
-  // Register all IPC handlers from modular structure
-  registerIpcHandlers(context);
+const context: IpcHandlerContext = {
+  database: databaseOperations,
+};
 
-  // Start Next.js server in production before creating window
-  try {
-    await startNextServer();
-  } catch (err) {
-    console.error('Failed to start Next.js server:', err);
-    dialog.showErrorBox(
-      'Server Error',
-      'Failed to start the application server. Please try again.'
-    );
-    app.quit();
-    return;
+/**
+ * Banking context for IPC handlers.
+ * Initialized lazily when first banking operation is called.
+ */
+let bankingContext: BankingIpcContext | null = null;
+
+/**
+ * Initializes the banking context with Prisma client.
+ *
+ * @returns {BankingIpcContext} Banking context
+ */
+function getBankingContext(): BankingIpcContext {
+  if (!bankingContext) {
+    bankingContext = {
+      prisma: new PrismaClient(),
+      bankingService: new BankingService(),
+    };
   }
+  return bankingContext;
+}
 
+// Setup handlers
+function setupHandlers(): void {
+  // Invoice handlers
+  ipcMain.handle('invoice:create', (_event, data) => createInvoiceHandler(context, data));
+  ipcMain.handle('customer:list', () => getCustomersHandler(context));
+
+  // Settings handlers
+  ipcMain.handle('settings:get', () => getSettingsHandler(context));
+  ipcMain.handle('settings:update', (_event, data) => updateSettingsHandler(context, data));
+
+  // Voice handlers
+  ipcMain.handle('voice:save-recording', (_event, audioData, duration, mimeType) =>
+    saveRecording(audioData, duration, mimeType)
+  );
+  ipcMain.handle('voice:list-recordings', () => listRecordings());
+  ipcMain.handle('voice:delete-recording', (_event, filePath) => deleteRecording(filePath));
+
+  // Analytics handlers
+  ipcMain.handle('analytics:getKPIs', () => getWorkflowKPIsHandler());
+  ipcMain.handle('analytics:getStats', (_event, startDate, endDate, workflowIntent) =>
+    getExecutionStatsHandler(startDate, endDate, workflowIntent)
+  );
+  ipcMain.handle('analytics:getDailyCounts', (_event, days) => getDailyCountsHandler(days));
+  ipcMain.handle('analytics:getSuccessRates', () => getSuccessRatesHandler());
+  ipcMain.handle('analytics:getErrorBreakdown', () => getErrorBreakdownHandler());
+  ipcMain.handle('analytics:getRecentExecutions', (_event, limit, workflowIntent) =>
+    getRecentExecutionsHandler(limit, workflowIntent)
+  );
+  ipcMain.handle('analytics:getTimelineInvoices', () => getTimelineInvoicesHandler());
+  ipcMain.handle('analytics:getTopCustomers', (_event, limit) => getTopCustomersHandler(limit));
+
+  // Banking handlers
+  ipcMain.handle('banking:selectCsvFiles', () => selectCsvFilesHandler());
+  ipcMain.handle('banking:selectFolder', () => selectFolderHandler());
+  ipcMain.handle('banking:importCsv', (_event, filePath) =>
+    importCsvHandler(getBankingContext(), filePath)
+  );
+  ipcMain.handle('banking:getAllTransactions', () =>
+    getAllTransactionsHandler(getBankingContext())
+  );
+  ipcMain.handle('banking:getUnmatchedTransactions', () =>
+    getUnmatchedTransactionsHandler(getBankingContext())
+  );
+  ipcMain.handle('banking:findMatches', (_event, transactionId) =>
+    findMatchesHandler(getBankingContext(), transactionId)
+  );
+  ipcMain.handle('banking:confirmMatch', (_event, transactionId, invoiceId, confidence) =>
+    confirmMatchHandler(getBankingContext(), transactionId, invoiceId, confidence)
+  );
+
+  // File handlers
+  ipcMain.handle(
+    'file:saveFile',
+    async (
+      _event,
+      content: string,
+      defaultFilename: string,
+      filters: { name: string; extensions: string[] }[]
+    ) => {
+      try {
+        const result = await dialog.showSaveDialog({
+          defaultPath: defaultFilename,
+          filters: filters,
+        });
+
+        if (result.canceled || !result.filePath) {
+          return false;
+        }
+
+        fs.writeFileSync(result.filePath, content, 'utf-8');
+        return true;
+      } catch (error) {
+        console.error('Error saving file:', error);
+        return false;
+      }
+    }
+  );
+}
+
+// App lifecycle
+app.whenReady().then(() => {
+  setupHandlers();
   mainWindow = createMainWindow();
 
   app.on('activate', () => {
@@ -217,40 +258,11 @@ app.whenReady().then(async () => {
       mainWindow = createMainWindow();
     }
   });
-  // Check for updates in production
-  if (!isDev) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { autoUpdater } = require('electron-updater');
-    console.log('Checking for updates...');
-
-    // Allow prereleases (e.g. beta)
-    autoUpdater.allowPrerelease = true;
-
-    // Check and notify
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    autoUpdater.checkForUpdatesAndNotify().catch((err: any) => {
-      console.error('Failed to check for updates:', err);
-    });
-  }
 });
-app.on('window-all-closed', () => {
-  // Stop Next.js server when all windows are closed
-  if (nextServerProcess) {
-    console.log('Stopping Next.js server...');
-    nextServerProcess.kill();
-    nextServerProcess = null;
-  }
 
+app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
-  }
-});
-
-// Cleanup on app quit
-app.on('will-quit', () => {
-  if (nextServerProcess) {
-    nextServerProcess.kill();
-    nextServerProcess = null;
   }
 });
 
@@ -258,11 +270,7 @@ app.on('will-quit', () => {
 app.on('web-contents-created', (_event, contents) => {
   contents.on('will-navigate', (event, url) => {
     const parsedUrl = new URL(url);
-    const allowedOrigins = [
-      'http://localhost:3002', // Dev server
-      `http://localhost:${NEXT_SERVER_PORT}`, // Production server
-    ];
-    const isAllowed = allowedOrigins.includes(parsedUrl.origin) || url.startsWith('file://');
+    const isAllowed = parsedUrl.origin === 'http://localhost:3002' || url.startsWith('file://');
 
     if (!isAllowed) {
       console.warn('[Security] Blocked navigation to:', url);
