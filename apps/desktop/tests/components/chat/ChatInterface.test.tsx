@@ -65,15 +65,31 @@ vi.mock('../../../src/components/chat/MessageBubble', () => ({
 
 describe('ChatInterface', () => {
   const originalEnv = process.env;
+  const mockGetGoogleApiKey = vi.fn();
+  const mockGetN8nChatWebhook = vi.fn();
+  const mockGetN8nIngestWebhook = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Set up environment variables
-    process.env = {
-      ...originalEnv,
-      NEXT_PUBLIC_GOOGLE_API_KEY: 'test-api-key',
-      NEXT_PUBLIC_N8N_CHAT_WEBHOOK: 'https://test.webhook.url/chat',
-    };
+
+    // Set up default mock return values
+    mockGetGoogleApiKey.mockResolvedValue('test-api-key');
+    mockGetN8nChatWebhook.mockResolvedValue('https://test.webhook.url/chat');
+    mockGetN8nIngestWebhook.mockResolvedValue('https://test.webhook.url/ingest');
+
+    // Mock the window.voiceinvoice API safely
+    Object.defineProperty(global.window, 'voiceinvoice', {
+      value: {
+        env: {
+          getGoogleApiKey: mockGetGoogleApiKey,
+          getN8nChatWebhook: mockGetN8nChatWebhook,
+          getN8nIngestWebhook: mockGetN8nIngestWebhook,
+        },
+      },
+      writable: true,
+      configurable: true,
+    });
+
     global.fetch = vi.fn();
 
     // Mock scrollIntoView
@@ -198,7 +214,8 @@ describe('ChatInterface', () => {
 
   describe('error handling', () => {
     it('should show error message when webhook URL is not configured', async () => {
-      process.env.NEXT_PUBLIC_N8N_CHAT_WEBHOOK = '';
+      // Mock webhook URL as null
+      mockGetN8nChatWebhook.mockResolvedValueOnce(null);
 
       render(<ChatInterface />);
 
@@ -206,8 +223,11 @@ describe('ChatInterface', () => {
       const buttons = screen.getAllByRole('button');
       const sendButton = buttons.find((btn) => !btn.getAttribute('data-testid'));
 
-      fireEvent.change(input, { target: { value: 'Test' } });
-      fireEvent.click(sendButton!);
+      // Wait for config to load
+      await waitFor(() => {
+        fireEvent.change(input, { target: { value: 'Test' } });
+        fireEvent.click(sendButton!);
+      });
 
       await waitFor(() => {
         expect(screen.getByTestId('message-assistant')).toHaveTextContent(
@@ -275,12 +295,17 @@ describe('ChatInterface', () => {
     });
 
     it('should show error when Gemini client is not initialized', async () => {
-      process.env.NEXT_PUBLIC_GOOGLE_API_KEY = '';
+      // Mock API key as null
+      mockGetGoogleApiKey.mockResolvedValueOnce(null);
 
       render(<ChatInterface />);
 
       const voiceButton = screen.getByTestId('voice-recorder-button');
-      fireEvent.click(voiceButton);
+
+      // Wait for config to load
+      await waitFor(() => {
+        fireEvent.click(voiceButton);
+      });
 
       await waitFor(() => {
         expect(screen.getByTestId('message-assistant')).toHaveTextContent(

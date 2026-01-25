@@ -65,6 +65,18 @@ export interface AppApi {
 }
 
 /**
+ * Environment configuration API exposed to renderer.
+ *
+ * Provides secure access to environment variables without
+ * exposing them in the client bundle.
+ */
+export interface EnvApi {
+  getGoogleApiKey: () => Promise<string | null>;
+  getN8nChatWebhook: () => Promise<string | null>;
+  getN8nIngestWebhook: () => Promise<string | null>;
+}
+
+/**
  * Complete Preload API interface.
  *
  * This is the full API exposed to the renderer process
@@ -76,6 +88,7 @@ export interface PreloadApi {
   settings: SettingsApi;
   voice: VoiceApi;
   app: AppApi;
+  env: EnvApi;
 }
 
 /**
@@ -132,6 +145,12 @@ export function createPreloadApi(invoke: IpcInvoker): PreloadApi {
     app: {
       getVersion: () => invoke('app:getVersion') as Promise<string>,
       getPlatform: () => invoke('app:getPlatform') as Promise<string>,
+    },
+
+    env: {
+      getGoogleApiKey: () => invoke('env:getGoogleApiKey') as Promise<string | null>,
+      getN8nChatWebhook: () => invoke('env:getN8nChatWebhook') as Promise<string | null>,
+      getN8nIngestWebhook: () => invoke('env:getN8nIngestWebhook') as Promise<string | null>,
     },
   };
 }

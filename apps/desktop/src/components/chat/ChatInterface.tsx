@@ -5,27 +5,52 @@ import { VoiceRecorderButton } from '../VoiceRecorderButton';
 import { GeminiClient } from '../../lib/ai/gemini-client';
 import { Send, Loader2 } from 'lucide-react';
 
-export function ChatInterface() {
+/**
+ * ChatInterface component.
+ *
+ * Provides a chat interface for RAG-based financial assistance with voice input and document upload.
+ *
+ * @returns {JSX.Element} The chat interface component
+ */
+export function ChatInterface(): JSX.Element {
   const [messages, setMessages] = useState<MessageBubbleProps[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [geminiClient, setGeminiClient] = useState<GeminiClient | null>(null);
+  const [chatWebhookUrl, setChatWebhookUrl] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
-    if (apiKey) {
-      setGeminiClient(new GeminiClient({ apiKey }));
-    } else {
-      console.error('Missing NEXT_PUBLIC_GOOGLE_API_KEY');
+    // Load environment configuration from IPC bridge
+    async function loadConfig(): Promise<void> {
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      if (typeof window !== 'undefined' && (window as any).voiceinvoice?.env) {
+        const apiKey = await (window as any).voiceinvoice.env.getGoogleApiKey();
+        const webhookUrl = await (window as any).voiceinvoice.env.getN8nChatWebhook();
+        /* eslint-enable @typescript-eslint/no-explicit-any */
+
+        if (apiKey) {
+          setGeminiClient(new GeminiClient({ apiKey }));
+        } else {
+          console.error('Missing GOOGLE_API_KEY in environment');
+        }
+
+        if (webhookUrl) {
+          setChatWebhookUrl(webhookUrl);
+        } else {
+          console.error('Missing N8N_CHAT_WEBHOOK in environment');
+        }
+      }
     }
+
+    loadConfig();
   }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string): Promise<void> => {
     if (!text.trim()) return;
 
     setMessages((prev) => [...prev, { role: 'user', content: text }]);
@@ -33,13 +58,12 @@ export function ChatInterface() {
     setIsLoading(true);
 
     try {
-      const webhookUrl = process.env.NEXT_PUBLIC_N8N_CHAT_WEBHOOK;
-      if (!webhookUrl) {
+      if (!chatWebhookUrl) {
         throw new Error('Chat webhook URL not configured');
       }
 
       // Call n8n webhook
-      const response = await fetch(webhookUrl, {
+      const response = await fetch(chatWebhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -70,13 +94,13 @@ export function ChatInterface() {
     }
   };
 
-  const handleVoiceRecordingComplete = async (blob: Blob, duration: number) => {
+  const handleVoiceRecordingComplete = async (blob: Blob, _duration: number): Promise<void> => {
     if (!geminiClient) {
-        setMessages((prev) => [
-            ...prev,
-            { role: 'assistant', content: 'Fehler: Gemini Client nicht initialisiert.' },
-        ]);
-        return;
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Fehler: Gemini Client nicht initialisiert.' },
+      ]);
+      return;
     }
 
     setIsLoading(true);
@@ -84,7 +108,7 @@ export function ChatInterface() {
       // Convert blob to base64
       const reader = new FileReader();
       reader.readAsDataURL(blob);
-      reader.onloadend = async () => {
+      reader.onloadend = async (): Promise<void> => {
         try {
           const base64Data = reader.result as string;
           const base64 = base64Data.split(',')[1]; // Remove data URL prefix
@@ -95,8 +119,8 @@ export function ChatInterface() {
             handleSendMessage(transcription.text);
           } else {
             setMessages((prev) => [
-                ...prev,
-                { role: 'assistant', content: 'Konnte Audio nicht verstehen.' },
+              ...prev,
+              { role: 'assistant', content: 'Konnte Audio nicht verstehen.' },
             ]);
           }
         } catch (error) {
@@ -136,52 +160,64 @@ export function ChatInterface() {
           <MessageBubble key={idx} role={msg.role} content={msg.content} />
         ))}
         {isLoading && (
-            <div className="flex w-full flex-row gap-4 p-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-muted">
-                    <BotIcon className="h-6 w-6 animate-pulse" />
-                </div>
-                <div className="flex items-center">
-                    <span className="text-sm text-muted-foreground">Analysiere...</span>
-                </div>
+          <div className="flex w-full flex-row gap-4 p-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-muted">
+              <BotIcon className="h-6 w-6 animate-pulse" />
             </div>
+            <div className="flex items-center">
+              <span className="text-sm text-muted-foreground">Analysiere...</span>
+            </div>
+          </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
-            <div className="flex-1 relative">
-                <input
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(inputValue)}
-                    placeholder="Nachricht eingeben..."
-                    disabled={isLoading}
-                    className="w-full rounded-full border border-input bg-background px-4 py-3 pr-12 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                />
-                <button
-                    onClick={() => handleSendMessage(inputValue)}
-                    disabled={isLoading || !inputValue.trim()}
-                    className="absolute right-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:opacity-50"
-                >
-                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </button>
-            </div>
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(inputValue)}
+              placeholder="Nachricht eingeben..."
+              disabled={isLoading}
+              className="w-full rounded-full border border-input bg-background px-4 py-3 pr-12 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+            <button
+              onClick={() => handleSendMessage(inputValue)}
+              disabled={isLoading || !inputValue.trim()}
+              className="absolute right-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="flex justify-center">
-            <VoiceRecorderButton
-                onRecordingComplete={handleVoiceRecordingComplete}
-                disabled={isLoading}
-            />
+          <VoiceRecorderButton
+            onRecordingComplete={handleVoiceRecordingComplete}
+            disabled={isLoading}
+          />
         </div>
       </div>
     </div>
   );
 }
 
-function BotIcon(props: React.SVGProps<SVGSVGElement>) {
+/**
+ * BotIcon component.
+ *
+ * SVG icon for the bot/assistant.
+ *
+ * @param {React.SVGProps<SVGSVGElement>} props - SVG element props
+ * @returns {JSX.Element} The bot icon
+ */
+function BotIcon(props: React.SVGProps<SVGSVGElement>): JSX.Element {
   return (
     <svg
       {...props}
@@ -202,5 +238,5 @@ function BotIcon(props: React.SVGProps<SVGSVGElement>) {
       <path d="M15 13v2" />
       <path d="M9 13v2" />
     </svg>
-  )
+  );
 }

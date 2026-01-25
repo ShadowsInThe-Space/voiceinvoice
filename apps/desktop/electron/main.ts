@@ -22,6 +22,7 @@ import {
   type IpcHandlerContext,
 } from './ipc/handlers';
 import { saveRecording, listRecordings, deleteRecording } from './ipc/voice-handlers';
+import { getGoogleApiKey, getN8nChatWebhook, getN8nIngestWebhook } from './ipc/env-handlers';
 
 /**
  * Main application window reference.
@@ -102,27 +103,27 @@ function createMainWindow(): BrowserWindow {
 // Mock Database Implementation for UI Demo
 // In a real app, this would import @voiceinvoice/database
 const databaseOperations = {
-  createInvoice: async (data: unknown) => {
+  createInvoice: async (data: unknown): Promise<{ id: string; [key: string]: unknown }> => {
     console.log('Mock DB: createInvoice', data);
-    return { id: 'mock-id', ...data as object };
+    return { id: 'mock-id', ...(data as object) };
   },
-  getCustomers: async () => {
+  getCustomers: async (): Promise<Array<{ id: string; companyName: string; type: string }>> => {
     return [
       { id: 'c1', companyName: 'Acme Corp', type: 'CUSTOMER' },
-      { id: 'c2', companyName: 'Globex', type: 'SUPPLIER' }
+      { id: 'c2', companyName: 'Globex', type: 'SUPPLIER' },
     ];
   },
-  getSettings: async () => {
+  getSettings: async (): Promise<{ privacyMode: string; n8nEnabled: boolean }> => {
     return { privacyMode: 'STRICT', n8nEnabled: false };
   },
-  updateSettings: async (data: unknown) => {
+  updateSettings: async (data: unknown): Promise<unknown> => {
     console.log('Mock DB: updateSettings', data);
     return data;
-  }
+  },
 };
 
 const context: IpcHandlerContext = {
-  database: databaseOperations
+  database: databaseOperations,
 };
 
 // Setup handlers
@@ -130,17 +131,22 @@ function setupHandlers(): void {
   // Invoice handlers
   ipcMain.handle('invoice:create', (_event, data) => createInvoiceHandler(context, data));
   ipcMain.handle('customer:list', () => getCustomersHandler(context));
-  
+
   // Settings handlers
   ipcMain.handle('settings:get', () => getSettingsHandler(context));
   ipcMain.handle('settings:update', (_event, data) => updateSettingsHandler(context, data));
 
   // Voice handlers
-  ipcMain.handle('voice:save-recording', (_event, audioData, duration, mimeType) => 
+  ipcMain.handle('voice:save-recording', (_event, audioData, duration, mimeType) =>
     saveRecording(audioData, duration, mimeType)
   );
   ipcMain.handle('voice:list-recordings', () => listRecordings());
   ipcMain.handle('voice:delete-recording', (_event, filePath) => deleteRecording(filePath));
+
+  // Environment configuration handlers
+  ipcMain.handle('env:getGoogleApiKey', () => getGoogleApiKey());
+  ipcMain.handle('env:getN8nChatWebhook', () => getN8nChatWebhook());
+  ipcMain.handle('env:getN8nIngestWebhook', () => getN8nIngestWebhook());
 }
 
 // App lifecycle
