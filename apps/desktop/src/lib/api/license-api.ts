@@ -20,6 +20,19 @@ export interface LicenseStatusResponse extends License {
   usageResetDate: string;
 }
 
+export interface CheckoutSessionParams {
+  planId: string;
+  companyName: string;
+  email: string;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export interface CheckoutSessionResponse {
+  sessionId: string;
+  url: string;
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 class LicenseApi {
@@ -99,6 +112,29 @@ class LicenseApi {
       }
       const error = await response.json();
       throw new Error(error.error || 'Failed to get license status');
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Create a Stripe checkout session for a license plan.
+   * @param params
+   */
+  public async createCheckoutSession(
+    params: CheckoutSessionParams
+  ): Promise<CheckoutSessionResponse> {
+    const response = await fetch(`${API_BASE_URL}/api/stripe/checkout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create checkout session');
     }
 
     return response.json();

@@ -6,7 +6,7 @@
  * @module components/workflows/WorkflowTriggerList
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { WorkflowIntent } from '@voiceinvoice/ai-orchestrator';
 import {
   getAvailableWorkflows,
@@ -52,6 +52,7 @@ const WORKFLOW_ICONS: Record<string, string> = {
 
 /**
  * Formats a date as relative time.
+ * @param date
  */
 function formatRelativeTime(date: Date): string {
   const now = new Date();
@@ -68,6 +69,10 @@ function formatRelativeTime(date: Date): string {
 
 /**
  * Single workflow item component.
+ * @param root0
+ * @param root0.workflow
+ * @param root0.state
+ * @param root0.onTrigger
  */
 function WorkflowItem({
   workflow,
@@ -146,6 +151,8 @@ function WorkflowItem({
  * List of workflows with trigger buttons.
  *
  * @param props - Component props
+ * @param props.onWorkflowComplete
+ * @param props.maxItems
  * @returns Workflow trigger list
  *
  * @example
@@ -158,8 +165,13 @@ export function WorkflowTriggerList({
   maxItems = 10,
 }: WorkflowTriggerListProps): React.ReactElement {
   const [workflowStates, setWorkflowStates] = useState<Record<string, WorkflowState>>({});
+  const [workflows, setWorkflows] = useState<WorkflowWebhookConfig[]>([]);
 
-  const workflows = getAvailableWorkflows().slice(0, maxItems);
+  useEffect(() => {
+    getAvailableWorkflows().then((list) => {
+      setWorkflows(list.slice(0, maxItems));
+    });
+  }, [maxItems]);
 
   const handleTrigger = useCallback(
     async (workflow: WorkflowWebhookConfig) => {

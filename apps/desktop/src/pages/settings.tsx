@@ -10,6 +10,7 @@
 import React, { useState, useEffect, useCallback, FormEvent } from 'react';
 import { LogoUpload, LOGO_STORAGE_KEY } from '../components/LogoUpload';
 import Link from 'next/link';
+import { WORKFLOW_STORAGE_KEYS } from '../lib/workflow';
 
 /**
  * Available locale options.
@@ -51,6 +52,8 @@ export default function SettingsPage(): React.ReactElement {
   const [ttsVoice, setTtsVoice] = useState('de-DE-Wavenet-C');
   const [ttsRate, setTtsRate] = useState(1.0);
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  const [workflowsEnabled, setWorkflowsEnabled] = useState(false);
+  const [n8nBaseUrl, setN8nBaseUrl] = useState('http://localhost:5678');
   const [showApiKey, setShowApiKey] = useState(false);
 
   // UI state
@@ -76,9 +79,17 @@ export default function SettingsPage(): React.ReactElement {
       window.voiceinvoice.settings
         .get()
         .then((settings: unknown) => {
-          const typedSettings = settings as { n8nWebhookUrl?: string };
-          if (typedSettings && typedSettings.n8nWebhookUrl) {
-            setN8nWebhookUrl(typedSettings.n8nWebhookUrl);
+          const typedSettings = settings as Record<string, string>;
+          if (typedSettings) {
+            if (typedSettings.n8nWebhookUrl) {
+              setN8nWebhookUrl(typedSettings.n8nWebhookUrl);
+            }
+            if (typedSettings[WORKFLOW_STORAGE_KEYS.enabled] !== undefined) {
+              setWorkflowsEnabled(typedSettings[WORKFLOW_STORAGE_KEYS.enabled] === 'true');
+            }
+            if (typedSettings[WORKFLOW_STORAGE_KEYS.baseUrl]) {
+              setN8nBaseUrl(typedSettings[WORKFLOW_STORAGE_KEYS.baseUrl]);
+            }
           }
         })
         .catch((err) => console.error('Failed to load backend settings:', err));
@@ -128,6 +139,8 @@ export default function SettingsPage(): React.ReactElement {
         if (typeof window !== 'undefined' && window.voiceinvoice) {
           await window.voiceinvoice.settings.update({
             n8nWebhookUrl,
+            [WORKFLOW_STORAGE_KEYS.enabled]: String(workflowsEnabled),
+            [WORKFLOW_STORAGE_KEYS.baseUrl]: n8nBaseUrl,
           });
         }
 
@@ -145,7 +158,7 @@ export default function SettingsPage(): React.ReactElement {
         setIsSaving(false);
       }
     },
-    [apiKey, locale, ttsVoice, ttsRate, n8nWebhookUrl, validateForm]
+    [apiKey, locale, ttsVoice, ttsRate, n8nWebhookUrl, workflowsEnabled, n8nBaseUrl, validateForm]
   );
 
   /**
@@ -180,9 +193,17 @@ export default function SettingsPage(): React.ReactElement {
     setTtsVoice('de-DE-Wavenet-C');
     setTtsRate(1.0);
     setN8nWebhookUrl('');
+    setWorkflowsEnabled(false);
+    setN8nBaseUrl('http://localhost:5678');
 
     if (typeof window !== 'undefined' && window.voiceinvoice) {
-      window.voiceinvoice.settings.update({ n8nWebhookUrl: '' }).catch(console.error);
+      window.voiceinvoice.settings
+        .update({
+          n8nWebhookUrl: '',
+          [WORKFLOW_STORAGE_KEYS.enabled]: 'false',
+          [WORKFLOW_STORAGE_KEYS.baseUrl]: 'http://localhost:5678',
+        })
+        .catch(console.error);
     }
 
     setShowResetDialog(false);
@@ -212,13 +233,56 @@ export default function SettingsPage(): React.ReactElement {
           >
             Integrationen
           </h2>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
-            <div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <label
+                  htmlFor="workflowsEnabled"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  Automatisierte Workflows aktivieren
+                </label>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Ermöglicht das Auslösen von n8n Workflows via Sprachbefehl
+                </p>
+              </div>
+              <div className="flex items-center h-5">
+                <input
+                  id="workflowsEnabled"
+                  type="checkbox"
+                  checked={workflowsEnabled}
+                  onChange={(e) => setWorkflowsEnabled(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className={workflowsEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}>
+              <label
+                htmlFor="n8nBaseUrl"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                n8n Basis URL
+              </label>
+              <input
+                type="url"
+                id="n8nBaseUrl"
+                value={n8nBaseUrl}
+                onChange={(e) => setN8nBaseUrl(e.target.value)}
+                placeholder="http://localhost:5678"
+                className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Basis-URL Ihrer n8n Instanz (für manuelle Trigger)
+              </p>
+            </div>
+
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
               <label
                 htmlFor="n8nWebhook"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
               >
-                n8n Webhook URL
+                Status-Ereignis Webhook URL
               </label>
               <input
                 type="url"
@@ -229,7 +293,7 @@ export default function SettingsPage(): React.ReactElement {
                 className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                URL fuer Webhook-Trigger bei Statusaenderungen
+                URL für Webhook-Trigger bei Rechnungs-Statusänderungen (Backend)
               </p>
             </div>
           </div>

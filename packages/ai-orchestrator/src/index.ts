@@ -200,58 +200,118 @@ const WORKFLOW_PATTERNS: Record<
   { keywords: string[]; phrases: string[]; priority: number }
 > = {
   WORKFLOW_MAHNWESEN: {
-    keywords: ['mahnung', 'mahnungen', 'mahnen', 'überfällig', 'überfällige', 'zahlungserinnerung'],
+    keywords: [
+      'mahnung',
+      'mahnungen',
+      'mahnen',
+      'überfällig',
+      'überfällige',
+      'zahlungserinnerung',
+      'mahnwesen',
+    ],
     phrases: [
       'sende mahnungen',
       'prüfe überfällige',
       'zahlungserinnerung senden',
       'mahnung erstellen',
+      'mahnwesen agent starten',
+      'starte mahnwesen',
     ],
     priority: 1,
   },
   WORKFLOW_RECHNUNGSEINGANG: {
     keywords: ['rechnungseingang', 'eingangsrechnung', 'eingehende'],
-    phrases: ['prüfe eingehende rechnungen', 'neue rechnungen', 'rechnungseingang prüfen'],
+    phrases: [
+      'prüfe eingehende rechnungen',
+      'neue rechnungen',
+      'rechnungseingang prüfen',
+      'starte rechnungseingang',
+      'rechnungseingangs agent',
+    ],
     priority: 2,
   },
   WORKFLOW_ZAHLUNGSABGLEICH: {
     keywords: ['zahlungsabgleich', 'abgleich', 'kontoauszug', 'bezahlt'],
-    phrases: ['gleiche zahlungen ab', 'prüfe zahlungen', 'kontoauszug abgleichen'],
+    phrases: [
+      'gleiche zahlungen ab',
+      'prüfe zahlungen',
+      'kontoauszug abgleichen',
+      'starte zahlungsabgleich',
+      'zahlungsabgleich agent',
+    ],
     priority: 3,
   },
   WORKFLOW_AUSGABEN: {
     keywords: ['ausgaben', 'kategorisierung', 'kategorisieren', 'kosten'],
-    phrases: ['kategorisiere ausgaben', 'ausgaben einordnen', 'kosten kategorisieren'],
+    phrases: [
+      'kategorisiere ausgaben',
+      'ausgaben einordnen',
+      'kosten kategorisieren',
+      'ausgaben agent starten',
+    ],
     priority: 4,
   },
   WORKFLOW_MONATSREPORT: {
     keywords: ['monatsreport', 'monatsabschluss', 'monatsbericht', 'finanzübersicht'],
-    phrases: ['erstelle monatsreport', 'monatsabschluss erstellen', 'monatsbericht generieren'],
+    phrases: [
+      'erstelle monatsreport',
+      'monatsabschluss erstellen',
+      'monatsbericht generieren',
+      'starte monatsreport',
+    ],
     priority: 5,
   },
   WORKFLOW_LEAD_QUALIFIZIERUNG: {
     keywords: ['lead', 'leads', 'qualifizierung', 'interessent', 'interessenten'],
-    phrases: ['qualifiziere leads', 'prüfe leads', 'lead bewerten', 'interessenten prüfen'],
+    phrases: [
+      'qualifiziere leads',
+      'prüfe leads',
+      'lead bewerten',
+      'interessenten prüfen',
+      'starte lead qualifizierung',
+    ],
     priority: 6,
   },
   WORKFLOW_FOLLOW_UP: {
     keywords: ['follow-up', 'followup', 'nachfassen', 'nachfrage', 'erinnerung'],
-    phrases: ['sende follow-up', 'nachfassen bei', 'follow-up senden', 'erinnere kunde'],
+    phrases: [
+      'sende follow-up',
+      'nachfassen bei',
+      'follow-up senden',
+      'erinnere kunde',
+      'starte follow up agent',
+    ],
     priority: 7,
   },
   WORKFLOW_KUNDENFEEDBACK: {
     keywords: ['feedback', 'kundenfeedback', 'bewertung', 'bewertungen', 'zufriedenheit'],
-    phrases: ['sammle feedback', 'kundenfeedback analysieren', 'bewertungen prüfen'],
+    phrases: [
+      'sammle feedback',
+      'kundenfeedback analysieren',
+      'bewertungen prüfen',
+      'starte feedback sammler',
+    ],
     priority: 8,
   },
   WORKFLOW_VERTRAGS_ERINNERUNG: {
     keywords: ['vertrag', 'verträge', 'vertragserinnerung', 'vertragsablauf', 'verlängerung'],
-    phrases: ['prüfe verträge', 'vertragsablauf prüfen', 'vertragserinnerung senden'],
+    phrases: [
+      'prüfe verträge',
+      'vertragsablauf prüfen',
+      'vertragserinnerung senden',
+      'starte vertrags erinnerung',
+    ],
     priority: 9,
   },
   WORKFLOW_KUNDENANFRAGEN: {
     keywords: ['kundenanfrage', 'kundenanfragen', 'anfrage', 'anfragen', 'ticket', 'support'],
-    phrases: ['verteile anfragen', 'kundenanfragen routen', 'anfragen zuweisen', 'support tickets'],
+    phrases: [
+      'verteile anfragen',
+      'kundenanfragen routen',
+      'anfragen zuweisen',
+      'support tickets',
+      'starte anfragen router',
+    ],
     priority: 10,
   },
 };
