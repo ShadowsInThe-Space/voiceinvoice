@@ -590,7 +590,9 @@ describe('VoiceInvoicePipeline', () => {
           ]),
           paymentTerms: '14 Tage netto',
           notes: 'Zahlbar in 14 Tagen',
-          transcription: transcription,
+          // Transcription is anonymized for DSGVO compliance (email redacted)
+          transcription:
+            'Rechnung fuer Kunde XYZ, Email [EMAIL_REDACTED], 2 Stunden Support zu 80 Euro, Zahlbar in 14 Tagen',
         })
       );
     });
