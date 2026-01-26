@@ -69,3 +69,5 @@ squashfs-root/
 # Archive
 archive/
 server_database.sqlite
+
+CLAUDE.md 
