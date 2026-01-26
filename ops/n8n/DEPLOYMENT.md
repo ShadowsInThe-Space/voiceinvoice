@@ -6,7 +6,7 @@
 
 ```bash
 # SSH in deinen Hetzner Server
-ssh root@138.199.166.219
+ssh root@***.***.***.***
 
 # Docker & Docker Compose installieren (falls noch nicht vorhanden)
 curl -fsSL https://get.docker.com -o get-docker.sh
@@ -67,7 +67,7 @@ docker logs -f n8n-production
 
 ```bash
 # Workflows hochladen
-scp workflows-backup.json root@138.199.166.219:/opt/n8n/
+scp workflows-backup.json root@***.***.***.***:/opt/n8n/
 
 # Auf dem Server: In n8n UI importieren
 # https://n8n.shadowsinthe.space → Settings → Import/Export → Import
@@ -80,18 +80,18 @@ scp workflows-backup.json root@138.199.166.219:/opt/n8n/
 Du musst alle Credentials neu eintragen:
 
 1. **Google Gemini API**
-   - API Key: `***REMOVED***`
+   - API Key: 
 
 2. **Google OAuth2**
-   - Client ID: `13993611510-fs2a30rbkr3v27nbp1lkttbrf890tjku.apps.googleusercontent.com`
-   - Client Secret: `***REMOVED***`
+   - Client ID: 
+   - Client Secret: 
    - Scopes: (siehe ops/n8n/google-oauth2-scopes.txt)
 
 3. **Slack API**
-   - Access Token: `***REMOVED***`
+   - Access Token: 
 
 4. **Supabase** (für RAG Workflows)
-   - URL: `https://supabase-studio.shadowsinthe.space`
+   - URL: `https://supabase-studio.*******`
    - Service Role Key: (aus Supabase Dashboard)
 
 ---
@@ -105,22 +105,22 @@ Du musst alle Credentials neu eintragen:
 apt install nginx certbot python3-certbot-nginx -y
 
 # SSL Zertifikat holen
-certbot --nginx -d n8n.shadowsinthe.space
+certbot --nginx -d n8n.***
 
 # Nginx Config
 cat > /etc/nginx/sites-available/n8n <<'EOF'
 server {
     listen 80;
-    server_name n8n.shadowsinthe.space;
+    server_name n8n.***;
     return 301 https://$server_name$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name n8n.shadowsinthe.space;
+    server_name n8n.***;
 
-    ssl_certificate /etc/letsencrypt/live/n8n.shadowsinthe.space/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/n8n.shadowsinthe.space/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/n8n.***/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/n8n.***/privkey.pem;
 
     location / {
         proxy_pass http://localhost:5678;
@@ -219,7 +219,7 @@ docker-compose -f docker-compose.production.yml up -d
 
 1. Prüfe WEBHOOK_URL in docker-compose.production.yml
 2. Prüfe SSL/HTTPS Setup
-3. Teste Webhook: `curl -X POST https://n8n.shadowsinthe.space/webhook/test`
+3. Teste Webhook: `curl -X POST https://n8n.***webhook/test`
 
 ### Credentials fehlen nach Migration
 
@@ -229,7 +229,7 @@ docker-compose -f docker-compose.production.yml up -d
 
 ## 📝 Post-Deployment Checklist
 
-- [ ] n8n erreichbar unter https://n8n.shadowsinthe.space
+- [ ] n8n erreichbar unter https://n8n.***
 - [ ] Basic Auth funktioniert
 - [ ] Alle Workflows importiert
 - [ ] Alle Credentials neu eingetragen
