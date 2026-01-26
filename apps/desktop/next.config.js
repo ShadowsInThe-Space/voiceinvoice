@@ -1,21 +1,28 @@
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const path = require('path');
-
 const nextConfig = {
   // Standalone output for Electron - creates minimal server with all dependencies
   output: 'standalone',
   distDir: '.next',
-  // Limit file tracing to monorepo root (fixes Windows CI permission errors)
-  outputFileTracingRoot: path.join(__dirname, '../../'),
   experimental: {
-    // Exclude Windows system directories from file tracing
+    // Exclude Windows system directories from file tracing (fixes EPERM errors on CI)
     outputFileTracingExcludes: {
       '*': [
-        'C:\\Users\\*\\Application Data\\**',
-        'C:\\Users\\*\\AppData\\**',
+        // Windows system directories
         'C:\\Windows\\**',
         'C:\\Program Files\\**',
         'C:\\Program Files (x86)\\**',
+        'C:\\ProgramData\\**',
+        // User directories that might have permission issues
+        'C:\\Users\\*\\Application Data\\**',
+        'C:\\Users\\*\\AppData\\**',
+        'C:\\Users\\*\\Local Settings\\**',
+        'C:\\Users\\*\\My Documents\\**',
+        // System volume information
+        'C:\\System Volume Information\\**',
+        'C:\\$Recycle.Bin\\**',
+        // Other common restricted paths
+        'C:\\hiberfil.sys',
+        'C:\\pagefile.sys',
+        'C:\\swapfile.sys',
       ],
     },
   },

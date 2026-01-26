@@ -7,7 +7,7 @@
  * @module electron/ipc/analytics-handlers
  */
 
-import { PrismaClient } from '../../src/generated/prisma';
+import { PrismaClient } from '@/generated/prisma';
 import { getDatabaseUrl, logDatabaseConfig } from '../lib/database-path';
 import type { IpcResult } from './handlers';
 
@@ -135,7 +135,9 @@ export interface TopCustomer {
 export async function getWorkflowKPIsHandler(): Promise<IpcResult<LatestKPIs>> {
   try {
     // Get latest KPIs from WorkflowKPI table
-    const kpiResults = await getPrismaClient().$queryRaw<Array<{ metricName: string; metricValue: number }>>`
+    const kpiResults = await getPrismaClient().$queryRaw<
+      Array<{ metricName: string; metricValue: number }>
+    >`
       SELECT metricName, metricValue
       FROM WorkflowKPI
       WHERE id IN (
@@ -148,7 +150,9 @@ export async function getWorkflowKPIsHandler(): Promise<IpcResult<LatestKPIs>> {
     `;
 
     // Also get overdue invoice totals directly from Invoice table
-    const overdueResult = await getPrismaClient().$queryRaw<Array<{ total: number; count: number }>>`
+    const overdueResult = await getPrismaClient().$queryRaw<
+      Array<{ total: number; count: number }>
+    >`
       SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count
       FROM Invoice
       WHERE status = 'OVERDUE' AND deletedAt IS NULL
