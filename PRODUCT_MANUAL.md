@@ -121,7 +121,7 @@ Während traditionelle Software nur "Datenfriedhöfe" erzeugt, macht VoiceInvoic
 
 ### Schritt 1: Diktieren (Eingabe)
 
-Drücken Sie die Leertaste. Sprechen Sie natürlich:
+Drücken Sie die "n". Sprechen Sie natürlich:
 
 > "Rechnung an die Musterfirma GmbH in Berlin. Wir haben drei Tage Beratung geleistet, Tagessatz 800 Euro. Bitte sofort zahlbar."
 
