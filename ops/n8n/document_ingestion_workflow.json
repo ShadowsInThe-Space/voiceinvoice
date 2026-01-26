@@ -1,5 +1,6 @@
 {
   "name": "Document Ingestion",
+  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -11,7 +12,10 @@
       "name": "Ingestion Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [250, 300],
+      "position": [
+        250,
+        300
+      ],
       "webhookId": "ingestion-webhook"
     },
     {
@@ -20,7 +24,10 @@
       "name": "Default File Loader",
       "type": "@n8n/n8n-nodes-langchain.documentLoaderDefault",
       "typeVersion": 1,
-      "position": [450, 300]
+      "position": [
+        450,
+        300
+      ]
     },
     {
       "parameters": {
@@ -31,7 +38,10 @@
       "name": "Recursive Character Text Splitter",
       "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacter",
       "typeVersion": 1,
-      "position": [650, 400]
+      "position": [
+        650,
+        400
+      ]
     },
     {
       "parameters": {
@@ -42,7 +52,10 @@
       "name": "Google Gemini Embeddings",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
-      "position": [650, 500],
+      "position": [
+        650,
+        500
+      ],
       "credentials": {
         "googlePalmApi": {
           "id": "google-gemini-creds",
@@ -59,7 +72,10 @@
       "name": "Supabase Vector Store",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
       "typeVersion": 1,
-      "position": [850, 300],
+      "position": [
+        850,
+        300
+      ],
       "credentials": {
         "supabaseApi": {
           "id": "supabase-creds",

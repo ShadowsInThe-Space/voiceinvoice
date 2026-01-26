@@ -8,7 +8,7 @@ async function build() {
     bundle: true,
     platform: 'node',
     target: 'node20', // Electron 35 uses Node 20
-    external: ['electron', '@prisma/client'],
+    external: ['electron'],
     sourcemap: isDev,
     minify: !isDev,
     loader: {

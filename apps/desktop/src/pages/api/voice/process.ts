@@ -96,25 +96,33 @@ export default async function handler(
 
     // Step 1: Transcribe with Chirp 3
     console.log('[Voice API] Starting Chirp 3 transcription...');
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT;
-    if (!projectId) {
-      throw new Error('Missing GOOGLE_CLOUD_PROJECT environment variable');
+    let transcription = '';
+
+    try {
+      const projectId = process.env.GOOGLE_CLOUD_PROJECT;
+      if (!projectId) {
+        throw new Error('Missing GOOGLE_CLOUD_PROJECT environment variable');
+      }
+
+      const chirpClient = new GoogleChirpClient({
+        projectId,
+        location: process.env.GOOGLE_CLOUD_LOCATION || 'eu',
+        recognizerId: process.env.CHIRP3_RECOGNIZER || 'invoice-chirp3-de',
+      });
+
+      const transcriptionResult = await chirpClient.transcribeWithRedaction(audioBuffer, 'de-DE', {
+        redactEmails: true,
+        redactPhoneNumbers: true,
+      });
+
+      transcription = transcriptionResult.text;
+      console.log('[Voice API] Chirp 3 transcription:', transcription);
+    } catch (err: any) {
+      console.error('[Voice API] Transcription failed:', err);
+      // Fail gracefully or throw? 
+      // If transcription fails, we can't extract.
+      throw new Error(`Transcription service failed: ${err.message || err}`);
     }
-
-    const chirpClient = new GoogleChirpClient({
-      projectId,
-      location: process.env.GOOGLE_CLOUD_LOCATION || 'eu',
-      recognizerId: process.env.CHIRP3_RECOGNIZER || 'invoice-chirp3-de',
-    });
-
-    const transcriptionResult = await chirpClient.transcribeWithRedaction(audioBuffer, 'de-DE', {
-      redactEmails: true,
-      redactPhoneNumbers: true,
-    });
-
-    const transcription = transcriptionResult.text;
-    console.log('[Voice API] Chirp 3 transcription:', transcription);
-    console.log('[Voice API] Redactions:', transcriptionResult.redactions.length);
 
     if (!transcription || transcription.trim().length === 0) {
       res.status(400).json({
@@ -124,45 +132,52 @@ export default async function handler(
       return;
     }
 
-    // Step 2: Extract invoice data with Gemini using enhanced prompt
+    // Step 2: Extract invoice data with Gemini
     console.log('[Voice API] Extracting invoice data with Gemini...');
-    const geminiApiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
-    if (!geminiApiKey) {
-      throw new Error('Missing Gemini API key');
-    }
-
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-    // Use enhanced extraction prompt with keyword guidance
-    const extractionPrompt = generateExtractionPrompt(transcription);
-
-    const extractionResult = await model.generateContent(extractionPrompt);
     let extractedData: any;
 
     try {
-      const jsonText = extractionResult.response.text().trim();
-      // Remove markdown code blocks if present
-      const cleanJson = jsonText
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
-        .trim();
-      extractedData = JSON.parse(cleanJson);
+      const geminiApiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+      if (!geminiApiKey) {
+        throw new Error('Missing Gemini API key');
+      }
+
+      const genAI = new GoogleGenerativeAI(geminiApiKey);
+      // User requested gemini-3-pro-preview
+      let model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
+
+      // Use enhanced extraction prompt with keyword guidance
+      const extractionPrompt = generateExtractionPrompt(transcription);
+
+      try {
+        const extractionResult = await model.generateContent(extractionPrompt);
+        const jsonText = extractionResult.response.text().trim();
+        const cleanJson = jsonText
+          .replace(/```json\n?/g, '')
+          .replace(/```\n?/g, '')
+          .trim();
+        extractedData = JSON.parse(cleanJson);
+      } catch (geminiError: any) {
+        console.warn('[Voice API] Gemini 3 Pro failed, trying 2.5-flash fallback:', geminiError);
+        // Fallback to 2.5 if 3 Pro fails
+        model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const extractionResultFallback = await model.generateContent(extractionPrompt);
+        const jsonTextFallback = extractionResultFallback.response.text().trim();
+        const cleanJsonFallback = jsonTextFallback
+          .replace(/```json\n?/g, '')
+          .replace(/```\n?/g, '')
+          .trim();
+        extractedData = JSON.parse(cleanJsonFallback);
+      }
+
       console.log('[Voice API] Extracted data:', extractedData);
-    } catch (err) {
-      console.error('[Voice API] JSON parse error:', err);
-      console.error('[Voice API] Raw response:', extractionResult.response.text());
-      // Fallback to default values
+    } catch (err: any) {
+      console.error('[Voice API] Extraction failed:', err);
+      // Fallback to manual entry with just transcription
       extractedData = {
         customerName: 'Unbekannt',
-        items: [
-          {
-            description: transcription,
-            quantity: 1,
-            unitPrice: 0,
-          },
-        ],
-        taxRate: 19,
+        items: [{ description: transcription, quantity: 1, unitPrice: 0 }],
+        taxRate: 19
       };
     }
 
@@ -207,7 +222,7 @@ export default async function handler(
     console.log('[Voice API] Invoice created:', invoice.number);
 
     // Clean up temp file
-    await fs.promises.unlink(audioFile.filepath).catch(() => {});
+    await fs.promises.unlink(audioFile.filepath).catch(() => { });
 
     res.status(200).json({
       success: true,

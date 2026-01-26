@@ -236,11 +236,32 @@ export class GoogleChirpClient implements ChirpClient {
 
       console.log('[Chirp3] Transcript length:', transcript.length, 'characters');
       return transcript;
-    } catch (error: unknown) {
+    } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorCode = (error as { code?: number })?.code;
       console.error('[Chirp3] API call failed:', errorMessage);
       console.error('[Chirp3] Error code:', errorCode);
+
+      // Handle NOT_FOUND (5) by creating the recognizer
+      if (errorCode === 5) {
+        console.log('[Chirp3] Recognizer not found. Attempting to create it...');
+        try {
+          await this.createRecognizer();
+          // Retry transcription
+          console.log('[Chirp3] Retrying transcription...');
+          const [response] = await this.client.recognize(request);
+
+          if (!response.results || response.results.length === 0) return '';
+
+          return response.results
+            .map((result) => result.alternatives?.[0]?.transcript || '')
+            .join(' ')
+            .trim();
+        } catch (createError) {
+          console.error('[Chirp3] Failed to create recognizer:', createError);
+          throw new Error(`Failed to create recognizer: ${createError}`);
+        }
+      }
 
       // Provide helpful error messages
       if (errorCode === 3) {
@@ -250,6 +271,46 @@ export class GoogleChirpClient implements ChirpClient {
       }
 
       throw new Error(`Transcription failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Creates the Chirp 3 recognizer if it doesn't exist.
+   */
+  private async createRecognizer(): Promise<void> {
+    const parent = `projects/${this.projectId}/locations/${this.location}`;
+
+    console.log('[Chirp3] Creating new recognizer resource...');
+    console.log('[Chirp3] Parent:', parent);
+    console.log('[Chirp3] ID:', this.recognizerId);
+
+    try {
+      const [operation] = await this.client.createRecognizer({
+        parent,
+        recognizerId: this.recognizerId,
+        recognizer: {
+          displayName: 'Invoice Chirp 3 (Auto-created)',
+          model: 'chirp_3',
+          languageCodes: ['de-DE'],
+          defaultRecognitionConfig: {
+            features: {
+              enableAutomaticPunctuation: true,
+              enableWordTimeOffsets: true,
+            },
+          },
+        },
+      });
+
+      console.log('[Chirp3] Waiting for creation operation to complete...');
+      await operation.promise();
+      console.log('[Chirp3] Recognizer created successfully!');
+    } catch (err) {
+      // If it already exists (ALREADY_EXISTS = 6), ignore
+      if ((err as any).code === 6) {
+        console.log('[Chirp3] Recognizer already exists (race condition?), proceeding.');
+        return;
+      }
+      throw err;
     }
   }
 }

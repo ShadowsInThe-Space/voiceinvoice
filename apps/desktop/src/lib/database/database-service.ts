@@ -7,7 +7,7 @@
  * @module lib/database/database-service
  */
 
-import { PrismaClient, Customer, Invoice, InvoiceItem, Setting } from '@prisma/client';
+import { PrismaClient, Customer, Invoice, InvoiceItem, Setting } from '@/generated/prisma';
 
 /**
  * Invoice status values.

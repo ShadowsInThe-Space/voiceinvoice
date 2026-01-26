@@ -7,7 +7,7 @@
  * @module lib/database/workflow-analytics
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@/generated/prisma';
 import type { WorkflowResult, WorkflowParams } from '../workflow';
 
 /**

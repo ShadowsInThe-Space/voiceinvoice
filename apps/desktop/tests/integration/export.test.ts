@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../src/generated/prisma';
 import { PDFExporter, PDFExportOptions, CompanyInfo } from '../../src/lib/export/pdf-exporter';
 import { DatabaseService, InvoiceWithRelations } from '../../src/lib/database/database-service';
 

@@ -8,13 +8,16 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import { ChevronLeft, Download, Edit, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
-import type { Invoice } from '@voiceinvoice/shared-types';
+import { ChevronLeft, Download, Edit, Trash2, CheckCircle2, AlertCircle, Volume2 } from 'lucide-react';
+// Invoice type is used as 'any' for flexibility
+import { useSpeechSynthesis } from '../../hooks/useSpeechSynthesis';
+import { PDFExporter } from '../../lib/export/pdf-exporter';
+import { LOGO_STORAGE_KEY } from '../../components/LogoUpload';
 
 /**
  * Mock invoice data for demonstration.
  */
-const MOCK_INVOICES: Record<string, Invoice & { customer: { name: string } }> = {
+const MOCK_INVOICES: Record<string, any> = {
   'inv-1': {
     id: 'inv-1',
     invoiceNumber: 'RE-2025-001',
@@ -124,12 +127,14 @@ export default function InvoiceDetailPage(): React.ReactElement {
   const router = useRouter();
   const { id } = router.query;
 
-  const [invoice, setInvoice] = useState<(Invoice & { customer: { name: string } }) | null>(null);
+  const [invoice, setInvoice] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
+
+  const { speak, speaking, stop } = useSpeechSynthesis();
 
   // Load invoice data
   useEffect(() => {
@@ -164,7 +169,12 @@ export default function InvoiceDetailPage(): React.ReactElement {
             status: data.invoice.status as any,
             description: data.invoice.description,
             customerId: data.invoice.customerId,
-            customer: { name: data.invoice.customer.name },
+            customer: {
+              name: data.invoice.customer.name,
+              email: data.invoice.customer.email,
+              address: data.invoice.customer.address,
+            },
+            items: data.invoice.items || [],
             createdAt: new Date(data.invoice.createdAt),
             updatedAt: new Date(data.invoice.updatedAt),
           };
@@ -206,13 +216,101 @@ export default function InvoiceDetailPage(): React.ReactElement {
     setExportSuccess(false);
 
     try {
-      // Simulate PDF generation
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const exporter = new PDFExporter();
 
-      // In production, this would use the PDF export service
+      // Map invoice to PDFExporter format
+      const pdfInvoice = {
+        id: invoice.id,
+        number: invoice.invoiceNumber,
+        customerId: invoice.customerId,
+        subtotal: invoice.netAmount,
+        taxRate: invoice.taxRate,
+        taxAmount: invoice.taxAmount,
+        total: invoice.grossAmount,
+        currency: invoice.currency,
+        status: invoice.status,
+        issuedAt: invoice.date,
+        dueAt: invoice.dueDate ?? null,
+        paidAt: null,
+        voiceRecordingId: null,
+        transcription: null,
+        notes: invoice.description || null,
+        paymentTerms: 'Zahlbar innerhalb von 14 Tagen',
+        createdAt: invoice.createdAt,
+        updatedAt: invoice.updatedAt,
+        deletedAt: null,
+        syncVersion: 1,
+        items: (invoice.items && invoice.items.length > 0)
+          ? invoice.items.map((item: any) => ({
+              id: item.id,
+              invoiceId: invoice.id,
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              total: item.total || item.quantity * item.unitPrice,
+              category: item.category || null,
+              createdAt: invoice.createdAt,
+              updatedAt: invoice.updatedAt,
+              syncVersion: 1,
+            }))
+          : [{
+              id: `item-${invoice.id}`,
+              invoiceId: invoice.id,
+              description: invoice.description || 'Leistung',
+              quantity: 1,
+              unitPrice: invoice.netAmount,
+              total: invoice.netAmount,
+              category: null,
+              createdAt: invoice.createdAt,
+              updatedAt: invoice.updatedAt,
+              syncVersion: 1,
+            }],
+      };
+
+      const pdfCustomer = {
+        id: invoice.customerId,
+        name: invoice.customer?.name || 'Kunde',
+        email: null,
+        phone: null,
+        address: null,
+        city: null,
+        zipCode: null,
+        country: 'DE',
+        taxId: null,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        syncVersion: 1,
+      };
+
+      // Get company logo from localStorage
+      const logoBase64 = typeof window !== 'undefined'
+        ? localStorage.getItem(LOGO_STORAGE_KEY) || undefined
+        : undefined;
+
+      // Get company info from localStorage or use defaults
+      const companyInfo: any = {
+        name: localStorage.getItem('voiceinvoice_company_name') || 'Meine Firma',
+        address: localStorage.getItem('voiceinvoice_company_address') || 'Musterstraße 1\n12345 Musterstadt',
+      };
+      if (logoBase64) {
+        companyInfo.logoBase64 = logoBase64;
+      }
+
+      const blob = await exporter.generateInvoicePDF({
+        invoice: pdfInvoice,
+        customer: pdfCustomer,
+        companyInfo,
+        language: 'de',
+      });
+
+      await exporter.saveToFile(blob, `${invoice.invoiceNumber}.pdf`);
+
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);
-    } catch {
+    } catch (err) {
+      console.error('[PDF Export] Error:', err);
       setError('PDF-Export fehlgeschlagen');
     } finally {
       setIsExporting(false);
@@ -237,6 +335,33 @@ export default function InvoiceDetailPage(): React.ReactElement {
     // In production, this would navigate to an edit page
     router.push(`/invoices/new?edit=${id}`);
   }, [router, id]);
+
+  /**
+   * Handle invoice reading (TTS).
+   */
+  const handleRead = useCallback(() => {
+    if (speaking) {
+      stop();
+      return;
+    }
+
+    if (!invoice) return;
+
+    // Build items text
+    let itemsText = '';
+    if (invoice.items && invoice.items.length > 0) {
+      itemsText = `Positionen: ${invoice.items.map((item: any, idx: number) =>
+        `Position ${idx + 1}: ${item.description}, ${item.quantity} mal ${formatCurrency(item.unitPrice)}, ergibt ${formatCurrency(item.total || item.quantity * item.unitPrice)}`
+      ).join('. ')}.`;
+    }
+
+    const text = `Rechnung ${invoice.invoiceNumber} für ${invoice.customer?.name || 'Unbekannt'} vom ${formatDate(invoice.date)}.
+                  ${itemsText}
+                  Gesamtbetrag: ${formatCurrency(invoice.grossAmount)} inklusive ${invoice.taxRate} Prozent Mehrwertsteuer.
+                  Status: ${STATUS_CONFIG[invoice.status]?.label || invoice.status}.`;
+
+    speak(text);
+  }, [invoice, speaking, speak, stop]);
 
   // Loading state
   if (isLoading) {
@@ -362,6 +487,14 @@ export default function InvoiceDetailPage(): React.ReactElement {
           </button>
           <button
             type="button"
+            onClick={handleRead}
+            className={`px-6 py-3 rounded-xl bg-card border border-border text-foreground font-bold hover:bg-muted transition-all flex items-center gap-2 ${speaking ? 'animate-pulse text-primary border-primary' : ''}`}
+          >
+            <Volume2 size={18} />
+            {speaking ? 'Stop' : 'Vorlesen'}
+          </button>
+          <button
+            type="button"
             onClick={() => setShowDeleteConfirm(true)}
             className="px-6 py-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive font-bold hover:bg-destructive/20 transition-all flex items-center gap-2"
           >
@@ -420,13 +553,32 @@ export default function InvoiceDetailPage(): React.ReactElement {
             </div>
           </div>
 
-          {/* Description */}
-          {invoice.description && (
+          {/* Items Table */}
+          {invoice.items && invoice.items.length > 0 && (
             <div>
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2">
-                Beschreibung
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-4">
+                Positionen
               </p>
-              <p className="text-foreground">{invoice.description}</p>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b-2 border-border">
+                    <th className="text-left py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Beschreibung</th>
+                    <th className="text-right py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Menge</th>
+                    <th className="text-right py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Einzelpreis</th>
+                    <th className="text-right py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Gesamt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.items.map((item: any, idx: number) => (
+                    <tr key={item.id || idx} className="border-b border-border/50">
+                      <td className="py-4 font-medium text-foreground">{item.description}</td>
+                      <td className="py-4 text-right text-muted-foreground">{item.quantity}</td>
+                      <td className="py-4 text-right font-mono text-muted-foreground">{formatCurrency(item.unitPrice)}</td>
+                      <td className="py-4 text-right font-mono font-bold text-foreground">{formatCurrency(item.total || item.quantity * item.unitPrice)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 

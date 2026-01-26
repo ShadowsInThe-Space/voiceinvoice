@@ -53,9 +53,7 @@ export default function SettingsPage(): React.ReactElement {
   const [ttsVoice, setTtsVoice] = useState('de-DE-Wavenet-C');
   const [ttsRate, setTtsRate] = useState(1.0);
   const [ttsProvider, setTtsProvider] = useState<'google' | 'browser'>('google');
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [workflowsEnabled, setWorkflowsEnabled] = useState(false);
-  const [n8nBaseUrl, setN8nBaseUrl] = useState('http://localhost:5678');
   const [showApiKey, setShowApiKey] = useState(false);
 
   // License state
@@ -76,7 +74,7 @@ export default function SettingsPage(): React.ReactElement {
   const [errorMessage, setErrorMessage] = useState('');
   const [showResetDialog, setShowResetDialog] = useState(false);
 
-  // Load saved settings on mount
+  // Load saved settings or defaults on mount
   useEffect(() => {
     const savedApiKey = localStorage.getItem(STORAGE_KEYS.apiKey);
     const savedLocale = localStorage.getItem(STORAGE_KEYS.locale);
@@ -84,7 +82,21 @@ export default function SettingsPage(): React.ReactElement {
     const savedRate = localStorage.getItem(STORAGE_KEYS.ttsRate);
     const savedProvider = localStorage.getItem(STORAGE_KEYS.ttsProvider);
 
-    if (savedApiKey) setApiKey(savedApiKey);
+    // PRIORITY:
+    // 1. LocalStorage (User overwrote it)
+    // 2. Environment Variable (Demo Build / Pre-configured)
+    // 3. Empty (User must input)
+
+    if (savedApiKey) {
+      setApiKey(savedApiKey);
+    } else if (process.env.NEXT_PUBLIC_DEMO_API_KEY) {
+      // Auto-inject Demo Key if available and nothing saved
+      console.log('Using embedded Demo API Key');
+      setApiKey(process.env.NEXT_PUBLIC_DEMO_API_KEY);
+      // Optional: Auto-save it so it persists? 
+      // Better: Just set it in state. If user saves, it writes to storage.
+    }
+
     if (savedLocale) setLocale(savedLocale);
     if (savedVoice) setTtsVoice(savedVoice);
     if (savedRate) setTtsRate(parseFloat(savedRate));
@@ -100,14 +112,8 @@ export default function SettingsPage(): React.ReactElement {
           .then((settings: unknown) => {
             const typedSettings = settings as Record<string, string>;
             if (typedSettings) {
-              if (typedSettings.n8nWebhookUrl) {
-                setN8nWebhookUrl(typedSettings.n8nWebhookUrl);
-              }
               if (typedSettings[WORKFLOW_STORAGE_KEYS.enabled] !== undefined) {
                 setWorkflowsEnabled(typedSettings[WORKFLOW_STORAGE_KEYS.enabled] === 'true');
-              }
-              if (typedSettings[WORKFLOW_STORAGE_KEYS.baseUrl]) {
-                setN8nBaseUrl(typedSettings[WORKFLOW_STORAGE_KEYS.baseUrl]);
               }
             }
           })
@@ -181,9 +187,7 @@ export default function SettingsPage(): React.ReactElement {
         // Save to backend
         if (typeof window !== 'undefined' && window.voiceinvoice?.settings?.update) {
           await window.voiceinvoice.settings.update({
-            n8nWebhookUrl,
             [WORKFLOW_STORAGE_KEYS.enabled]: String(workflowsEnabled),
-            [WORKFLOW_STORAGE_KEYS.baseUrl]: n8nBaseUrl,
           });
         }
 
@@ -207,9 +211,7 @@ export default function SettingsPage(): React.ReactElement {
       ttsVoice,
       ttsRate,
       ttsProvider,
-      n8nWebhookUrl,
       workflowsEnabled,
-      n8nBaseUrl,
       validateForm,
     ]
   );
@@ -254,16 +256,12 @@ export default function SettingsPage(): React.ReactElement {
     setTtsVoice('de-DE-Wavenet-C');
     setTtsRate(1.0);
     setTtsProvider('google');
-    setN8nWebhookUrl('');
     setWorkflowsEnabled(false);
-    setN8nBaseUrl('http://localhost:5678');
 
     if (typeof window !== 'undefined' && window.voiceinvoice?.settings?.update) {
       window.voiceinvoice.settings
         .update({
-          n8nWebhookUrl: '',
           [WORKFLOW_STORAGE_KEYS.enabled]: 'false',
-          [WORKFLOW_STORAGE_KEYS.baseUrl]: 'http://localhost:5678',
         })
         .catch(console.error);
     }
@@ -359,10 +357,10 @@ export default function SettingsPage(): React.ReactElement {
                   htmlFor="workflowsEnabled"
                   className="block text-sm font-medium text-gray-700 dark:text-gray-300"
                 >
-                  Automatisierte Workflows aktivieren
+                  Automatisierte Workflows
                 </label>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Ermöglicht das Auslösen von n8n Workflows via Sprachbefehl
+                  Automatischer E-Mail-Versand und Zahlungserinnerungen
                 </p>
               </div>
               <div className="flex items-center h-5">
@@ -374,46 +372,6 @@ export default function SettingsPage(): React.ReactElement {
                   className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
               </div>
-            </div>
-
-            <div className={workflowsEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}>
-              <label
-                htmlFor="n8nBaseUrl"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                n8n Basis URL
-              </label>
-              <input
-                type="url"
-                id="n8nBaseUrl"
-                value={n8nBaseUrl}
-                onChange={(e) => setN8nBaseUrl(e.target.value)}
-                placeholder="http://localhost:5678"
-                className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Basis-URL Ihrer n8n Instanz (für manuelle Trigger)
-              </p>
-            </div>
-
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-              <label
-                htmlFor="n8nWebhook"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                Status-Ereignis Webhook URL
-              </label>
-              <input
-                type="url"
-                id="n8nWebhook"
-                value={n8nWebhookUrl}
-                onChange={(e) => setN8nWebhookUrl(e.target.value)}
-                placeholder="https://n8n.example.com/webhook/..."
-                className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                URL für Webhook-Trigger bei Rechnungs-Statusänderungen (Backend)
-              </p>
             </div>
           </div>
         </section>
@@ -517,22 +475,20 @@ export default function SettingsPage(): React.ReactElement {
                 <button
                   type="button"
                   onClick={() => setTtsProvider('browser')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-l-md border transition-colors ${
-                    ttsProvider === 'browser'
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
-                  }`}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-l-md border transition-colors ${ttsProvider === 'browser'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                    }`}
                 >
                   Browser
                 </button>
                 <button
                   type="button"
                   onClick={() => setTtsProvider('google')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-r-md border transition-colors ${
-                    ttsProvider === 'google'
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
-                  }`}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-r-md border transition-colors ${ttsProvider === 'google'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                    }`}
                 >
                   Google Cloud
                 </button>
@@ -624,13 +580,12 @@ export default function SettingsPage(): React.ReactElement {
                   Aktueller Status
                 </span>
                 <span
-                  className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                    licenseStatus === 'active'
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300'
-                      : licenseStatus === 'expired'
-                        ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
-                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                  }`}
+                  className={`px-3 py-1 text-xs font-semibold rounded-full ${licenseStatus === 'active'
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300'
+                    : licenseStatus === 'expired'
+                      ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
+                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                    }`}
                 >
                   {licenseStatus === 'active'
                     ? '✓ Aktiv'
@@ -665,7 +620,7 @@ export default function SettingsPage(): React.ReactElement {
                           style={{
                             width: `${Math.min(
                               ((licenseDetails.currentUsage || 0) / licenseDetails.monthlyQuota) *
-                                100,
+                              100,
                               100
                             )}%`,
                           }}
@@ -813,11 +768,10 @@ export default function SettingsPage(): React.ReactElement {
         {saveStatus && (
           <div
             role="status"
-            className={`p-4 rounded-md ${
-              saveStatus === 'success'
-                ? 'bg-green-50 text-green-800 dark:bg-green-900/50 dark:text-green-300'
-                : 'bg-red-50 text-red-800 dark:bg-red-900/50 dark:text-red-300'
-            }`}
+            className={`p-4 rounded-md ${saveStatus === 'success'
+              ? 'bg-green-50 text-green-800 dark:bg-green-900/50 dark:text-green-300'
+              : 'bg-red-50 text-red-800 dark:bg-red-900/50 dark:text-red-300'
+              }`}
           >
             {saveStatus === 'success' ? 'Einstellungen gespeichert!' : 'Fehler beim Speichern'}
           </div>

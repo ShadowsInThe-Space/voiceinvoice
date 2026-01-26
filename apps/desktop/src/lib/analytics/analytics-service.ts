@@ -10,7 +10,7 @@
  * @module lib/analytics/analytics-service
  */
 
-import { PrismaClient, Customer, Invoice, InvoiceItem } from '@prisma/client';
+import { PrismaClient, Customer, Invoice, InvoiceItem } from '@/generated/prisma';
 import { DatabaseService, InvoiceStatistics } from '../database/database-service';
 
 /**

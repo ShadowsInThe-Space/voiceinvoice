@@ -9,7 +9,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { PrismaClient, Invoice, Customer } from '@prisma/client';
+import { PrismaClient, Invoice, Customer } from '@/generated/prisma';
 
 const prisma = new PrismaClient();
 
