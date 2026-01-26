@@ -47,7 +47,12 @@ export interface ParsedInvoiceItem {
 export interface ParsedInvoice {
   customerName: string;
   customerEmail?: string;
+  customerPhone?: string;
   customerAddress?: string;
+  customerCity?: string;
+  customerZipCode?: string;
+  customerCountry?: string;
+  customerTaxId?: string;
   items: ParsedInvoiceItem[];
   notes?: string;
   dueDate?: string;
@@ -203,74 +208,54 @@ export class GeminiClient {
   }
 
   /**
-   * Transcribes audio to text using Chirp 3.
+   * Transcribes audio to text using Chirp 3 (via server API) or Gemini Multimodal.
    * @param audioBase64
    * @param mimeType
    * @param options
    * @param options.language
+   * @param _options
+   * @param _options.language
    */
   async transcribe(
     audioBase64: string,
     mimeType: string,
-    options?: { language?: string }
+    _options?: { language?: string }
   ): Promise<TranscriptionResult> {
-    const language = options?.language ?? 'de-DE';
-    const languageCode = language === 'de' ? 'de-DE' : language;
+    // Check if Chirp 3 credentials are configured
+    const hasChirpCredentials = this.recognizer && this.projectId && this.location;
 
-    // 1. Try Chirp 3 (High Quality, specialized STT)
-    try {
-      const encoding = this.getEncodingFromMimeType(mimeType);
-      const requestBody: Record<string, unknown> = {
-        config: {
-          encoding,
-          sampleRateHertz: 48000,
-          languageCode,
-          enableAutomaticPunctuation: true,
-          useEnhanced: true,
-        },
-        audio: {
-          content: audioBase64,
-        },
-      };
+    if (hasChirpCredentials) {
+      // 1. Try Chirp 3 via Server API (uses @google-cloud/speech SDK with ADC)
+      try {
+        console.log('[GeminiClient] Trying Chirp 3 via server API...');
+        const response = await fetch('/api/speech/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audio: audioBase64, mimeType }),
+        });
 
-      if (this.recognizer && this.projectId && this.location) {
-        const recognizerPath = `projects/${this.projectId}/locations/${this.location}/recognizers/${this.recognizer}`;
-        (requestBody.config as Record<string, unknown>).model = recognizerPath;
-      } else {
-        (requestBody.config as Record<string, unknown>).model = 'chirp_2';
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.text) {
+            console.log('[GeminiClient] Chirp 3 transcription successful');
+            return {
+              success: true,
+              text: data.text,
+              confidence: data.confidence || 0.9,
+            };
+          }
+        }
+
+        // Server returned error - check if Chirp is not configured
+        const errorData = await response.json().catch(() => ({}));
+        console.warn('[GeminiClient] Chirp 3 API error, falling back to Gemini:', errorData.error);
+      } catch (e) {
+        console.warn('[GeminiClient] Chirp 3 request failed, falling back to Gemini:', e);
       }
-
-      const response = await this.makeChirpRequest(requestBody);
-
-      if (response.success && response.data?.results) {
-        const results = response.data.results;
-        const transcripts = results
-          .map((r: unknown) => {
-            const item = r as { alternatives?: Array<{ transcript?: string; confidence?: number }> };
-            return item.alternatives?.[0]?.transcript ?? '';
-          })
-          .join(' ');
-
-        const firstResult = results[0] as
-          | { alternatives?: Array<{ transcript?: string; confidence?: number }> }
-          | undefined;
-        const confidence = firstResult?.alternatives?.[0]?.confidence ?? 0;
-
-        return {
-          success: true,
-          text: transcripts,
-          confidence,
-        };
-      } else {
-        console.warn('Chirp transcription failed or empty, trying fallback:', response.error);
-        // Fallthrough to Gemini fallback
-      }
-    } catch (e) {
-      console.warn('Chirp transcription crashed, trying fallback', e);
     }
 
-    // 2. Fallback: Gemini 2.5 Flash Multimodal (Works with standard keys)
-    console.log('Falling back to Gemini Multimodal Transcription...');
+    // 2. Gemini 2.5 Flash Multimodal (Works with standard API keys, runs in browser)
+    console.log('[GeminiClient] Using Gemini Multimodal for transcription');
     return this.transcribeWithGeminiFlash(audioBase64, mimeType);
   }
 
@@ -498,79 +483,8 @@ export class GeminiClient {
     return { success: false, error: `Network error: ${lastError}` };
   }
 
-  /**
-   * Makes a request to Google Speech-to-Text (Chirp) API.
-   * @param body
-   */
-  private async makeChirpRequest(
-    body: Record<string, unknown>
-  ): Promise<{ success: boolean; data?: { results?: unknown[] }; error?: string }> {
-    let lastError = '';
-    let retryCount = 0;
-
-    while (retryCount < this.maxRetries) {
-      try {
-        const url = `${this.CHIRP_BASE_URL}/speech:recognize?key=${this.apiKey}`;
-
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        });
-
-        this.stats.requestCount++;
-
-        if (!response.ok) {
-          const status = response.status;
-
-          if (status === 429 || status >= 500) {
-            retryCount++;
-            await this.sleep(1000 * retryCount);
-            continue;
-          }
-
-          return {
-            success: false,
-            error: `API error: ${status} ${response.statusText}`,
-          };
-        }
-
-        const data = await response.json();
-        return { success: true, data };
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : 'Unknown error occurred';
-        retryCount++;
-
-        if (retryCount < this.maxRetries) {
-          await this.sleep(1000 * retryCount);
-        }
-      }
-    }
-
-    return { success: false, error: `Network error: ${lastError}` };
-  }
-
-  /**
-   * Maps MIME type to Google Speech encoding.
-   * @param mimeType
-   */
-  private getEncodingFromMimeType(mimeType: string): string {
-    if (mimeType.includes('webm')) {
-      return 'WEBM_OPUS';
-    }
-    if (mimeType.includes('ogg')) {
-      return 'OGG_OPUS';
-    }
-    if (mimeType.includes('flac')) {
-      return 'FLAC';
-    }
-    if (mimeType.includes('wav')) {
-      return 'LINEAR16';
-    }
-    return 'WEBM_OPUS';
-  }
+  // Note: makeChirpRequest and getEncodingFromMimeType removed
+  // Chirp 3 now runs server-side via /api/speech/transcribe
 
   /**
    * Calculates confidence score for parsed invoice.
