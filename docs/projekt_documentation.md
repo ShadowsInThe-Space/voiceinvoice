@@ -10,9 +10,6 @@ Dieses Dokument fasst die wichtigsten Inhalte der Notion-MCP-Struktur zusammen u
 4. **Lizenz- & Hosting-Modell** – Erläuterung, wie Lizenzierung über dedizierte Hetzner-Server gesteuert wird.
 5. **KI-Integration & Compliance** – Darstellung der Gemini-Modelle in Frankfurt und der damit verbundenen DSGVO-Gewährleistung.
 6. **Designentscheidungen & Trade-offs** – Beispiele, warum bestimmte Technologien, Muster oder Abläufe gewählt wurden.
-7. **Offene Punkte & ToDos** – Platzhalter für zukünftige Ergänzungen und Abstimmungen.
-
-## Designentscheidungen (mit Beispielen)
 
 - **Electron + Next.js 14 Desktop-App**  
   _Begründung:_ Native Desktop-Erfahrung mit Web-UI erlaubt den Zugriff auf lokale Mikrofone/Dateisysteme ohne Browser-Limitationen.  
@@ -72,10 +69,3 @@ Das Lizenzmanagement läuft auf einer dedizierten Hetzner-Infrastruktur (Frankfu
   - Auftragsverarbeitung (AVV) mit Google und Hetzner liegt vor.
   - Data Residency Policies dokumentiert im Compliance-Board (Notion-Page verlinkt).
   - Rechte der Betroffenen (z. B. Löschanfragen) werden über den License-Service und Privacy-Engine-Logs nachvollziehbar gemacht.
-
-## Weiteres
-
-- **Missing Pages ergänzen:** Die Notion MCP-Version ergänzen wir durch die oben genannten Abschnitte und verlinken sie unter „Projekt-Doku“, „Privacy“, „Licensing“ sowie „Compliance“.
-- **ToDos:**
-  - Implementierung automatisierter Privacy-Tests (Workflows siehe `docs/workflows/privacy-testing.md`).
-  - Redaktionelle Abstimmung mit Legal bzgl. Lizenzdokumentation und DSGVO-Statements.

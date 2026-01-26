@@ -10,7 +10,7 @@
     "dev": "next dev -p 3002",
     "dev:electron": "tsc electron/main.ts --outDir dist/electron --esModuleInterop --skipLibCheck && concurrently \"npm run dev\" \"wait-on http://localhost:3002 && NODE_ENV=development ELECTRON_DEV_URL=http://localhost:3002 electron . --no-sandbox\"",
     "build": "next build",
-    "build:electron": "node scripts/build-electron.mjs && next build && node scripts/prepare-standalone.mjs && electron-builder",
+    "build:electron": "node scripts/build-electron.mjs && prisma db push --skip-generate && tsx prisma/seed.ts && next build && node scripts/prepare-standalone.mjs && electron-builder",
     "start": "next start",
     "lint": "next lint && eslint electron --ext .ts",
     "typecheck": "tsc --noEmit",
