@@ -100,10 +100,7 @@
         "deb"
       ],
       "category": "Office",
-      "executableName": "voiceinvoice-enterprise",
-      "desktop": {
-        "Exec": "voiceinvoice-enterprise --no-sandbox %U"
-      }
+      "executableName": "voiceinvoice-enterprise"
     },
     "win": {
       "target": [
