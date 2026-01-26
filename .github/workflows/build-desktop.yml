@@ -17,6 +17,10 @@ on:
 
 env:
   NODE_VERSION: '20'
+  DATABASE_URL: 'file:./prisma/data/voiceinvoice.db'
+
+permissions:
+  contents: write
 
 jobs:
   # Build for each platform in parallel
@@ -75,7 +79,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-0 libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2
+          sudo apt-get install -y libgtk-3-0 libnotify-dev libnss3 libxss1 libasound2t64
 
       # Generate Prisma client (required for electron build)
       - name: Generate Prisma client
@@ -85,7 +89,10 @@ jobs:
       # Initialize database with seed data
       - name: Setup database with seed data
         working-directory: apps/desktop
+        env:
+          DATABASE_URL: 'file:./prisma/data/voiceinvoice.db'
         run: |
+          mkdir -p prisma/data
           pnpm exec prisma db push --skip-generate
           pnpm exec tsx prisma/seed.ts
 
@@ -97,6 +104,8 @@ jobs:
       # Build Next.js
       - name: Build Next.js
         working-directory: apps/desktop
+        env:
+          DATABASE_URL: 'file:./prisma/data/voiceinvoice.db'
         run: pnpm exec next build
 
       # Prepare standalone
