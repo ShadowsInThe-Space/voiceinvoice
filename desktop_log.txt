@@ -1,0 +1,65 @@
+
+> @voiceinvoice/desktop@0.1.0 dev /app/apps/desktop
+> next dev -p 3002
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3002
+
+ ✓ Starting...
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+ ✓ Ready in 1576ms
+ ○ Compiling /invoices ...
+ ⨯ ./src/lib/sync/sync-engine.ts:10:1
+Module not found: Can't resolve '@voiceinvoice/database/server'
+[0m [90m  8 |[39m [90m */[39m[0m
+[0m [90m  9 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 10 |[39m [36mimport[39m { isValidTenantId } [36mfrom[39m [32m'@voiceinvoice/database/server'[39m[33m;[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mSyncQueue[39m[33m,[39m [33mSyncQueueEntry[39m[33m,[39m [33mSyncEntityType[39m } [36mfrom[39m [32m'./sync-queue'[39m[33m;[39m[0m
+[0m [90m 12 |[39m [36mimport[39m { [33mConflictResolver[39m[33m,[39m [33mSyncConflict[39m[33m,[39m [33mResolvedConflict[39m } [36mfrom[39m [32m'./conflict-resolver'[39m[33m;[39m[0m
+[0m [90m 13 |[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./src/contexts/SyncContext.tsx
+./src/pages/_app.tsx
+ ⨯ ./src/lib/sync/sync-engine.ts:10:1
+Module not found: Can't resolve '@voiceinvoice/database/server'
+[0m [90m  8 |[39m [90m */[39m[0m
+[0m [90m  9 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 10 |[39m [36mimport[39m { isValidTenantId } [36mfrom[39m [32m'@voiceinvoice/database/server'[39m[33m;[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mSyncQueue[39m[33m,[39m [33mSyncQueueEntry[39m[33m,[39m [33mSyncEntityType[39m } [36mfrom[39m [32m'./sync-queue'[39m[33m;[39m[0m
+[0m [90m 12 |[39m [36mimport[39m { [33mConflictResolver[39m[33m,[39m [33mSyncConflict[39m[33m,[39m [33mResolvedConflict[39m } [36mfrom[39m [32m'./conflict-resolver'[39m[33m;[39m[0m
+[0m [90m 13 |[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./src/contexts/SyncContext.tsx
+./src/pages/_app.tsx
+ ⨯ ./src/lib/sync/sync-engine.ts:10:1
+Module not found: Can't resolve '@voiceinvoice/database/server'
+[0m [90m  8 |[39m [90m */[39m[0m
+[0m [90m  9 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 10 |[39m [36mimport[39m { isValidTenantId } [36mfrom[39m [32m'@voiceinvoice/database/server'[39m[33m;[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mSyncQueue[39m[33m,[39m [33mSyncQueueEntry[39m[33m,[39m [33mSyncEntityType[39m } [36mfrom[39m [32m'./sync-queue'[39m[33m;[39m[0m
+[0m [90m 12 |[39m [36mimport[39m { [33mConflictResolver[39m[33m,[39m [33mSyncConflict[39m[33m,[39m [33mResolvedConflict[39m } [36mfrom[39m [32m'./conflict-resolver'[39m[33m;[39m[0m
+[0m [90m 13 |[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./src/contexts/SyncContext.tsx
+./src/pages/_app.tsx
+ GET /invoices 500 in 14226ms
+/app/apps/desktop:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @voiceinvoice/desktop@0.1.0 dev: `next dev -p 3002`
+Command failed with signal "SIGTERM"
+[?25h

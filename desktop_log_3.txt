@@ -1,0 +1,48 @@
+
+> @voiceinvoice/desktop@0.1.0 dev /app/apps/desktop
+> next dev -p 3002
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3002
+
+ ✓ Starting...
+ ✓ Ready in 1892ms
+ ○ Compiling /invoices ...
+ ✓ Compiled /invoices in 2.3s (445 modules)
+ ✓ Compiled in 370ms (445 modules)
+ GET /invoices 200 in 2894ms
+ ⨯ ./src/pages/api/invoices/list.ts:10:1
+Module not found: Can't resolve '@/generated/prisma'
+[0m [90m  8 |[39m[0m
+[0m [90m  9 |[39m [36mimport[39m type { [33mNextApiRequest[39m[33m,[39m [33mNextApiResponse[39m } [36mfrom[39m [32m'next'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 10 |[39m [36mimport[39m { [33mPrismaClient[39m } [36mfrom[39m [32m'@/generated/prisma'[39m[33m;[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 11 |[39m[0m
+[0m [90m 12 |[39m [36mconst[39m prisma [33m=[39m [36mnew[39m [33mPrismaClient[39m()[33m;[39m[0m
+[0m [90m 13 |[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ○ Compiling /api/invoices/[id] ...
+ ⨯ ./src/pages/api/invoices/[id].ts:10:1
+Module not found: Can't resolve '@/generated/prisma'
+[0m [90m  8 |[39m[0m
+[0m [90m  9 |[39m [36mimport[39m type { [33mNextApiRequest[39m[33m,[39m [33mNextApiResponse[39m } [36mfrom[39m [32m'next'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 10 |[39m [36mimport[39m { [33mPrismaClient[39m } [36mfrom[39m [32m'@/generated/prisma'[39m[33m;[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 11 |[39m[0m
+[0m [90m 12 |[39m [36mconst[39m prisma [33m=[39m [36mnew[39m [33mPrismaClient[39m()[33m;[39m[0m
+[0m [90m 13 |[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./src/pages/api/invoices/[id].ts:10:1
+Module not found: Can't resolve '@/generated/prisma'
+[0m [90m  8 |[39m[0m
+[0m [90m  9 |[39m [36mimport[39m type { [33mNextApiRequest[39m[33m,[39m [33mNextApiResponse[39m } [36mfrom[39m [32m'next'[39m[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 10 |[39m [36mimport[39m { [33mPrismaClient[39m } [36mfrom[39m [32m'@/generated/prisma'[39m[33m;[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 11 |[39m[0m
+[0m [90m 12 |[39m [36mconst[39m prisma [33m=[39m [36mnew[39m [33mPrismaClient[39m()[33m;[39m[0m
+[0m [90m 13 |[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ GET /api/invoices/list 500 in 2430ms

@@ -234,14 +234,14 @@ describe('InvoiceList', () => {
         />
       );
 
-      const deleteButtons = screen.getAllByRole('button', { name: /loeschen|delete/i });
+      const deleteButtons = screen.getAllByRole('button', { name: /löschen|loeschen|delete/i });
       expect(deleteButtons).toHaveLength(mockInvoices.length);
     });
 
     it('should not render delete button when onDelete is not provided', () => {
       render(<InvoiceList invoices={mockInvoices} onSelect={mockOnSelect} />);
 
-      expect(screen.queryByRole('button', { name: /loeschen|delete/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /löschen|loeschen|delete/i })).not.toBeInTheDocument();
     });
 
     it('should call onDelete with invoice id when delete is clicked', async () => {
@@ -255,7 +255,7 @@ describe('InvoiceList', () => {
       );
 
       const row = screen.getByTestId('invoice-row-inv-2');
-      const deleteButton = within(row).getByRole('button', { name: /loeschen|delete/i });
+      const deleteButton = within(row).getByRole('button', { name: /löschen|loeschen|delete/i });
 
       await user.click(deleteButton);
 
@@ -277,7 +277,7 @@ describe('InvoiceList', () => {
       );
 
       const row = screen.getByTestId('invoice-row-inv-2');
-      const deleteButton = within(row).getByRole('button', { name: /loeschen|delete/i });
+      const deleteButton = within(row).getByRole('button', { name: /löschen|loeschen|delete/i });
 
       await user.click(deleteButton);
 
@@ -296,7 +296,7 @@ describe('InvoiceList', () => {
       );
 
       const row = screen.getByTestId('invoice-row-inv-2');
-      const deleteButton = within(row).getByRole('button', { name: /loeschen|delete/i });
+      const deleteButton = within(row).getByRole('button', { name: /löschen|loeschen|delete/i });
 
       await user.click(deleteButton);
 
@@ -318,7 +318,7 @@ describe('InvoiceList', () => {
       );
 
       const row = screen.getByTestId('invoice-row-inv-2');
-      const deleteButton = within(row).getByRole('button', { name: /loeschen|delete/i });
+      const deleteButton = within(row).getByRole('button', { name: /löschen|loeschen|delete/i });
 
       await user.click(deleteButton);
 

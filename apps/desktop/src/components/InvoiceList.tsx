@@ -216,6 +216,7 @@ export function InvoiceList({
           <input
             type="text"
             placeholder="Suchen nach Nummer oder Inhalt..."
+            aria-label="Rechnungen durchsuchen"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="h-12 w-full rounded-xl border-2 border-transparent bg-muted/20 pl-11 pr-4 text-sm transition-all focus:bg-background focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/5"
@@ -278,7 +279,7 @@ export function InvoiceList({
                   onKeyDown={(e) => handleKeyDown(e, invoice)}
                   tabIndex={0}
                   className={cn(
-                    "group cursor-pointer transition-all hover:bg-muted/20 focus:outline-none focus:bg-primary/5",
+                    "group cursor-pointer transition-all hover:bg-muted/20 focus:outline-none focus:bg-primary/5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
                     selectedId === invoice.id && "bg-primary/5 border-l-4 border-l-primary"
                   )}
                 >
@@ -327,7 +328,7 @@ export function InvoiceList({
                         onClick={(e) => handleDeleteClick(e, invoice.id)}
                         className="p-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all"
                         title="Rechnung löschen"
-                        aria-label="Loeschen"
+                        aria-label={`Rechnung ${invoice.invoiceNumber} löschen`}
                       >
                         <Trash2 className="h-5 w-5" />
                       </button>
