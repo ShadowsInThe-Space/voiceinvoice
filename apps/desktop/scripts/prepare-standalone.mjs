@@ -13,6 +13,7 @@ import { join } from 'path';
 const standaloneDir = join(process.cwd(), '.next', 'standalone');
 const staticDir = join(process.cwd(), '.next', 'static');
 const publicDir = join(process.cwd(), 'public');
+const prismaDataDir = join(process.cwd(), 'prisma', 'data');
 
 // In a monorepo, the app directory structure is preserved
 const standaloneAppDir = join(standaloneDir, 'apps', 'desktop');
@@ -38,6 +39,14 @@ if (existsSync(staticDir)) {
   console.log('Copying .next/static/ to standalone/apps/desktop/.next/...');
   mkdirSync(join(standaloneAppDir, '.next'), { recursive: true });
   cpSync(staticDir, destStatic, { recursive: true });
+}
+
+// Copy prisma/data (SQLite database with seed data) to standalone app directory
+if (existsSync(prismaDataDir)) {
+  const destPrismaData = join(standaloneAppDir, 'prisma', 'data');
+  console.log('Copying prisma/data/ (database) to standalone/apps/desktop/prisma/data/...');
+  mkdirSync(join(standaloneAppDir, 'prisma'), { recursive: true });
+  cpSync(prismaDataDir, destPrismaData, { recursive: true });
 }
 
 console.log('Standalone preparation complete.');

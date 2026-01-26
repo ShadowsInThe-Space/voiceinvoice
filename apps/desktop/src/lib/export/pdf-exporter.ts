@@ -261,21 +261,37 @@ export class PDFExporter {
     // Ensure .pdf extension
     const finalFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
 
-    // In Electron environment, use the electronAPI
+    // In Electron environment, use the electronAPI file.saveFile
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : null;
+
+    if (electronAPI?.file?.saveFile) {
+      // Convert blob to base64 string for IPC transfer
       const arrayBuffer = await blob.arrayBuffer();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (window as any).electronAPI.writeFile(finalFilename, arrayBuffer);
-      return finalFilename;
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
+
+      // Use Electron's save dialog
+      const success = await electronAPI.file.saveFile(base64, finalFilename, [
+        { name: 'PDF Dokumente', extensions: ['pdf'] },
+      ]);
+
+      if (success) {
+        return finalFilename;
+      }
+      // User cancelled - don't fall through to browser download
+      return '';
     }
 
-    // Fallback for browser environment
+    // Fallback for browser environment (non-Electron)
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = finalFilename;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
     return finalFilename;
