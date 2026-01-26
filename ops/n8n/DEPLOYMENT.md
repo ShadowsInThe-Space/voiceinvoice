@@ -20,8 +20,8 @@ apt install docker-compose -y
 
 ```bash
 # Vom lokalen Rechner
-cd /home/sonny/Development/invoice_finance_app
-scp -r ops/n8n root@138.199.166.219:/opt/
+cd /home/user/Development/invoice_finance_app
+scp -r ops/n8n root@***.***.***.***:/opt/
 
 # Auf dem Server
 cd /opt/n8n
