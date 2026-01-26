@@ -147,7 +147,6 @@ export function AlertProvider({ children }: AlertProviderProps): React.ReactElem
     // Check for Gemini API key (localStorage OR environment)
     const geminiKey =
       localStorage.getItem('voiceinvoice_gemini_api_key') ||
-      process.env.GEMINI_API_KEY ||
       process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
     if (!geminiKey) {
       addAlert(SYSTEM_ALERTS.missingGeminiApiKey);

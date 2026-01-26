@@ -57,38 +57,29 @@ export interface UseSpeechSynthesisReturn {
    * Set speaking rate.
    */
   setSpeakingRate: (rate: number) => void;
+
+  /**
+   * Set voice name (e.g. 'gemini-2.5-flash-preview-tts').
+   */
+  setVoiceName: (voice: string) => void;
+
+  /**
+   * Current voice name.
+   */
+  voiceName: string;
 }
 
-/**
- * Hook for Text-to-Speech functionality.
- *
- * Provides German TTS with Google Cloud TTS as primary source
- * and browser Web Speech API as fallback.
- *
- * @returns {UseSpeechSynthesisReturn} TTS controls and state
- *
- * @example
- * ```tsx
- * const { speak, stop, speaking } = useSpeechSynthesis();
- *
- * // Speak assistant response
- * await speak("Ihre offenen Rechnungen betragen 5.432 Euro");
- *
- * // Stop speaking
- * stop();
- * ```
- */
 export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
   const [speaking, setSpeaking] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [useGoogleTTS, setUseGoogleTTS] = useState(true); // Default: Google Cloud TTS (high quality)
+  const [useGoogleTTS, setUseGoogleTTS] = useState(true);
   const [speakingRate, setSpeakingRate] = useState(1.0);
+  const [voiceName, setVoiceName] = useState('de-DE-Wavenet-F'); // High-quality female German voice
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (audioRef.current) {
@@ -101,18 +92,16 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
     };
   }, []);
 
-  /**
-   * Speak using Google Cloud TTS.
-   */
   const speakWithGoogleTTS = useCallback(
     async (text: string): Promise<boolean> => {
       try {
-        // Abort any previous request
         if (abortControllerRef.current) {
           abortControllerRef.current.abort();
         }
         abortControllerRef.current = new AbortController();
 
+        // Always use server-side TTS route to avoid CORS issues
+        // Direct TTSClient usage causes CORS errors with Google API
         const response = await fetch('/api/speech/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -120,13 +109,15 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
             text,
             languageCode: 'de-DE',
             speakingRate,
+            voiceName,
           }),
           signal: abortControllerRef.current.signal,
         });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || 'TTS request failed');
+          console.error('[useSpeechSynthesis] API error response:', response.status, errorData);
+          throw new Error(errorData.message || `TTS request failed with status ${response.status}`);
         }
 
         const data = await response.json();
@@ -156,13 +147,15 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
             resolve(true);
           };
 
-          audio.onerror = (): void => {
+          audio.onerror = (e): void => {
+            console.error('[useSpeechSynthesis] Audio playback error:', e);
             setSpeaking(false);
             URL.revokeObjectURL(audioUrl);
             resolve(false);
           };
 
-          audio.play().catch(() => {
+          audio.play().catch((playError) => {
+            console.error('[useSpeechSynthesis] Audio play() failed:', playError);
             setSpeaking(false);
             resolve(false);
           });
@@ -175,7 +168,7 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
         return false;
       }
     },
-    [speakingRate]
+    [speakingRate, voiceName]
   );
 
   /**
@@ -233,16 +226,22 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
         // Try Google TTS first (if enabled)
         if (useGoogleTTS) {
           try {
+            console.log('[useSpeechSynthesis] Attempting Google Cloud TTS...');
             success = await speakWithGoogleTTS(text);
-          } catch {
-            console.log('[useSpeechSynthesis] Google TTS failed, trying fallback');
+            if (success) {
+              console.log('[useSpeechSynthesis] Google Cloud TTS succeeded!');
+            } else {
+              console.warn('[useSpeechSynthesis] Google TTS returned false, falling back...');
+            }
+          } catch (ttsError) {
+            console.error('[useSpeechSynthesis] Google TTS threw error:', ttsError);
             success = false;
           }
         }
 
         // Fallback to Web Speech API
         if (!success) {
-          console.log('[useSpeechSynthesis] Using Web Speech API');
+          console.warn('[useSpeechSynthesis] Falling back to Web Speech API (browser voice)');
           success = await speakWithWebSpeech(text);
         }
 
@@ -294,6 +293,8 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
     setUseGoogleTTS,
     speakingRate,
     setSpeakingRate,
+    voiceName,
+    setVoiceName,
   };
 }
 

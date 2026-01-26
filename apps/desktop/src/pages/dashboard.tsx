@@ -194,60 +194,73 @@ export default function DashboardPage(): React.ReactElement {
   const exportDropdownRef = React.useRef<HTMLDivElement>(null);
 
   /**
-   * Load dashboard data.
+   * Load dashboard data from API.
    */
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // In production, these would be real API calls
-      // For now, we use mock data
-      const mockSummary: DashboardSummary = {
-        revenue: {
-          total: 15000,
-          trend: 'up',
-          trendPercent: 15,
-        },
-        customers: {
-          activeCustomers: 12,
-          newCustomers: 5,
-        },
-        invoices: {
-          averageValue: 1250,
-          paymentTimeAverage: 14,
-        },
-        basicStats: {
-          totalInvoices: 50,
-          paidInvoices: 35,
-          pendingInvoices: 10,
-          overdueInvoices: 5,
-          totalRevenue: 15000,
-        },
-      };
+      // Fetch real data from APIs
+      const [kpisResponse, invoicesResponse] = await Promise.all([
+        fetch('/api/analytics/kpis'),
+        fetch('/api/invoices/list?limit=5'),
+      ]);
 
-      const mockRecentInvoices: RecentInvoice[] = [
-        {
-          id: 'inv-1',
-          number: 'RE-2025-001',
-          customer: { id: 'c1', name: 'Kunde A' },
-          total: 1190,
-          status: 'PAID',
-          createdAt: new Date('2025-01-20'),
-        },
-        {
-          id: 'inv-2',
-          number: 'RE-2025-002',
-          customer: { id: 'c2', name: 'Kunde B' },
-          total: 2380,
-          status: 'PENDING',
-          createdAt: new Date('2025-01-22'),
-        },
-      ];
+      // Process KPIs
+      let dashboardSummary: DashboardSummary;
+      if (kpisResponse.ok) {
+        const kpisData = await kpisResponse.json();
+        if (kpisData.success) {
+          dashboardSummary = {
+            revenue: {
+              total: kpisData.data.totalRevenue || 0,
+              trend: kpisData.data.revenueTrend > 0 ? 'up' : kpisData.data.revenueTrend < 0 ? 'down' : 'stable',
+              trendPercent: Math.abs(kpisData.data.revenueTrend || 0),
+            },
+            customers: {
+              activeCustomers: kpisData.data.activeCustomers || 0,
+              newCustomers: kpisData.data.newCustomers || 0,
+            },
+            invoices: {
+              averageValue: kpisData.data.averageInvoiceValue || 0,
+              paymentTimeAverage: kpisData.data.avgPaymentDays || 14,
+            },
+            basicStats: {
+              totalInvoices: kpisData.data.totalInvoices || 0,
+              paidInvoices: kpisData.data.paidInvoices || 0,
+              pendingInvoices: kpisData.data.pendingInvoices || 0,
+              overdueInvoices: kpisData.data.overdueInvoices || 0,
+              totalRevenue: kpisData.data.totalRevenue || 0,
+            },
+          };
+        } else {
+          throw new Error('KPIs API error');
+        }
+      } else {
+        throw new Error('Failed to fetch KPIs');
+      }
 
-      setSummary(mockSummary);
-      setRecentInvoices(mockRecentInvoices);
+      // Process recent invoices
+      let recentInvoicesList: RecentInvoice[] = [];
+      if (invoicesResponse.ok) {
+        const invoicesData = await invoicesResponse.json();
+        if (invoicesData.success && invoicesData.invoices) {
+          recentInvoicesList = invoicesData.invoices.slice(0, 5).map((inv: any) => ({
+            id: inv.id,
+            number: inv.invoiceNumber,
+            customer: { id: inv.customerId, name: inv.customerName },
+            total: inv.grossAmount,
+            status: inv.status,
+            createdAt: new Date(inv.createdAt),
+          }));
+        }
+      }
+
+      setSummary(dashboardSummary);
+      setRecentInvoices(recentInvoicesList);
     } catch (err) {
+      console.error('[Dashboard] Error loading data:', err);
       setError('Fehler beim Laden der Dashboard-Daten');
     } finally {
       setIsLoading(false);

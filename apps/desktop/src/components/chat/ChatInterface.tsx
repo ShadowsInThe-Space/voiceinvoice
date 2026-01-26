@@ -11,7 +11,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageBubble, MessageBubbleProps } from './MessageBubble';
 import { DocumentUpload } from './DocumentUpload';
 import { VoiceRecorderButton } from '../VoiceRecorderButton';
-import { GeminiClient } from '../../lib/ai/gemini-client';
+import { GeminiClient, GeminiClientConfig } from '../../lib/ai/gemini-client';
 import { useSpeechSynthesis } from '../../hooks/useSpeechSynthesis';
 import { Send, Loader2, Volume2, VolumeX } from 'lucide-react';
 
@@ -42,22 +42,25 @@ export function ChatInterface(): React.ReactElement {
 
   // Load Gemini client
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+    // Try to get key from storage first, then fallback to Demo Key, then legacy env var
+    const storedApiKey = localStorage.getItem('voiceinvoice_google_api_key');
+    const apiKey = storedApiKey || process.env.NEXT_PUBLIC_DEMO_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+
     const projectId = process.env.GOOGLE_CLOUD_PROJECT;
     const location = process.env.GOOGLE_CLOUD_LOCATION;
     const recognizer = process.env.CHIRP3_RECOGNIZER;
 
     if (apiKey) {
-      setGeminiClient(
-        new GeminiClient({
-          apiKey,
-          projectId,
-          location,
-          recognizer,
-        })
-      );
+      // Build config object, only including defined properties
+      // (exactOptionalPropertyTypes requires this approach)
+      const config: GeminiClientConfig = { apiKey };
+      if (projectId) config.projectId = projectId;
+      if (location) config.location = location;
+      if (recognizer) config.recognizer = recognizer;
+
+      setGeminiClient(new GeminiClient(config));
     } else {
-      console.error('Missing NEXT_PUBLIC_GOOGLE_API_KEY');
+      console.error('Missing API Key (Checked: localStorage, NEXT_PUBLIC_DEMO_API_KEY, NEXT_PUBLIC_GOOGLE_API_KEY)');
     }
   }, []);
 
@@ -96,8 +99,8 @@ export function ChatInterface(): React.ReactElement {
     setIsLoading(true);
 
     try {
-      // Call our Mock RAG API (uses local SQLite invoices)
-      const response = await fetch('/api/chat/rag-mock', {
+      // Call RAG API (uses Supabase Vector DB)
+      const response = await fetch('/api/chat/rag', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -185,11 +188,10 @@ export function ChatInterface(): React.ReactElement {
                 return newValue;
               });
             }}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              autoSpeak
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${autoSpeak
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
-            }`}
+              }`}
             title={autoSpeak ? 'Voice Output: Ein' : 'Voice Output: Aus'}
           >
             {autoSpeak ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}

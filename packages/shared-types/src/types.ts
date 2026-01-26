@@ -25,7 +25,7 @@ export type CustomerType = 'CUSTOMER' | 'SUPPLIER' | 'BOTH';
  * - CANCELLED: Invoice was cancelled/voided
  * - OVERDUE: Payment deadline has passed
  */
-export type InvoiceStatus = 'DRAFT' | 'PENDING' | 'PAID' | 'CANCELLED' | 'OVERDUE';
+export type InvoiceStatus = 'DRAFT' | 'SENT' | 'PENDING' | 'PAID' | 'CANCELLED' | 'OVERDUE';
 
 /**
  * Supported tax rates in Germany.
@@ -115,6 +115,32 @@ export interface Customer {
 }
 
 /**
+ * Represents a single line item on an invoice.
+ *
+ * Contains description, quantity, and pricing information
+ * for individual products or services.
+ */
+export interface InvoiceItem {
+  /** Unique identifier (UUID v4) */
+  id?: string;
+
+  /** Item description */
+  description: string;
+
+  /** Quantity of items */
+  quantity: number;
+
+  /** Unit of measurement (e.g., 'Stück', 'Stunde') */
+  unit?: string;
+
+  /** Price per unit before tax */
+  unitPrice: number;
+
+  /** Total amount for this line item (quantity * unitPrice) */
+  totalPrice?: number;
+}
+
+/**
  * Represents an invoice document.
  *
  * Contains all fields required for legally compliant invoicing
@@ -160,6 +186,9 @@ export interface Invoice {
 
   /** Human-readable description or notes */
   description?: string;
+
+  /** Line items on the invoice */
+  items?: InvoiceItem[];
 
   /** Reference to the source voice recording */
   recordingId?: string;

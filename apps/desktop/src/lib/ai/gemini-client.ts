@@ -178,7 +178,7 @@ export class GeminiClient {
   private locale: 'de' | 'en';
   private maxRetries: number;
 
-  private readonly GEMINI_MODEL = 'gemini-2.5-flash-preview-05-20';
+  private readonly GEMINI_MODEL = 'gemini-2.5-flash';
   private readonly GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
   private readonly CHIRP_BASE_URL = 'https://speech.googleapis.com/v1';
 
@@ -194,9 +194,10 @@ export class GeminiClient {
    */
   constructor(config: GeminiClientConfig) {
     this.apiKey = config.apiKey;
-    this.projectId = config.projectId;
-    this.location = config.location;
-    this.recognizer = config.recognizer;
+    // Only assign optional properties if defined (exactOptionalPropertyTypes)
+    if (config.projectId !== undefined) this.projectId = config.projectId;
+    if (config.location !== undefined) this.location = config.location;
+    if (config.recognizer !== undefined) this.recognizer = config.recognizer;
     this.locale = config.locale ?? 'de';
     this.maxRetries = config.maxRetries ?? 3;
   }
@@ -216,57 +217,124 @@ export class GeminiClient {
     const language = options?.language ?? 'de-DE';
     const languageCode = language === 'de' ? 'de-DE' : language;
 
-    // Map MIME type to encoding
-    const encoding = this.getEncodingFromMimeType(mimeType);
+    // 1. Try Chirp 3 (High Quality, specialized STT)
+    try {
+      const encoding = this.getEncodingFromMimeType(mimeType);
+      const requestBody: Record<string, unknown> = {
+        config: {
+          encoding,
+          sampleRateHertz: 48000,
+          languageCode,
+          enableAutomaticPunctuation: true,
+          useEnhanced: true,
+        },
+        audio: {
+          content: audioBase64,
+        },
+      };
 
-    // Build request body with custom recognizer if available
-    const requestBody: Record<string, unknown> = {
-      config: {
-        encoding,
-        sampleRateHertz: 48000,
-        languageCode,
-        enableAutomaticPunctuation: true,
-        useEnhanced: true,
-      },
-      audio: {
-        content: audioBase64,
+      if (this.recognizer && this.projectId && this.location) {
+        const recognizerPath = `projects/${this.projectId}/locations/${this.location}/recognizers/${this.recognizer}`;
+        (requestBody.config as Record<string, unknown>).model = recognizerPath;
+      } else {
+        (requestBody.config as Record<string, unknown>).model = 'chirp_2';
+      }
+
+      const response = await this.makeChirpRequest(requestBody);
+
+      if (response.success && response.data?.results) {
+        const results = response.data.results;
+        const transcripts = results
+          .map((r: unknown) => {
+            const item = r as { alternatives?: Array<{ transcript?: string; confidence?: number }> };
+            return item.alternatives?.[0]?.transcript ?? '';
+          })
+          .join(' ');
+
+        const firstResult = results[0] as
+          | { alternatives?: Array<{ transcript?: string; confidence?: number }> }
+          | undefined;
+        const confidence = firstResult?.alternatives?.[0]?.confidence ?? 0;
+
+        return {
+          success: true,
+          text: transcripts,
+          confidence,
+        };
+      } else {
+        console.warn('Chirp transcription failed or empty, trying fallback:', response.error);
+        // Fallthrough to Gemini fallback
+      }
+    } catch (e) {
+      console.warn('Chirp transcription crashed, trying fallback', e);
+    }
+
+    // 2. Fallback: Gemini 2.5 Flash Multimodal (Works with standard keys)
+    console.log('Falling back to Gemini Multimodal Transcription...');
+    return this.transcribeWithGeminiFlash(audioBase64, mimeType);
+  }
+
+  /**
+   * Transcribes audio using Gemini Multimodal capabilities.
+   * @param audioBase64
+   * @param mimeType
+   */
+  private async transcribeWithGeminiFlash(
+    audioBase64: string,
+    mimeType: string
+  ): Promise<TranscriptionResult> {
+    const prompt = `Transkribiere das folgende Audio exakt Wort für Wort. 
+    Antworte NUR mit dem Transkript, ohne Einleitung oder Kommentare.`;
+
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: audioBase64,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 2048,
       },
     };
 
-    // Add custom recognizer if configured (Chirp 3)
-    if (this.recognizer && this.projectId && this.location) {
-      // Use custom recognizer format: projects/{project}/locations/{location}/recognizers/{recognizer}
-      const recognizerPath = `projects/${this.projectId}/locations/${this.location}/recognizers/${this.recognizer}`;
-      (requestBody.config as Record<string, unknown>).model = recognizerPath;
-    } else {
-      // Fallback to chirp_2
-      (requestBody.config as Record<string, unknown>).model = 'chirp_2';
+    try {
+      const url = `${this.GEMINI_BASE_URL}/models/${this.GEMINI_MODEL}:generateContent?key=${this.apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: `Gemini Fallback failed: ${response.status} ${response.statusText}`,
+        };
+      }
+
+      const data = (await response.json()) as GeminiResponse;
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+
+      return {
+        success: true,
+        text,
+        confidence: 0.85, // Synthetic confidence
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown Gemini error',
+      };
     }
-
-    const response = await this.makeChirpRequest(requestBody);
-
-    if (!response.success) {
-      return { success: false, error: response.error ?? 'Unknown error during transcription' };
-    }
-
-    const results = response.data?.results ?? [];
-    const transcripts = results
-      .map((r: unknown) => {
-        const item = r as { alternatives?: Array<{ transcript?: string; confidence?: number }> };
-        return item.alternatives?.[0]?.transcript ?? '';
-      })
-      .join(' ');
-
-    const firstResult = results[0] as
-      | { alternatives?: Array<{ transcript?: string; confidence?: number }> }
-      | undefined;
-    const confidence = firstResult?.alternatives?.[0]?.confidence ?? 0;
-
-    return {
-      success: true,
-      text: transcripts,
-      confidence,
-    };
   }
 
   /**

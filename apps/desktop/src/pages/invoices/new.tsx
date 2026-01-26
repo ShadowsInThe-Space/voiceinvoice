@@ -6,7 +6,7 @@
  * @module pages/invoices/new
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { VoiceRecorderButton } from '../../components/VoiceRecorderButton';
 import { KeywordHelp } from '../../components/KeywordHelp';
@@ -18,7 +18,10 @@ import {
   Sparkles,
   AlertCircle,
   CheckCircle2,
+  Trash2,
 } from 'lucide-react';
+import { useSpeechSynthesis } from '../../hooks/useSpeechSynthesis';
+import { PDFExporter } from '../../lib/export/pdf-exporter';
 
 /**
  * Invoice item type.
@@ -68,6 +71,7 @@ function formatCurrency(amount: number): string {
  */
 export default function NewInvoicePage(): React.ReactElement {
   const router = useRouter();
+  const { speak } = useSpeechSynthesis();
 
   // Processing state
   const [processingState, setProcessingState] = useState<
@@ -83,10 +87,13 @@ export default function NewInvoicePage(): React.ReactElement {
 
   // Manual entry mode
   const [isManualMode, setIsManualMode] = useState(false);
-  const [manualForm, setManualForm] = useState({
+  const [manualForm, setManualForm] = useState<{
+    customerName: string;
+    items: { id: string; description: string; quantity: number | ''; unitPrice: number | '' }[];
+    taxRate: string;
+  }>({
     customerName: '',
-    description: '',
-    amount: '',
+    items: [{ id: '1', description: '', quantity: 1, unitPrice: '' }],
     taxRate: '19',
   });
 
@@ -114,10 +121,15 @@ export default function NewInvoicePage(): React.ReactElement {
           setIsManualMode(true);
 
           // Fill form with invoice data
+          // Fill form with invoice data
           setManualForm({
             customerName: data.invoice.customer.name,
-            description: data.invoice.description || data.invoice.items[0]?.description || '',
-            amount: String(data.invoice.netAmount),
+            items: data.invoice.items?.map((item: any) => ({
+              id: item.id,
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice
+            })) || [],
             taxRate: String(data.invoice.taxRate),
           });
 
@@ -176,7 +188,14 @@ export default function NewInvoicePage(): React.ReactElement {
       });
 
       if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
+        let errorMessage = `API returned ${response.status}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.error) errorMessage = errorData.error;
+        } catch (e) {
+          // Response was not JSON
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
@@ -193,6 +212,13 @@ export default function NewInvoicePage(): React.ReactElement {
       setTranscription(result.transcription);
       setConfidence(result.confidence);
       setProcessingState('complete');
+
+      // Voice feedback
+      if (result.invoice.items && result.invoice.items.length > 0) {
+        speak(`Rechnung erkannt für ${result.invoice.customer.name} über ${formatCurrency(result.invoice.total)}.`);
+      } else {
+        speak('Rechnungsinformationen erkannt. Bitte überprüfen.');
+      }
     } catch (err) {
       console.error('[Voice Recording] Error:', err);
       const errorMsg = err instanceof Error ? err.message : 'Verarbeitung fehlgeschlagen';
@@ -208,26 +234,135 @@ export default function NewInvoicePage(): React.ReactElement {
   const handleEditClick = useCallback(() => setIsEditing(true), []);
 
   const handleSave = useCallback(async () => {
+    if (!invoice) return;
     setIsSaving(true);
     setSaveSuccess(false);
-    setTimeout(() => {
-      setIsSaving(false);
+    setError(null);
+
+    try {
+      // Save invoice to database via API
+      const response = await fetch('/api/invoices/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice: {
+            number: invoice.number || `RE-${Date.now()}`,
+            customerId: invoice.customerId,
+            customer: invoice.customer,
+            items: invoice.items,
+            subtotal: invoice.subtotal,
+            taxRate: invoice.taxRate,
+            taxAmount: invoice.taxAmount,
+            total: invoice.total,
+            status: 'ENTWURF',
+          },
+          transcription: transcription,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Speichern fehlgeschlagen');
+      }
+
+      const data = await response.json();
+
+      if (!data.success || !data.invoiceId) {
+        throw new Error('Keine Rechnungs-ID erhalten');
+      }
+
       setSaveSuccess(true);
-      setIsEditing(false);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    }, 1000);
-  }, []);
+      speak('Rechnung erfolgreich gespeichert.');
+
+      // Redirect to the saved invoice
+      setTimeout(() => {
+        setSaveSuccess(false);
+        setIsEditing(false);
+        router.push(`/invoices/${data.invoiceId}`);
+      }, 2000);
+
+    } catch (err) {
+      console.error('Failed to save invoice:', err);
+      setError(err instanceof Error ? err.message : 'Speichern fehlgeschlagen');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [invoice, router, speak, transcription]);
 
   const handleExportPDF = useCallback(async () => {
     if (!invoice) return;
     setIsExporting(true);
     setExportSuccess(false);
     setError(null);
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const exporter = new PDFExporter();
+
+      // Map invoice to PDFExporter format
+      const pdfInvoice = {
+        id: invoice.id,
+        number: invoice.number || `RE-${Date.now()}`,
+        customerId: invoice.customerId,
+        subtotal: invoice.subtotal,
+        taxRate: invoice.taxRate,
+        taxAmount: invoice.taxAmount,
+        total: invoice.total,
+        currency: 'EUR',
+        status: invoice.status || 'DRAFT',
+        issuedAt: new Date(),
+        dueAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days
+        paidAt: null,
+        voiceRecordingId: null,
+        transcription: null,
+        notes: null,
+        paymentTerms: 'Zahlbar innerhalb von 14 Tagen',
+        createdAt: invoice.createdAt || new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        syncVersion: 1,
+        items: (invoice.items || []).map((item, idx) => ({
+          id: item.id || `item-${idx}`,
+          invoiceId: invoice.id,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total || item.quantity * item.unitPrice,
+          category: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          syncVersion: 1,
+        })),
+      };
+
+      const pdfCustomer = {
+        id: invoice.customerId,
+        name: invoice.customer?.name || 'Kunde',
+        email: null,
+        phone: null,
+        address: null,
+        city: null,
+        zipCode: null,
+        country: 'DE',
+        taxId: null,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        syncVersion: 1,
+      };
+
+      const blob = await exporter.generateInvoicePDF({
+        invoice: pdfInvoice,
+        customer: pdfCustomer,
+        language: 'de',
+      });
+
+      await exporter.saveToFile(blob, `${pdfInvoice.number}.pdf`);
+
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);
     } catch (err) {
+      console.error('[PDF Export] Error:', err);
       setError(err instanceof Error ? err.message : 'PDF Fehler');
     } finally {
       setIsExporting(false);
@@ -243,30 +378,66 @@ export default function NewInvoicePage(): React.ReactElement {
     setManualForm((prev) => ({ ...prev, [field]: value }));
   }, []);
 
+  const handleItemChange = useCallback((id: string, field: string, value: string | number) => {
+    setManualForm((prev) => ({
+      ...prev,
+      items: prev.items.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item
+      ),
+    }));
+  }, []);
+
+  const handleAddItem = useCallback(() => {
+    const newId = Math.random().toString(36).substr(2, 9);
+    setManualForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { id: newId, description: '', quantity: 1, unitPrice: '' }],
+    }));
+  }, []);
+
+  const handleRemoveItem = useCallback((id: string) => {
+    setManualForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((item) => item.id !== id),
+    }));
+  }, []);
+
+  /**
+   * Calculate totals from manual form items
+   */
+  const manualTotals = useMemo(() => {
+    let subtotal = 0;
+    manualForm.items.forEach(item => {
+      const q = typeof item.quantity === 'number' ? item.quantity : 0;
+      const p = typeof item.unitPrice === 'number' ? item.unitPrice : 0;
+      subtotal += q * p;
+    });
+    const taxRate = parseFloat(manualForm.taxRate) || 19;
+    const taxAmount = subtotal * (taxRate / 100);
+    const total = subtotal + taxAmount;
+    return { subtotal, taxAmount, total };
+  }, [manualForm.items, manualForm.taxRate]);
+
   /**
    * Handle manual form submission.
    */
   const handleManualSubmit = useCallback(() => {
-    const amount = parseFloat(manualForm.amount.replace(',', '.')) || 0;
+    const { subtotal, taxAmount, total } = manualTotals;
     const taxRate = parseFloat(manualForm.taxRate) || 19;
-    const taxAmount = amount * (taxRate / 100);
-    const total = amount + taxAmount;
 
     const newInvoice: Invoice = {
       id: 'inv-new-' + Date.now(),
       number: 'RE-2025-' + String(Math.floor(Math.random() * 1000)).padStart(3, '0'),
       customerId: 'c-manual',
       customer: { id: 'c-manual', name: manualForm.customerName || 'Unbekannter Kunde' },
-      items: [
-        {
-          id: 'item-1',
-          description: manualForm.description || 'Leistung',
-          quantity: 1,
-          unitPrice: amount,
-          total: amount,
-        },
-      ],
-      subtotal: amount,
+      items: manualForm.items.map((item, index) => ({
+        id: item.id || `item-${index}`,
+        description: item.description || 'Position',
+        quantity: typeof item.quantity === 'number' ? item.quantity : 0,
+        unitPrice: typeof item.unitPrice === 'number' ? item.unitPrice : 0,
+        total: (typeof item.quantity === 'number' ? item.quantity : 0) * (typeof item.unitPrice === 'number' ? item.unitPrice : 0),
+      })),
+      subtotal,
       taxRate,
       taxAmount,
       total,
@@ -276,10 +447,13 @@ export default function NewInvoicePage(): React.ReactElement {
 
     setInvoice(newInvoice);
     setTranscription(
-      `Manuelle Eingabe: ${manualForm.customerName} - ${manualForm.description} - ${formatCurrency(amount)}`
+      `Manuelle Eingabe: ${manualForm.customerName} - ${manualForm.items.length} Positionen`
     );
     setConfidence(1.0);
     setProcessingState('complete');
+
+    // Voice feedback
+    speak(`Rechnung für ${manualForm.customerName} mit ${manualForm.items.length} Positionen über ${formatCurrency(manualTotals.total)} erstellt.`);
   }, [manualForm]);
 
   /**
@@ -351,22 +525,20 @@ export default function NewInvoicePage(): React.ReactElement {
             <button
               type="button"
               onClick={() => !isManualMode || handleToggleMode()}
-              className={`flex-1 py-3 px-4 rounded-lg text-sm font-bold transition-all ${
-                !isManualMode
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
+              className={`flex-1 py-3 px-4 rounded-lg text-sm font-bold transition-all ${!isManualMode
+                ? 'bg-card text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+                }`}
             >
               Spracheingabe
             </button>
             <button
               type="button"
               onClick={() => isManualMode || handleToggleMode()}
-              className={`flex-1 py-3 px-4 rounded-lg text-sm font-bold transition-all ${
-                isManualMode
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
+              className={`flex-1 py-3 px-4 rounded-lg text-sm font-bold transition-all ${isManualMode
+                ? 'bg-card text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+                }`}
             >
               Manuelle Eingabe
             </button>
@@ -434,41 +606,63 @@ export default function NewInvoicePage(): React.ReactElement {
                     />
                   </div>
 
-                  <div>
-                    <label
-                      htmlFor="description"
-                      className="block text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2"
+                  <div className="space-y-4">
+                    {manualForm.items.map((item, index) => (
+                      <div key={item.id} className="p-4 bg-muted/20 rounded-xl relative group border border-transparent hover:border-border transition-all">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Position {index + 1}</span>
+                          {manualForm.items.length > 1 && (
+                            <button type="button" onClick={() => handleRemoveItem(item.id)} className="text-destructive hover:text-red-700">
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                        <div className="space-y-3">
+                          <input
+                            type="text"
+                            value={item.description}
+                            onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
+                            placeholder="Beschreibung"
+                            className="w-full bg-background border-2 border-transparent rounded-lg p-2 text-sm focus:border-primary/30 outline-none"
+                          />
+                          <div className="grid grid-cols-2 gap-3">
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => handleItemChange(item.id, 'quantity', parseFloat(e.target.value))}
+                              placeholder="Menge"
+                              step="0.1"
+                              className="w-full bg-background border-2 border-transparent rounded-lg p-2 text-sm focus:border-primary/30 outline-none"
+                            />
+                            <input
+                              type="number"
+                              value={item.unitPrice}
+                              onChange={(e) => handleItemChange(item.id, 'unitPrice', parseFloat(e.target.value))}
+                              placeholder="Einzelpreis (€)"
+                              step="0.01"
+                              className="w-full bg-background border-2 border-transparent rounded-lg p-2 text-sm focus:border-primary/30 outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={handleAddItem}
+                      className="w-full py-2 bg-muted/30 border-2 border-dashed border-muted-foreground/20 rounded-xl text-sm font-bold text-muted-foreground hover:bg-muted/50 hover:text-primary transition-all flex items-center justify-center gap-2"
                     >
-                      Leistungsbeschreibung
-                    </label>
-                    <input
-                      id="description"
-                      type="text"
-                      value={manualForm.description}
-                      onChange={(e) => handleManualFormChange('description', e.target.value)}
-                      placeholder="z.B. Beratungsleistungen"
-                      className="w-full bg-muted/20 border-2 border-transparent rounded-xl p-4 text-sm font-medium focus:border-primary/30 focus:outline-none transition-all"
-                    />
+                      + Weitere Position hinzufügen
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label
-                        htmlFor="amount"
-                        className="block text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2"
-                      >
-                        Netto Betrag (EUR)
-                      </label>
-                      <input
-                        id="amount"
-                        type="text"
-                        value={manualForm.amount}
-                        onChange={(e) => handleManualFormChange('amount', e.target.value)}
-                        placeholder="z.B. 1000,00"
-                        className="w-full bg-muted/20 border-2 border-transparent rounded-xl p-4 text-sm font-medium focus:border-primary/30 focus:outline-none transition-all"
-                      />
+                    <div className="flex items-center justify-between p-4 bg-muted/10 rounded-xl border border-border/50 col-span-2">
+                      <span className="text-sm font-bold text-muted-foreground">Zwischensumme:</span>
+                      <span className="text-lg font-black">{formatCurrency(manualTotals.subtotal)}</span>
                     </div>
-                    <div>
+
+                    <div className="col-span-2">
                       <label
                         htmlFor="taxRate"
                         className="block text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2"
@@ -491,7 +685,7 @@ export default function NewInvoicePage(): React.ReactElement {
                   <button
                     type="button"
                     onClick={handleManualSubmit}
-                    disabled={!manualForm.customerName || !manualForm.amount}
+                    disabled={!manualForm.customerName || manualForm.items.length === 0 || !manualForm.items[0].description}
                     className="w-full py-4 bg-primary text-white rounded-xl font-bold hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Rechnung erstellen

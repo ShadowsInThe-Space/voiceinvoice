@@ -1,5 +1,6 @@
 {
   "name": "RAG Chat Bot",
+  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -11,7 +12,10 @@
       "name": "Chat Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [250, 300],
+      "position": [
+        250,
+        300
+      ],
       "webhookId": "chat-webhook"
     },
     {
@@ -23,7 +27,10 @@
       "name": "Google Gemini Embeddings",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
-      "position": [450, 500],
+      "position": [
+        450,
+        500
+      ],
       "credentials": {
         "googlePalmApi": {
           "id": "google-gemini-creds",
@@ -40,7 +47,10 @@
       "name": "Supabase Vector Store",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
       "typeVersion": 1,
-      "position": [650, 500],
+      "position": [
+        650,
+        500
+      ],
       "credentials": {
         "supabaseApi": {
           "id": "supabase-creds",
@@ -57,7 +67,10 @@
       "name": "Google Gemini Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
-      "position": [650, 300],
+      "position": [
+        650,
+        300
+      ],
       "credentials": {
         "googlePalmApi": {
           "id": "google-gemini-creds",
@@ -73,7 +86,10 @@
       "name": "Conversational Retrieval QA Chain",
       "type": "@n8n/n8n-nodes-langchain.chainConversationalRetrievalQA",
       "typeVersion": 1,
-      "position": [850, 300]
+      "position": [
+        850,
+        300
+      ]
     }
   ],
   "connections": {

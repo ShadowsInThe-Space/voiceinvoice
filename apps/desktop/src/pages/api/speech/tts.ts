@@ -8,7 +8,6 @@
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 
 /**
  * Request body for TTS endpoint.
@@ -80,43 +79,59 @@ export default async function handler(
     return;
   }
 
+  // Get API key - check multiple sources with fallback
+  const apiKey = process.env.GEMINI_API_KEY
+    || process.env.NEXT_PUBLIC_GOOGLE_API_KEY
+    || '***REMOVED***'; // Fallback for dev
+
+  console.log('[TTS API] Using API Key (first 10 chars):', apiKey?.substring(0, 10));
+
+  if (!apiKey) {
+    console.error('[TTS API] No API Key found in env vars');
+    res.status(500).json({ message: 'No API Key configured for TTS' });
+    return;
+  }
+
   try {
-    // Initialize Google Cloud TTS client
-    // Uses GOOGLE_APPLICATION_CREDENTIALS or Application Default Credentials
-    const client = new TextToSpeechClient();
+    // Select voice
+    const selectedVoiceName = voiceName || getDefaultVoiceName(languageCode);
 
-    // Select voice based on language
-    // WaveNet voices provide the most natural-sounding speech
-    const voice = {
-      languageCode,
-      name: voiceName || getDefaultVoiceName(languageCode),
-      ssmlGender: 'NEUTRAL' as const,
-    };
+    // Use REST API directly with API key (more reliable than ADC)
+    const cloudTtsUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
 
-    // Configure audio output
-    const audioConfig = {
-      audioEncoding: 'LINEAR16' as const, // WAV format
-      speakingRate,
-      pitch: 0.0, // Default pitch
-      sampleRateHertz: 24000, // High quality 24kHz
-    };
-
-    // Perform TTS request
-    const [response] = await client.synthesizeSpeech({
-      input: { text },
-      voice,
-      audioConfig,
+    const response = await fetch(cloudTtsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        input: { text },
+        voice: {
+          languageCode,
+          name: selectedVoiceName,
+          ssmlGender: 'NEUTRAL',
+        },
+        audioConfig: {
+          audioEncoding: 'LINEAR16', // WAV format
+          speakingRate,
+          pitch: 0.0,
+          sampleRateHertz: 24000,
+        },
+      }),
     });
 
-    if (!response.audioContent) {
-      throw new Error('No audio content received from Google TTS');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('[TTS API] Cloud TTS failed:', errorData);
+      throw new Error(errorData.error?.message || `TTS API error ${response.status}`);
     }
 
-    // Convert Buffer to base64 string
-    const audioBase64 = Buffer.from(response.audioContent as Uint8Array).toString('base64');
+    const data = await response.json();
+
+    if (!data.audioContent) {
+      throw new Error('No audio content in response');
+    }
 
     res.status(200).json({
-      audioContent: audioBase64,
+      audioContent: data.audioContent,
       mimeType: 'audio/wav',
     });
   } catch (error) {
@@ -125,11 +140,7 @@ export default async function handler(
     const errorMessage =
       error instanceof Error ? error.message : 'Text-to-Speech conversion failed';
 
-    // Don't expose internal error details in production
-    const sanitizedMessage =
-      process.env.NODE_ENV === 'production' ? 'TTS service temporarily unavailable' : errorMessage;
-
-    res.status(500).json({ message: sanitizedMessage });
+    res.status(500).json({ message: errorMessage });
   }
 }
 
