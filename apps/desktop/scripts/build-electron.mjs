@@ -39,6 +39,7 @@ async function build() {
     // Ensure proper resolution of workspace packages
     alias: {
       '@voiceinvoice/shared-types': join(__dirname, '../../..', 'packages/shared-types/dist/index.js'),
+      '@/generated/prisma': join(__dirname, '..', 'src/generated/prisma'),
     },
     logLevel: 'info',
   };
