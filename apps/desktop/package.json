@@ -100,8 +100,9 @@
         "deb"
       ],
       "category": "Office",
+      "executableName": "voiceinvoice-enterprise",
       "desktop": {
-        "Exec": "/opt/VoiceInvoice Enterprise/voiceinvoice-enterprise --no-sandbox %U"
+        "Exec": "voiceinvoice-enterprise --no-sandbox %U"
       }
     },
     "win": {
