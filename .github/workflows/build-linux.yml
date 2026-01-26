@@ -99,3 +99,22 @@ jobs:
             apps/desktop/release/*.rpm
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+
+          # Create release if it doesn't exist
+          if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" \
+              --title "VoiceInvoice Enterprise $TAG_NAME" \
+              --notes "Release $TAG_NAME for Linux" \
+              --draft
+          fi
+
+          # Upload Linux artifacts
+          gh release upload "$TAG_NAME" apps/desktop/release/*.AppImage --clobber
+          gh release upload "$TAG_NAME" apps/desktop/release/*.deb --clobber
