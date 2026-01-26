@@ -51,15 +51,19 @@ export default async function handler(
   }
 
   try {
-    console.log('[List Invoices API] Fetching invoices from database...');
+    // Parse query parameters
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
-    // Fetch all invoices with customer info
+    console.log('[List Invoices API] Fetching invoices from database...', { limit });
+
+    // Fetch invoices with customer info, ordered by newest first
     const invoices = await prisma.invoice.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
         customer: true,
         items: true,
       },
+      ...(limit && { take: limit }),
     });
 
     console.log('[List Invoices API] Found invoices:', invoices.length);

@@ -277,12 +277,14 @@ describe('PDFExporter', () => {
       } as unknown as Blob;
       const filename = 'test-invoice.pdf';
 
-      // Mock the file system API
-      const mockWriteFile = vi.fn().mockResolvedValue(undefined);
+      // Mock the file system API (correct path: electronAPI.file.saveFile)
+      const mockSaveFile = vi.fn().mockResolvedValue(true);
       global.window = {
         ...global.window,
         electronAPI: {
-          writeFile: mockWriteFile,
+          file: {
+            saveFile: mockSaveFile,
+          },
         },
       } as unknown as Window & typeof globalThis;
 
@@ -300,11 +302,14 @@ describe('PDFExporter', () => {
       } as unknown as Blob;
       const filename = 'test-invoice';
 
-      const mockWriteFile = vi.fn().mockResolvedValue(undefined);
+      // Mock the file system API (correct path: electronAPI.file.saveFile)
+      const mockSaveFile = vi.fn().mockResolvedValue(true);
       global.window = {
         ...global.window,
         electronAPI: {
-          writeFile: mockWriteFile,
+          file: {
+            saveFile: mockSaveFile,
+          },
         },
       } as unknown as Window & typeof globalThis;
 
@@ -434,9 +439,7 @@ describe('PDFExporter', () => {
         expect.any(Number),
         expect.any(Number),
         expect.any(Number),
-        expect.any(Number),
-        undefined,
-        'FAST'
+        expect.any(Number)
       );
     });
 
@@ -461,9 +464,7 @@ describe('PDFExporter', () => {
         expect.any(Number),
         expect.any(Number),
         expect.any(Number),
-        expect.any(Number),
-        undefined,
-        'FAST'
+        expect.any(Number)
       );
     });
 
