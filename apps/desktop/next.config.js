@@ -7,6 +7,18 @@ const nextConfig = {
   distDir: '.next',
   // Limit file tracing to monorepo root (fixes Windows CI permission errors)
   outputFileTracingRoot: path.join(__dirname, '../../'),
+  experimental: {
+    // Exclude Windows system directories from file tracing
+    outputFileTracingExcludes: {
+      '*': [
+        'C:\\Users\\*\\Application Data\\**',
+        'C:\\Users\\*\\AppData\\**',
+        'C:\\Windows\\**',
+        'C:\\Program Files\\**',
+        'C:\\Program Files (x86)\\**',
+      ],
+    },
+  },
   images: {
     unoptimized: true,
   },
