@@ -34,7 +34,7 @@ import {
   getTimelineInvoicesHandler,
   getTopCustomersHandler,
 } from './ipc/analytics-handlers';
-import { ensureDatabaseExists, logDatabaseConfig } from './lib/database-path';
+import { ensureDatabaseExists, logDatabaseConfig, getDatabaseUrl } from './lib/database-path';
 
 /**
  * Main application window reference.
@@ -90,11 +90,16 @@ async function startNextServer(): Promise<void> {
   return new Promise((resolve, reject) => {
     console.log('Starting Next.js standalone server...');
 
+    // Get the correct writable database URL
+    const databaseUrl = getDatabaseUrl();
+    console.log('[Next.js] Using DATABASE_URL:', databaseUrl);
+
     nextServerProcess = spawn('node', [serverPath], {
       env: {
         ...process.env,
         PORT: String(NEXT_SERVER_PORT),
         HOSTNAME: 'localhost',
+        DATABASE_URL: databaseUrl,
       },
       cwd: path.join(appPath, '.next', 'standalone', 'apps', 'desktop'),
       stdio: ['ignore', 'pipe', 'pipe'],

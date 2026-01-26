@@ -77,6 +77,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-0 libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2
 
+      # Generate Prisma client (required for electron build)
+      - name: Generate Prisma client
+        working-directory: apps/desktop
+        run: pnpm exec prisma generate
+
+      # Initialize database with seed data
+      - name: Setup database with seed data
+        working-directory: apps/desktop
+        run: |
+          pnpm exec prisma db push --skip-generate
+          pnpm exec tsx prisma/seed.ts
+
       # Build Electron main process
       - name: Build Electron
         working-directory: apps/desktop
