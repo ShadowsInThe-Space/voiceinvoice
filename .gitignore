@@ -65,3 +65,7 @@ service-account.json
 squashfs-root/
 
 *.venv
+
+# Archive
+archive/
+server_database.sqlite
