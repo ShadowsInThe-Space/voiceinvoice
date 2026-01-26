@@ -142,7 +142,22 @@ export async function saveRecording(
  */
 export async function deleteRecording(filePath: string): Promise<boolean> {
   try {
-    await fs.unlink(filePath);
+    const recordingsDir = await getRecordingsDir();
+    const resolvedPath = path.resolve(filePath);
+    const resolvedRecordingsDir = path.resolve(recordingsDir);
+
+    // Security check: ensure path is within recordings directory
+    // We add path.sep to ensure we don't match partial folder names (e.g. /recordings_backup)
+    const allowedPath = resolvedRecordingsDir.endsWith(path.sep)
+      ? resolvedRecordingsDir
+      : resolvedRecordingsDir + path.sep;
+
+    if (!resolvedPath.startsWith(allowedPath)) {
+      console.error(`[Security] Attempted path traversal: ${filePath}`);
+      return false;
+    }
+
+    await fs.unlink(resolvedPath);
     return true;
   } catch {
     return false;

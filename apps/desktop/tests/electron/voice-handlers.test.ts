@@ -105,18 +105,37 @@ describe('Voice Handlers', () => {
 
   describe('deleteRecording', () => {
     it('should delete recording and return true', async () => {
-      const result = await deleteRecording('/path/to/recording.webm');
+      // Must use a path inside the mocked recordings directory
+      // resolved path will be compared
+      const validPath = '/mock/user/data/recordings/recording.webm';
+      // Mock path.resolve to return the path as is for simplicity in this env
+      // or assume the test runner handles it (vitest runs in node, so path.resolve works)
+
+      const result = await deleteRecording(validPath);
 
       expect(result).toBe(true);
-      expect(fs.unlink).toHaveBeenCalledWith('/path/to/recording.webm');
+      expect(fs.unlink).toHaveBeenCalledWith(expect.stringContaining('recording.webm'));
     });
 
     it('should return false on deletion failure', async () => {
       vi.mocked(fs.unlink).mockRejectedValueOnce(new Error('File not found'));
+      const validPath = '/mock/user/data/recordings/nonexistent.webm';
 
-      const result = await deleteRecording('/path/to/nonexistent.webm');
+      const result = await deleteRecording(validPath);
 
       expect(result).toBe(false);
+    });
+
+    it('should prevent path traversal deletion', async () => {
+      // Setup: define a path outside the allowed recordings directory
+      // getRecordingsDir returns '/mock/user/data/recordings'
+      const outsidePath = '/mock/user/data/sensitive.txt';
+
+      const result = await deleteRecording(outsidePath);
+
+      // Should fail and NOT delete the file
+      expect(result).toBe(false);
+      expect(fs.unlink).not.toHaveBeenCalledWith(outsidePath);
     });
   });
 
