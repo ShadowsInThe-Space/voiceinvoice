@@ -59,11 +59,21 @@ export function SyncProvider({ children, tenantId = 'demo-tenant' }: SyncProvide
   });
 
   useEffect(() => {
+    // Only initialize sync if API URL is explicitly configured
+    // Skip sync in standalone/offline mode (no NEXT_PUBLIC_API_URL set)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!apiUrl) {
+      // Running in standalone/offline mode - no sync needed
+      setConnectionState('OFFLINE');
+      setStatus('IDLE');
+      return;
+    }
+
     // Initialize Sync Engine
     const queue = new SyncQueue({ tenantId });
     const resolver = new ConflictResolver();
     const apiClient = new HttpSyncApiClient({
-      baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+      baseUrl: apiUrl,
       getAuthToken: async () => localStorage.getItem('voiceinvoice_license_token'),
     });
 

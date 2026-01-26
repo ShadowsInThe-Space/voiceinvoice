@@ -49,9 +49,10 @@ export function ChatInterface(): React.ReactElement {
       process.env.NEXT_PUBLIC_DEMO_API_KEY ||
       process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT;
-    const location = process.env.GOOGLE_CLOUD_LOCATION;
-    const recognizer = process.env.CHIRP3_RECOGNIZER;
+    // Chirp 3 requires Google Cloud project credentials (NEXT_PUBLIC_ for browser access)
+    const projectId = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT;
+    const location = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOCATION;
+    const recognizer = process.env.NEXT_PUBLIC_CHIRP3_RECOGNIZER;
 
     if (apiKey) {
       // Build config object, only including defined properties

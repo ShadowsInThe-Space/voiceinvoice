@@ -1,0 +1,65 @@
+/\*\*
+
+- @mainpage VoiceInvoice Enterprise API Documentation
+-
+- @section intro_sec Einführung
+-
+- Willkommen zur technischen Referenzdokumentation von **VoiceInvoice Enterprise**.
+- Diese Dokumentation richtet sich an Entwickler und Architekten und bietet detaillierte Einblicke
+- in die Code-Struktur, Module und APIs der Anwendung.
+-
+- @section architecture_sec Architektur-Übersicht
+-
+- VoiceInvoice Enterprise folgt einer strengen **Monorepo-Architektur** (Turborepo) mit klarer Trennung zwischen
+- Frontend, Backend und geteilten Bibliotheken.
+-
+- @subsection apps_sec Applikationen
+- - **Desktop App** (`apps/desktop`):
+- Electron-basierte Client-Anwendung mit Next.js 14 Frontend.
+- - Verarbeitet Audio-Aufnahmen lokal.
+- - Kommuniziert via IPC und REST mit Backend-Diensten.
+- - Beinhaltet die UI-Komponenten und Workflows.
+-
+- - **Proxy Server** (`apps/proxy-server`):
+- Fastify-Backend für zentrale Dienste.
+- - **Lizenzierung:** JWT-Validierung und Quota-Management.
+- - **Privacy:** Server-seitige Redaction via Chirp 3.
+- - **Stripe:** Payment-Integration.
+-
+- @subsection packages_sec Core Packages
+- - **AI Orchestrator** (`packages/ai-orchestrator`):
+- Steuert die Interaktion mit Gemini 2.5 und Vertex AI.
+- Beinhaltet Intent Classification und Entity Extraction Logik.
+-
+- - **Privacy Engine** (`packages/privacy-engine`):
+- Implementiert das Dual-Layer Privacy Konzept (Client-Masking + Server-Redaction).
+-
+- - **Database** (`packages/database`):
+- Prisma-Clients und Schema-Definitionen für SQLite (Client) und PostgreSQL (Server).
+-
+- - **Shared Types** (`packages/shared-types`):
+- Zod-Schemas und TypeScript Interfaces für Typensicherheit über alle Grenzen hinweg.
+-
+- @section workflow_sec Entwickler-Workflow
+-
+- ### Voraussetzungen
+- - Node.js 20 LTS
+- - pnpm 8.x
+-
+- ### Wichtige Befehle
+-
+- - `pnpm dev`: Startet den Development-Server.
+- - `pnpm test`: Führt die Test-Suite (Vitest) aus.
+- - `pnpm ci:validate`: Führt Linting, Typecheck, Tests und Build aus.
+-
+- @section privacy_sec Privacy-First Ansatz
+-
+- Datenschutz ist ein Kernbestandteil der Architektur. Siehe `packages/privacy-engine` für Details
+- zur Implementierung der **Dual-Layer Anonymisierung**.
+-
+- @section links_sec Weiterführende Links
+-
+- - [Projekt README](../../README.md)
+- - [Dokumentations-Guidelines](../../DOCUMENTATION.md)
+- - [Changelog](../../CHANGELOG.md)
+    \*/

@@ -514,16 +514,32 @@ export class VoiceInvoicePipeline {
       return existingCustomers[0].id;
     }
 
-    // Create new customer
+    // Create new customer with all extracted fields
     const customerInput: CreateCustomerInput = {
       name: parsedInvoice.customerName,
     };
 
+    // Add all optional customer fields if present
     if (parsedInvoice.customerEmail) {
       customerInput.email = parsedInvoice.customerEmail;
     }
+    if (parsedInvoice.customerPhone) {
+      customerInput.phone = parsedInvoice.customerPhone;
+    }
     if (parsedInvoice.customerAddress) {
       customerInput.address = parsedInvoice.customerAddress;
+    }
+    if (parsedInvoice.customerCity) {
+      customerInput.city = parsedInvoice.customerCity;
+    }
+    if (parsedInvoice.customerZipCode) {
+      customerInput.zipCode = parsedInvoice.customerZipCode;
+    }
+    if (parsedInvoice.customerCountry) {
+      customerInput.country = parsedInvoice.customerCountry;
+    }
+    if (parsedInvoice.customerTaxId) {
+      customerInput.taxId = parsedInvoice.customerTaxId;
     }
 
     const newCustomer = await this.databaseService.createCustomer(customerInput);
