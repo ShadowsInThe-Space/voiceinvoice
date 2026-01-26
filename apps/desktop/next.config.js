@@ -1,7 +1,12 @@
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const path = require('path');
+
 const nextConfig = {
   // Standalone output for Electron - creates minimal server with all dependencies
   output: 'standalone',
   distDir: '.next',
+  // Limit file tracing to monorepo root (fixes Windows CI permission errors)
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   images: {
     unoptimized: true,
   },
