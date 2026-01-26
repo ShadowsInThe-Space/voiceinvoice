@@ -1,0 +1,101 @@
+# Build Desktop App for Linux
+#
+# Builds the Electron desktop app for Linux (AppImage, deb, rpm)
+#
+name: Build Linux
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  DATABASE_URL: 'file:./prisma/data/voiceinvoice.db'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm build --filter=@voiceinvoice/shared-types --filter=@voiceinvoice/privacy-engine --filter=@voiceinvoice/database --filter=@voiceinvoice/ai-orchestrator
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2
+
+      - name: Generate Prisma client
+        working-directory: apps/desktop
+        run: pnpm exec prisma generate
+
+      - name: Setup database with seed data
+        working-directory: apps/desktop
+        env:
+          DATABASE_URL: 'file:./prisma/data/voiceinvoice.db'
+        run: |
+          mkdir -p prisma/data
+          pnpm exec prisma db push --skip-generate
+          pnpm exec tsx prisma/seed.ts
+
+      - name: Build Electron
+        working-directory: apps/desktop
+        run: node scripts/build-electron.mjs
+
+      - name: Build Next.js
+        working-directory: apps/desktop
+        env:
+          DATABASE_URL: 'file:./prisma/data/voiceinvoice.db'
+        run: pnpm exec next build
+
+      - name: Prepare standalone
+        working-directory: apps/desktop
+        run: node scripts/prepare-standalone.mjs
+
+      - name: Build Linux installer
+        working-directory: apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec electron-builder --linux --publish never
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: |
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.rpm
+          if-no-files-found: warn
+          retention-days: 30
