@@ -90,6 +90,223 @@ pnpm install
 pnpm dev
 ```
 
+## 📦 Desktop-App Bauen
+
+### Fertige Downloads (Linux)
+
+Die Linux-Version ist als fertige Installationsdatei verfügbar:
+
+- **AppImage:** `VoiceInvoice Enterprise-0.1.0-x86_64.AppImage`
+- **Debian/Ubuntu:** `VoiceInvoice Enterprise-0.1.0-amd64.deb`
+
+### Selbst Bauen
+
+> **⚠️ Wichtig:** Die Desktop-App muss auf dem jeweiligen Zielbetriebssystem gebaut werden.
+> Cross-Platform-Builds (z.B. Windows von Linux aus) werden nicht unterstützt.
+
+#### Voraussetzungen (alle Plattformen)
+
+```bash
+# Node.js 20 LTS installieren (https://nodejs.org/)
+# pnpm installieren
+npm install -g pnpm
+
+# Repository klonen
+git clone https://github.com/YOUR_ORG/voiceinvoice-enterprise.git
+cd voiceinvoice-enterprise
+
+# Dependencies installieren
+pnpm install
+```
+
+---
+
+### 🪟 Windows Build
+
+**Voraussetzungen:**
+
+- Windows 10/11
+- Node.js 20 LTS
+- Visual Studio Build Tools (für native Module)
+
+```powershell
+# 1. Visual Studio Build Tools installieren (falls nicht vorhanden)
+# Download: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+# Bei der Installation "Desktop development with C++" auswählen
+
+# 2. Repository klonen und Dependencies installieren
+git clone https://github.com/YOUR_ORG/voiceinvoice-enterprise.git
+cd voiceinvoice-enterprise
+npm install -g pnpm
+pnpm install
+
+# 3. Desktop-App bauen
+pnpm --filter @voiceinvoice/desktop build:electron
+
+# 4. Fertige Installer findest du in:
+# apps/desktop/release/VoiceInvoice Enterprise Setup 0.1.0.exe
+# apps/desktop/release/VoiceInvoice Enterprise-0.1.0-win.zip
+```
+
+**Troubleshooting Windows:**
+
+- Falls `node-gyp` Fehler: `npm install -g windows-build-tools` (als Admin)
+- Falls Electron-Download fehlschlägt: Proxy-Einstellungen prüfen
+
+---
+
+### 🍎 macOS Build
+
+**Voraussetzungen:**
+
+- macOS 11 Big Sur oder neuer
+- Xcode Command Line Tools
+- Node.js 20 LTS
+
+```bash
+# 1. Xcode Command Line Tools installieren
+xcode-select --install
+
+# 2. Repository klonen und Dependencies installieren
+git clone https://github.com/YOUR_ORG/voiceinvoice-enterprise.git
+cd voiceinvoice-enterprise
+npm install -g pnpm
+pnpm install
+
+# 3. Desktop-App bauen
+pnpm --filter @voiceinvoice/desktop build:electron
+
+# 4. Fertige App findest du in:
+# apps/desktop/release/VoiceInvoice Enterprise-0.1.0.dmg
+# apps/desktop/release/VoiceInvoice Enterprise-0.1.0-mac.zip
+```
+
+**Für Apple Silicon (M1/M2/M3):**
+
+```bash
+# Universal Binary (Intel + ARM)
+pnpm --filter @voiceinvoice/desktop build:electron -- --mac --universal
+```
+
+**Code Signing (optional, für Verteilung):**
+
+```bash
+# Umgebungsvariablen setzen
+export CSC_LINK="path/to/certificate.p12"
+export CSC_KEY_PASSWORD="your-password"
+export APPLE_ID="your@apple.id"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+
+# Mit Signierung bauen
+pnpm --filter @voiceinvoice/desktop build:electron
+```
+
+---
+
+### 🐧 Linux Build
+
+**Voraussetzungen:**
+
+- Ubuntu 20.04+ / Debian 11+ / Fedora 35+
+- Node.js 20 LTS
+- Build-Tools
+
+```bash
+# 1. Build-Tools installieren
+# Ubuntu/Debian:
+sudo apt update
+sudo apt install -y build-essential git
+
+# Fedora:
+sudo dnf groupinstall "Development Tools"
+
+# 2. Repository klonen und Dependencies installieren
+git clone https://github.com/YOUR_ORG/voiceinvoice-enterprise.git
+cd voiceinvoice-enterprise
+npm install -g pnpm
+pnpm install
+
+# 3. Desktop-App bauen
+pnpm --filter @voiceinvoice/desktop build:electron
+
+# 4. Fertige Pakete findest du in:
+# apps/desktop/release/VoiceInvoice Enterprise-0.1.0-x86_64.AppImage
+# apps/desktop/release/VoiceInvoice Enterprise-0.1.0-amd64.deb
+```
+
+**AppImage ausführen:**
+
+```bash
+chmod +x "VoiceInvoice Enterprise-0.1.0-x86_64.AppImage"
+./"VoiceInvoice Enterprise-0.1.0-x86_64.AppImage"
+```
+
+**Debian-Paket installieren:**
+
+```bash
+sudo dpkg -i "VoiceInvoice Enterprise-0.1.0-amd64.deb"
+```
+
+---
+
+### 🤖 Automatisierte Builds mit GitHub Actions
+
+Das Repository enthält einen GitHub Actions Workflow, der automatisch für alle Plattformen baut:
+
+**Workflow-Datei:** `.github/workflows/build-desktop.yml`
+
+**Automatischer Trigger:**
+
+- Bei Version-Tags (`v*`) wird automatisch gebaut und ein Release erstellt
+
+**Manueller Trigger:**
+
+1. Gehe zu **Actions** → **Build Desktop App**
+2. Klicke auf **Run workflow**
+3. Wähle den Branch und starte den Build
+
+**Downloads:**
+Nach erfolgreichem Build findest du die Installer unter:
+
+- **Actions** → Letzter Build → **Artifacts**
+- Oder unter **Releases** (bei Tag-Trigger)
+
+**Neues Release erstellen:**
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+# GitHub Actions baut automatisch für Windows, macOS, Linux
+```
+
+---
+
+### Build-Konfiguration anpassen
+
+Die Electron-Builder Konfiguration befindet sich in `apps/desktop/package.json` unter dem `"build"` Schlüssel:
+
+```json
+{
+  "build": {
+    "appId": "com.voiceinvoice.enterprise",
+    "productName": "VoiceInvoice Enterprise",
+    "win": {
+      "target": ["nsis", "zip"]
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office"
+    }
+  }
+}
+```
+
+---
+
 ### Entwicklungs-Commands
 
 ```bash
