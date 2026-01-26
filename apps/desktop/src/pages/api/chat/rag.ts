@@ -10,6 +10,38 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
+import { PrismaClient } from '@/generated/prisma';
+
+const prisma = new PrismaClient();
+
+/**
+ * Finanz-Guru System Instruction for the AI assistant.
+ */
+const FINANZ_GURU_INSTRUCTION = `Du bist FINANZ-GURU, ein erfahrener deutscher Finanzexperte und Buchhaltungsberater mit 20 Jahren Erfahrung. Du arbeitest als Analyse-Assistent in einer professionellen Buchhaltungssoftware.
+
+DEINE PERSÖNLICHKEIT:
+Professionell aber nahbar. Präzise mit Zahlen. Proaktiv bei Mustern und Risiken.
+
+DEINE EXPERTISE:
+Rechnungswesen nach HGB, Cashflow-Analyse, Kundenanalyse, Forderungsmanagement, KPI-Analyse für KMUs.
+
+ANTWORT-FORMAT:
+Erste Zeile: Direkte Antwort mit konkreten Zahlen.
+Dann: Kurze Einordnung und falls relevant eine Handlungsempfehlung.
+
+WICHTIGE REGELN:
+1. Nutze NUR die bereitgestellten Daten, erfinde keine Zahlen
+2. Antworte auf Deutsch, professionell aber freundlich
+3. Halte Antworten prägnant, maximal drei bis vier Absätze
+4. Bei fehlenden Daten sage ehrlich, dass diese nicht verfügbar sind
+
+TEXT-TO-SPEECH REGELN (SEHR WICHTIG):
+1. KEINE Markdown-Formatierung verwenden. Keine Sternchen, Unterstriche, Rauten oder Bindestriche als Aufzählungszeichen
+2. Schreibe Euro statt dem Eurozeichen
+3. Schreibe Prozent statt dem Prozentzeichen
+4. Keine Emojis oder Sonderzeichen verwenden
+5. Zahlen in Worten wenn es natürlicher klingt
+6. Schreibe in natürlichen, flüssigen Sätzen die gut vorgelesen werden können`;
 
 // Allow self-signed certificates in development
 if (process.env.NODE_ENV !== 'production') {
@@ -127,23 +159,79 @@ export default async function handler(
       useDirectGemini = true;
     }
 
-    // Fallback: Direct Gemini response without RAG
+    // Fallback: Query local database and use Gemini
     if (useDirectGemini || matches.length === 0) {
+      // Fetch local database analytics for context
+      let localContext = '';
+      try {
+        // Get all invoices with customer info
+        const invoices = await prisma.invoice.findMany({
+          include: { customer: true },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        // Calculate customer revenue
+        const customerRevenue = new Map<string, { name: string; total: number; invoiceCount: number }>();
+        for (const inv of invoices) {
+          const id = inv.customerId;
+          const name = inv.customer?.name || 'Unbekannt';
+          const current = customerRevenue.get(id) || { name, total: 0, invoiceCount: 0 };
+          current.total += inv.total || 0;
+          current.invoiceCount += 1;
+          customerRevenue.set(id, current);
+        }
+
+        // Sort by revenue
+        const topCustomers = Array.from(customerRevenue.values())
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 10);
+
+        // Invoice statistics
+        const paidInvoices = invoices.filter((i) => i.status === 'PAID');
+        const overdueInvoices = invoices.filter((i) => {
+          if (i.status === 'PAID') return false;
+          if (!i.dueAt) return false;
+          return new Date(i.dueAt) < new Date();
+        });
+        const totalRevenue = paidInvoices.reduce((sum, i) => sum + (i.total || 0), 0);
+
+        // Build context
+        localContext = `
+LOKALE DATENBANK-ANALYSE:
+
+Gesamtstatistik:
+- Anzahl Rechnungen: ${invoices.length}
+- Bezahlte Rechnungen: ${paidInvoices.length}
+- Überfällige Rechnungen: ${overdueInvoices.length}
+- Gesamtumsatz (bezahlt): ${totalRevenue.toFixed(2)} EUR
+
+Top 10 Kunden nach Umsatz:
+${topCustomers.map((c, i) => `${i + 1}. ${c.name}: ${c.total.toFixed(2)} EUR (${c.invoiceCount} Rechnungen)`).join('\n')}
+
+Letzte 5 Rechnungen:
+${invoices.slice(0, 5).map((inv) => `- ${inv.number}: ${inv.customer?.name || 'N/A'} - ${(inv.total || 0).toFixed(2)} EUR (${inv.status})`).join('\n')}
+`;
+      } catch (dbError) {
+        console.warn('[RAG API] Local DB query failed:', dbError);
+        localContext = 'Lokale Datenbank nicht verfügbar.';
+      }
+
       const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-      const directPrompt = `Du bist ein hilfreicher Finanz-Assistent für eine deutsche Buchhaltungs-App.
 
-Beantworte die folgende Frage freundlich und hilfreich auf Deutsch.
-Falls du keine spezifischen Rechnungsdaten hast, gib allgemeine hilfreiche Informationen.
+      const directPrompt = `${FINANZ_GURU_INSTRUCTION}
 
-Frage: ${query}
+AKTUELLE GESCHÄFTSDATEN:
+${localContext}
 
-Antwort:`;
+BENUTZERANFRAGE: ${query}
+
+DEINE ANTWORT:`;
 
       const result = await chatModel.generateContent(directPrompt);
       const answer = result.response.text().trim();
 
       res.status(200).json({
-        answer: answer + '\n\n_(Hinweis: Für detaillierte Rechnungsdaten bitte Dokumente hochladen.)_',
+        answer,
         sources: [],
         latencyMs: Date.now() - startTime,
       });
@@ -190,21 +278,14 @@ Details: ${doc.content}
 
     // Step 4: Generate answer with Gemini
     const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-    const prompt = `Du bist ein Finanz-Assistent für ein deutsches Buchhaltungssystem.
+    const prompt = `${FINANZ_GURU_INSTRUCTION}
 
-KONTEXT (Relevante Rechnungen):
+RELEVANTE DOKUMENTE:
 ${contextText}
 
-FRAGE: ${query}
+BENUTZERANFRAGE: ${query}
 
-ANWEISUNG:
-- Beantworte die Frage basierend NUR auf dem gegebenen Kontext
-- Verwende konkrete Zahlen und Daten aus den Rechnungen
-- Antworte auf Deutsch in einem freundlichen, professionellen Ton
-- Wenn die Informationen nicht im Kontext sind, sage das ehrlich
-- Fasse die Antwort kurz und präzise zusammen
-
-ANTWORT:`;
+DEINE ANTWORT:`;
 
     const result = await chatModel.generateContent(prompt);
     const answer = result.response.text().trim();
