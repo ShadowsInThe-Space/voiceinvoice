@@ -23,7 +23,6 @@ import {
   Sun,
   X,
   Search,
-  Bell,
   User,
   Mic,
   BarChart3,
@@ -248,12 +247,6 @@ export default function App({ Component, pageProps }: AppProps): React.ReactElem
                     className="h-9 w-64 rounded-md border border-input bg-background pl-9 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   />
                 </div>
-
-                {/* Notifications */}
-                <button className="relative text-muted-foreground hover:text-foreground">
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-destructive" />
-                </button>
 
                 {/* Theme Toggle */}
                 <button
