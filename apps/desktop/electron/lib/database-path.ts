@@ -71,19 +71,34 @@ function getSeedDatabasePath(): string | null {
 
   const appPath = app.getAppPath();
 
-  // Try multiple possible locations
+  // Try multiple possible locations based on electron-builder file structure
+  // The app is built with asar: false, so files are directly accessible
   const possiblePaths = [
+    // Direct in app directory
     path.join(appPath, 'prisma', 'data', DB_FILENAME),
+    // One level up (common in some builds)
     path.join(appPath, '..', 'prisma', 'data', DB_FILENAME),
+    // In resources folder
     path.join(appPath, 'resources', 'prisma', 'data', DB_FILENAME),
+    // Next.js standalone directory (where prepare-standalone.mjs copies it)
+    path.join(appPath, '.next', 'standalone', 'apps', 'desktop', 'prisma', 'data', DB_FILENAME),
+    // Process resources path (for AppImage)
+    path.join(process.resourcesPath || appPath, 'prisma', 'data', DB_FILENAME),
   ];
 
+  console.log('[Database] Searching for seed database...');
+  console.log('[Database] App path:', appPath);
+  console.log('[Database] Resource path:', process.resourcesPath);
+
   for (const seedPath of possiblePaths) {
+    console.log('[Database] Checking:', seedPath, '- exists:', fs.existsSync(seedPath));
     if (fs.existsSync(seedPath)) {
+      console.log('[Database] Found seed database at:', seedPath);
       return seedPath;
     }
   }
 
+  console.log('[Database] No seed database found in any location');
   return null;
 }
 
