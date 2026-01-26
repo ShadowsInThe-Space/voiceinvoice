@@ -26,6 +26,8 @@ interface KPIData {
   newCustomers: number;
   averageInvoiceValue: number;
   avgPaymentDays: number;
+  topCustomerName: string | null;
+  topCustomerRevenue: number;
 }
 
 /**
@@ -62,13 +64,15 @@ export default async function handler(
         newCustomers: 0,
         averageInvoiceValue: 0,
         avgPaymentDays: 14,
+        topCustomerName: null,
+        topCustomerRevenue: 0,
       },
     });
     return;
   }
 
   try {
-    // Get invoice statistics from database
+    // Get invoice statistics from database with customer info
     const invoices = await prisma.invoice.findMany({
       select: {
         status: true,
@@ -76,6 +80,11 @@ export default async function handler(
         dueAt: true,
         createdAt: true,
         customerId: true,
+        customer: {
+          select: {
+            name: true,
+          },
+        },
       },
     });
 
@@ -83,6 +92,7 @@ export default async function handler(
     const customers = await prisma.customer.findMany({
       select: {
         id: true,
+        name: true,
         createdAt: true,
       },
     });
@@ -142,6 +152,25 @@ export default async function handler(
       ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
       : 0;
 
+    // Calculate top customer by revenue
+    const customerRevenue = new Map<string, { name: string; revenue: number }>();
+    for (const inv of invoices) {
+      const customerId = inv.customerId;
+      const customerName = inv.customer?.name || 'Unbekannt';
+      const current = customerRevenue.get(customerId) || { name: customerName, revenue: 0 };
+      current.revenue += inv.total || 0;
+      customerRevenue.set(customerId, current);
+    }
+
+    let topCustomerName: string | null = null;
+    let topCustomerRevenue = 0;
+    for (const [, data] of customerRevenue) {
+      if (data.revenue > topCustomerRevenue) {
+        topCustomerRevenue = data.revenue;
+        topCustomerName = data.name;
+      }
+    }
+
     res.status(200).json({
       success: true,
       data: {
@@ -155,6 +184,8 @@ export default async function handler(
         newCustomers,
         averageInvoiceValue: Math.round(averageInvoiceValue * 100) / 100,
         avgPaymentDays: 14, // TODO: Calculate from actual payment data
+        topCustomerName,
+        topCustomerRevenue: Math.round(topCustomerRevenue * 100) / 100,
       },
     });
   } catch (error) {
@@ -173,6 +204,8 @@ export default async function handler(
         newCustomers: 0,
         averageInvoiceValue: 0,
         avgPaymentDays: 14,
+        topCustomerName: null,
+        topCustomerRevenue: 0,
       },
     });
   }

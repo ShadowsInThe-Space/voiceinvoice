@@ -36,11 +36,17 @@ interface BasicStats {
   totalRevenue: number;
 }
 
+interface TopCustomer {
+  name: string | null;
+  revenue: number;
+}
+
 interface DashboardSummary {
   revenue: RevenueStats;
   customers: CustomerInsights;
   invoices: InvoiceInsights;
   basicStats: BasicStats;
+  topCustomer: TopCustomer;
 }
 
 interface RecentInvoice {
@@ -232,6 +238,10 @@ export default function DashboardPage(): React.ReactElement {
               pendingInvoices: kpisData.data.pendingInvoices || 0,
               overdueInvoices: kpisData.data.overdueInvoices || 0,
               totalRevenue: kpisData.data.totalRevenue || 0,
+            },
+            topCustomer: {
+              name: kpisData.data.topCustomerName || null,
+              revenue: kpisData.data.topCustomerRevenue || 0,
             },
           };
         } else {
@@ -670,11 +680,15 @@ export default function DashboardPage(): React.ReactElement {
             <div className="space-y-4">
               <div className="flex justify-between items-center p-4 bg-muted/20 rounded-xl">
                 <span className="text-sm text-muted-foreground font-medium">Zahlungseingang Ø</span>
-                <span className="text-sm font-bold text-foreground">14 Tage</span>
+                <span className="text-sm font-bold text-foreground">
+                  {summary?.invoices.paymentTimeAverage ?? 14} Tage
+                </span>
               </div>
               <div className="flex justify-between items-center p-4 bg-muted/20 rounded-xl">
                 <span className="text-sm text-muted-foreground font-medium">Top Kunde</span>
-                <span className="text-sm font-bold text-foreground">Kunde B</span>
+                <span className="text-sm font-bold text-foreground">
+                  {summary?.topCustomer.name || 'Keine Daten'}
+                </span>
               </div>
             </div>
           </div>
