@@ -98,7 +98,11 @@
       "target": [
         "AppImage",
         "deb"
-      ]
+      ],
+      "category": "Office",
+      "desktop": {
+        "Exec": "/opt/VoiceInvoice Enterprise/voiceinvoice-enterprise --no-sandbox %U"
+      }
     },
     "win": {
       "target": [
