@@ -185,7 +185,6 @@ export class GeminiClient {
 
   private readonly GEMINI_MODEL = 'gemini-2.5-flash';
   private readonly GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
-  private readonly CHIRP_BASE_URL = 'https://speech.googleapis.com/v1';
 
   private stats: UsageStats = {
     requestCount: 0,
