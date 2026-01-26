@@ -221,7 +221,12 @@ export default function DashboardPage(): React.ReactElement {
           dashboardSummary = {
             revenue: {
               total: kpisData.data.totalRevenue || 0,
-              trend: kpisData.data.revenueTrend > 0 ? 'up' : kpisData.data.revenueTrend < 0 ? 'down' : 'stable',
+              trend:
+                kpisData.data.revenueTrend > 0
+                  ? 'up'
+                  : kpisData.data.revenueTrend < 0
+                    ? 'down'
+                    : 'stable',
               trendPercent: Math.abs(kpisData.data.revenueTrend || 0),
             },
             customers: {
@@ -277,10 +282,23 @@ export default function DashboardPage(): React.ReactElement {
     }
   }, []);
 
-  // Load data on mount
+  // Load data on mount and when navigating to this page
   useEffect(() => {
     loadData();
-  }, [loadData]);
+
+    // Reload data when navigating back to dashboard
+    const handleRouteChange = (url: string) => {
+      if (url === '/dashboard') {
+        loadData();
+      }
+    };
+
+    router.events.on('routeChangeComplete', handleRouteChange);
+
+    return () => {
+      router.events.off('routeChangeComplete', handleRouteChange);
+    };
+  }, [loadData, router.events]);
 
   /**
    * Navigate to new invoice page.

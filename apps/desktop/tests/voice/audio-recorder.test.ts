@@ -45,6 +45,13 @@ class MockMediaRecorder {
     this.state = 'recording';
   }
 
+  requestData(): void {
+    // Simulate data available event with current recording data
+    if (this.ondataavailable) {
+      this.ondataavailable({ data: new Blob(['test audio data'], { type: 'audio/webm' }) });
+    }
+  }
+
   static isTypeSupported(mimeType: string): boolean {
     return mimeType.includes('audio/webm') || mimeType.includes('audio/ogg');
   }
@@ -97,7 +104,8 @@ describe('AudioRecorder', () => {
       const config = rec.getConfig();
 
       expect(config.mimeType).toBe('audio/webm;codecs=opus');
-      expect(config.sampleRate).toBe(48000);
+      // Google recommends 16kHz for Chirp 3 transcription
+      expect(config.sampleRate).toBe(16000);
     });
 
     it('should accept custom config', () => {
@@ -124,10 +132,11 @@ describe('AudioRecorder', () => {
     it('should request microphone access', async () => {
       await recorder.start();
 
+      // Note: noiseSuppression is false because Chirp 3 has built-in denoiser
       expect(mockGetUserMedia).toHaveBeenCalledWith({
         audio: expect.objectContaining({
           echoCancellation: true,
-          noiseSuppression: true,
+          noiseSuppression: false,
         }),
       });
     });
