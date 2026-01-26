@@ -52,14 +52,37 @@ GET  /api/stripe/plans          → Verfügbare Pläne abrufen
 
 ### 3. AI-Service-Infrastruktur (bereit für zentrale Nutzung)
 
-✅ **Transcribe-Endpoint (bereits implementiert):**
+✅ **Transcribe-Endpoints (Dual-Architecture):**
+
+**Proxy-Server (für Web-Clients):**
 
 ```typescript
 POST /transcribe
-Body: {audio: base64, language: "de-DE"}
+Body: {audio: base64, language: "de-DE", format: "webm"}
 → Nutzt zentrale GOOGLE_API_KEY am Server
-→ Speech-Service mit Gemini 2.0 Flash
+→ Chirp 3 via @google-cloud/speech SDK
+→ Multi-Tenant-fähig mit Quota-Tracking
+→ Gedacht für: Browser-basierte Clients, Mobile Apps
 ```
+
+**Desktop-App (lokale Next.js API Route):**
+
+```typescript
+POST /api/speech/transcribe
+Body: {audio: base64, mimeType: "audio/webm"}
+→ Läuft im Electron-Prozess
+→ Nutzt chirp3-client.ts lokal
+→ Direkter Google Cloud Speech API Zugriff
+→ Gedacht für: Desktop-Offline-Betrieb
+```
+
+**Architektur-Entscheidung:**
+Die Desktop-App nutzt bewusst eine lokale Implementierung für:
+
+- Offline-Fähigkeit ohne Proxy-Abhängigkeit
+- Niedrige Latenz durch direkten API-Zugriff
+- Privacy: Audio verlässt Gerät nur zu Google Cloud, nicht zum Proxy
+- Unabhängigkeit von Proxy-Server für Core-Funktionalität
 
 ✅ **Quota-Middleware (bereits implementiert):**
 
