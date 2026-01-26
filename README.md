@@ -78,19 +78,69 @@ graph TD
 
 ---
 
-## 🛠️ Getting Started
+## 📥 Installation (Releases)
+
+Laden Sie die neueste Version aus den [GitHub Releases](https://github.com/Shadows-In-The-Space/invoice_finance_app/releases) herunter.
+
+### Windows
+
+1. **Download**: Laden Sie `VoiceInvoice Enterprise Setup-x.x.x.exe` herunter
+2. **Installer ausführen**: Doppelklicken Sie auf die `.exe` Datei
+3. **Windows SmartScreen**: Falls eine Warnung erscheint:
+   - Klicken Sie auf **"Weitere Informationen"**
+   - Klicken Sie auf **"Trotzdem ausführen"**
+4. **Installation abschließen**: Folgen Sie dem Installationsassistenten
+5. **Starten**: Die App wird automatisch gestartet oder finden Sie im Startmenü unter "VoiceInvoice Enterprise"
+
+### macOS
+
+1. **Download**: Laden Sie `VoiceInvoice Enterprise-x.x.x.dmg` herunter
+2. **DMG öffnen**: Doppelklicken Sie auf die `.dmg` Datei
+3. **Installation**: Ziehen Sie die App in den **Applications**-Ordner
+4. **Erste Ausführung** (wichtig!):
+   - **Rechtsklick** auf die App → **"Öffnen"**
+   - Bei der Sicherheitswarnung auf **"Öffnen"** klicken
+   - _Alternativ:_ Systemeinstellungen → Datenschutz & Sicherheit → "Trotzdem öffnen"
+
+> ⚠️ **Hinweis**: macOS Gatekeeper blockiert die App beim ersten Start, da sie nicht von Apple notarisiert ist. Dies ist normal für Community-Software.
+
+### Linux (AppImage)
+
+1. **Download**: Laden Sie `VoiceInvoice Enterprise-x.x.x-x86_64.AppImage` herunter
+2. **Ausführbar machen**:
+   ```bash
+   chmod +x VoiceInvoice\ Enterprise-*-x86_64.AppImage
+   ```
+3. **Starten**:
+   ```bash
+   ./VoiceInvoice\ Enterprise-*-x86_64.AppImage --no-sandbox
+   ```
+
+> 💡 **Tipp**: Falls FUSE fehlt: `sudo apt install fuse libfuse2`
+
+---
+
+## ⌨️ Tastenkürzel
+
+| Aktion                         | Tastenkürzel |
+| ------------------------------ | ------------ |
+| Sprachaufnahme starten/stoppen | `N`          |
+
+---
+
+## 🛠️ Entwicklung (Development)
 
 ### Prerequisites
 
 - Node.js 20+
-- pnpm
-- Docker (for local DB and n8n)
+- pnpm 8+
+- Docker (optional, für lokale DB und n8n)
 
 ### Installation
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/your-org/voiceinvoice.git
+git clone https://github.com/Shadows-In-The-Space/invoice_finance_app.git
 
 # 2. Install dependencies
 pnpm install
