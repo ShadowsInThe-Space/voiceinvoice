@@ -114,17 +114,20 @@ export default async function handler(
 
   try {
     // Get environment variables with fallbacks for dev
-    const geminiApiKey = process.env.GEMINI_API_KEY
-      || process.env.NEXT_PUBLIC_GOOGLE_API_KEY
-      || 'AIzaSyAhM6S1SWtsMoKptlsxhYr84lWNgSep8fE';
+    const geminiApiKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.NEXT_PUBLIC_GOOGLE_API_KEY ||
+      'AIzaSyAhM6S1SWtsMoKptlsxhYr84lWNgSep8fE';
 
-    const supabaseUrl = process.env.SUPABASE_URL
-      || process.env.NEXT_PUBLIC_SUPABASE_URL
-      || 'https://supabase.shadowsinthe.space';
+    const supabaseUrl =
+      process.env.SUPABASE_URL ||
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      'https://supabase.shadowsinthe.space';
 
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
-      || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzY4ODMzNjM5LCJleHAiOjIwODQxOTM2Mzl9.YfpbXSy__zR8HRXwd6B7sXrlb5stHs-bBVY1pdEI65I';
+    const supabaseKey =
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzY4ODMzNjM5LCJleHAiOjIwODQxOTM2Mzl9.YfpbXSy__zR8HRXwd6B7sXrlb5stHs-bBVY1pdEI65I';
 
     console.log('[RAG API] Using Supabase URL:', supabaseUrl);
 
@@ -149,7 +152,10 @@ export default async function handler(
       });
 
       if (searchError) {
-        console.warn('[RAG API] Supabase search error, falling back to direct Gemini:', searchError);
+        console.warn(
+          '[RAG API] Supabase search error, falling back to direct Gemini:',
+          searchError
+        );
         useDirectGemini = true;
       } else {
         matches = data || [];
@@ -171,7 +177,10 @@ export default async function handler(
         });
 
         // Calculate customer revenue
-        const customerRevenue = new Map<string, { name: string; total: number; invoiceCount: number }>();
+        const customerRevenue = new Map<
+          string,
+          { name: string; total: number; invoiceCount: number }
+        >();
         for (const inv of invoices) {
           const id = inv.customerId;
           const name = inv.customer?.name || 'Unbekannt';
@@ -195,6 +204,40 @@ export default async function handler(
         });
         const totalRevenue = paidInvoices.reduce((sum, i) => sum + (i.total || 0), 0);
 
+        // Get all customers for detailed info
+        const customers = await prisma.customer.findMany({
+          where: { deletedAt: null },
+          include: {
+            invoices: {
+              where: { deletedAt: null },
+              select: { id: true, number: true, total: true, status: true, dueAt: true },
+            },
+          },
+        });
+
+        // Build detailed customer info
+        const customerDetails = customers.map((c) => {
+          const paid = c.invoices.filter((i) => i.status === 'PAID');
+          const open = c.invoices.filter((i) => i.status === 'SENT' || i.status === 'OVERDUE');
+          const overdue = c.invoices.filter((i) => i.status === 'OVERDUE');
+          const totalPaid = paid.reduce((sum, i) => sum + i.total, 0);
+          const totalOpen = open.reduce((sum, i) => sum + i.total, 0);
+
+          return {
+            name: c.name,
+            email: c.email || 'keine E-Mail',
+            phone: c.phone || 'kein Telefon',
+            city: c.city || 'keine Stadt',
+            taxId: c.taxId || 'keine USt-IdNr',
+            invoiceCount: c.invoices.length,
+            paidCount: paid.length,
+            openCount: open.length,
+            overdueCount: overdue.length,
+            totalPaid,
+            totalOpen,
+          };
+        });
+
         // Build context
         localContext = `
 LOKALE DATENBANK-ANALYSE:
@@ -204,12 +247,22 @@ Gesamtstatistik:
 - Bezahlte Rechnungen: ${paidInvoices.length}
 - Überfällige Rechnungen: ${overdueInvoices.length}
 - Gesamtumsatz (bezahlt): ${totalRevenue.toFixed(2)} EUR
+- Anzahl Kunden: ${customers.length}
 
 Top 10 Kunden nach Umsatz:
 ${topCustomers.map((c, i) => `${i + 1}. ${c.name}: ${c.total.toFixed(2)} EUR (${c.invoiceCount} Rechnungen)`).join('\n')}
 
+Alle Kunden mit Details:
+${customerDetails.map((c) => `- ${c.name} (${c.city}): ${c.invoiceCount} Rechnungen, ${c.totalPaid.toFixed(2)} EUR bezahlt, ${c.totalOpen.toFixed(2)} EUR offen${c.overdueCount > 0 ? `, ${c.overdueCount} überfällig` : ''}, Kontakt: ${c.email}, ${c.phone}`).join('\n')}
+
 Letzte 5 Rechnungen:
-${invoices.slice(0, 5).map((inv) => `- ${inv.number}: ${inv.customer?.name || 'N/A'} - ${(inv.total || 0).toFixed(2)} EUR (${inv.status})`).join('\n')}
+${invoices
+  .slice(0, 5)
+  .map(
+    (inv) =>
+      `- ${inv.number}: ${inv.customer?.name || 'N/A'} - ${(inv.total || 0).toFixed(2)} EUR (${inv.status})`
+  )
+  .join('\n')}
 `;
       } catch (dbError) {
         console.warn('[RAG API] Local DB query failed:', dbError);

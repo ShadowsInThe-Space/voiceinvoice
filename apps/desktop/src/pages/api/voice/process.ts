@@ -14,8 +14,11 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleChirpClient } from '@voiceinvoice/privacy-engine';
 import { generateExtractionPrompt } from '../../../lib/ai/invoice-keywords';
+import { PrismaClient } from '@/generated/prisma';
 import formidable from 'formidable';
 import fs from 'fs';
+
+const prisma = new PrismaClient();
 
 /**
  * Disable body parser to handle multipart/form-data.
@@ -48,6 +51,7 @@ interface VoiceProcessResponse {
     total: number;
     status: string;
     createdAt: string;
+    isExistingCustomer?: boolean;
   };
 }
 
@@ -119,7 +123,7 @@ export default async function handler(
       console.log('[Voice API] Chirp 3 transcription:', transcription);
     } catch (err: any) {
       console.error('[Voice API] Transcription failed:', err);
-      // Fail gracefully or throw? 
+      // Fail gracefully or throw?
       // If transcription fails, we can't extract.
       throw new Error(`Transcription service failed: ${err.message || err}`);
     }
@@ -177,11 +181,67 @@ export default async function handler(
       extractedData = {
         customerName: 'Unbekannt',
         items: [{ description: transcription, quantity: 1, unitPrice: 0 }],
-        taxRate: 19
+        taxRate: 19,
       };
     }
 
-    // Step 3: Build invoice object from extracted data
+    // Step 3: Find matching customer in database
+    const extractedCustomerName = extractedData.customerName?.trim() || 'Unbekannter Kunde';
+    let matchedCustomer: { id: string; name: string } | null = null;
+
+    try {
+      // Get all customers for fuzzy matching
+      const allCustomers = await prisma.customer.findMany({
+        where: { deletedAt: null },
+        select: { id: true, name: true },
+      });
+
+      // Normalize extracted name
+      const normalizedSearch = extractedCustomerName
+        .toLowerCase()
+        .replace(/\s*(gmbh|ag|ohg|kg|e\.k\.|ug|gbr|inc\.|ltd\.?|co\.?)\s*/gi, '')
+        .trim();
+
+      // Find best matching customer
+      let bestMatch: { id: string; name: string; score: number } | null = null;
+
+      for (const c of allCustomers) {
+        const normalizedName = c.name
+          .toLowerCase()
+          .replace(/\s*(gmbh|ag|ohg|kg|e\.k\.|ug|gbr|inc\.|ltd\.?|co\.?)\s*/gi, '')
+          .trim();
+
+        // Check if one contains the other
+        if (
+          normalizedName.includes(normalizedSearch) ||
+          normalizedSearch.includes(normalizedName)
+        ) {
+          const score =
+            Math.min(normalizedName.length, normalizedSearch.length) /
+            Math.max(normalizedName.length, normalizedSearch.length);
+
+          if (!bestMatch || score > bestMatch.score) {
+            bestMatch = { id: c.id, name: c.name, score };
+          }
+        }
+      }
+
+      // Use match if score is good enough (> 50%)
+      if (bestMatch && bestMatch.score > 0.5) {
+        matchedCustomer = { id: bestMatch.id, name: bestMatch.name };
+        console.log(
+          '[Voice API] Matched customer:',
+          matchedCustomer.name,
+          '(score:',
+          bestMatch.score.toFixed(2),
+          ')'
+        );
+      }
+    } catch (dbError) {
+      console.warn('[Voice API] Customer lookup failed:', dbError);
+    }
+
+    // Step 4: Build invoice object from extracted data
     const items = (extractedData.items || []).map((item: any, index: number) => {
       const quantity = item.quantity || 1;
       const unitPrice = item.unitPrice || 0;
@@ -205,10 +265,10 @@ export default async function handler(
       number:
         extractedData.invoiceNumber ||
         'RE-2025-' + String(Math.floor(Math.random() * 1000)).padStart(3, '0'),
-      customerId: 'c-voice',
-      customer: {
-        id: 'c-voice',
-        name: extractedData.customerName || 'Unbekannter Kunde',
+      customerId: matchedCustomer?.id || 'c-new',
+      customer: matchedCustomer || {
+        id: 'c-new',
+        name: extractedCustomerName,
       },
       items,
       subtotal,
@@ -217,12 +277,13 @@ export default async function handler(
       total,
       status: extractedData.status || 'DRAFT',
       createdAt: new Date().toISOString(),
+      isExistingCustomer: !!matchedCustomer,
     };
 
     console.log('[Voice API] Invoice created:', invoice.number);
 
     // Clean up temp file
-    await fs.promises.unlink(audioFile.filepath).catch(() => { });
+    await fs.promises.unlink(audioFile.filepath).catch(() => {});
 
     res.status(200).json({
       success: true,

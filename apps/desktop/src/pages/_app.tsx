@@ -27,6 +27,7 @@ import {
   Mic,
   BarChart3,
   MessageSquare,
+  Users,
 } from 'lucide-react';
 import { AlertProvider } from '../contexts/AlertContext';
 import { SystemAlerts } from '../components/SystemAlerts';
@@ -41,6 +42,7 @@ const NAV_ITEMS = [
   { href: '/chat', label: 'Assistent', icon: MessageSquare },
   { href: '/invoices/new', label: 'Neue Rechnung', icon: FilePlus },
   { href: '/invoices', label: 'Rechnungen', icon: FileText },
+  { href: '/customers', label: 'Kunden', icon: Users },
   { href: '/workflows', label: 'Workflows', icon: BarChart3 },
   { href: '/settings', label: 'Einstellungen', icon: Settings },
 ];

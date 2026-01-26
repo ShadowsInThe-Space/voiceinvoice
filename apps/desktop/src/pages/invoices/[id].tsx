@@ -8,7 +8,15 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import { ChevronLeft, Download, Edit, Trash2, CheckCircle2, AlertCircle, Volume2 } from 'lucide-react';
+import {
+  ChevronLeft,
+  Download,
+  Edit,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+  Volume2,
+} from 'lucide-react';
 // Invoice type is used as 'any' for flexibility
 import { useSpeechSynthesis } from '../../hooks/useSpeechSynthesis';
 import { PDFExporter } from '../../lib/export/pdf-exporter';
@@ -240,31 +248,34 @@ export default function InvoiceDetailPage(): React.ReactElement {
         updatedAt: invoice.updatedAt,
         deletedAt: null,
         syncVersion: 1,
-        items: (invoice.items && invoice.items.length > 0)
-          ? invoice.items.map((item: any) => ({
-              id: item.id,
-              invoiceId: invoice.id,
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              total: item.total || item.quantity * item.unitPrice,
-              category: item.category || null,
-              createdAt: invoice.createdAt,
-              updatedAt: invoice.updatedAt,
-              syncVersion: 1,
-            }))
-          : [{
-              id: `item-${invoice.id}`,
-              invoiceId: invoice.id,
-              description: invoice.description || 'Leistung',
-              quantity: 1,
-              unitPrice: invoice.netAmount,
-              total: invoice.netAmount,
-              category: null,
-              createdAt: invoice.createdAt,
-              updatedAt: invoice.updatedAt,
-              syncVersion: 1,
-            }],
+        items:
+          invoice.items && invoice.items.length > 0
+            ? invoice.items.map((item: any) => ({
+                id: item.id,
+                invoiceId: invoice.id,
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                total: item.total || item.quantity * item.unitPrice,
+                category: item.category || null,
+                createdAt: invoice.createdAt,
+                updatedAt: invoice.updatedAt,
+                syncVersion: 1,
+              }))
+            : [
+                {
+                  id: `item-${invoice.id}`,
+                  invoiceId: invoice.id,
+                  description: invoice.description || 'Leistung',
+                  quantity: 1,
+                  unitPrice: invoice.netAmount,
+                  total: invoice.netAmount,
+                  category: null,
+                  createdAt: invoice.createdAt,
+                  updatedAt: invoice.updatedAt,
+                  syncVersion: 1,
+                },
+              ],
       };
 
       const pdfCustomer = {
@@ -285,14 +296,17 @@ export default function InvoiceDetailPage(): React.ReactElement {
       };
 
       // Get company logo from localStorage
-      const logoBase64 = typeof window !== 'undefined'
-        ? localStorage.getItem(LOGO_STORAGE_KEY) || undefined
-        : undefined;
+      const logoBase64 =
+        typeof window !== 'undefined'
+          ? localStorage.getItem(LOGO_STORAGE_KEY) || undefined
+          : undefined;
 
       // Get company info from localStorage or use defaults
       const companyInfo: any = {
         name: localStorage.getItem('voiceinvoice_company_name') || 'Meine Firma',
-        address: localStorage.getItem('voiceinvoice_company_address') || 'Musterstraße 1\n12345 Musterstadt',
+        address:
+          localStorage.getItem('voiceinvoice_company_address') ||
+          'Musterstraße 1\n12345 Musterstadt',
       };
       if (logoBase64) {
         companyInfo.logoBase64 = logoBase64;
@@ -309,6 +323,21 @@ export default function InvoiceDetailPage(): React.ReactElement {
 
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);
+
+      // Open mailto link with invoice info
+      if (invoice.customer?.email) {
+        const subject = `Rechnung ${invoice.invoiceNumber}`;
+        const body = `Sehr geehrte Damen und Herren,
+
+anbei erhalten Sie die Rechnung ${invoice.invoiceNumber} über ${formatCurrency(invoice.grossAmount)}.
+
+Fälligkeitsdatum: ${invoice.dueDate ? formatDate(invoice.dueDate) : 'Auf Anfrage'}
+
+Mit freundlichen Grüßen`;
+
+        const mailtoLink = `mailto:${invoice.customer.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.open(mailtoLink, '_blank');
+      }
     } catch (err) {
       console.error('[PDF Export] Error:', err);
       setError('PDF-Export fehlgeschlagen');
@@ -350,9 +379,12 @@ export default function InvoiceDetailPage(): React.ReactElement {
     // Build items text
     let itemsText = '';
     if (invoice.items && invoice.items.length > 0) {
-      itemsText = `Positionen: ${invoice.items.map((item: any, idx: number) =>
-        `Position ${idx + 1}: ${item.description}, ${item.quantity} mal ${formatCurrency(item.unitPrice)}, ergibt ${formatCurrency(item.total || item.quantity * item.unitPrice)}`
-      ).join('. ')}.`;
+      itemsText = `Positionen: ${invoice.items
+        .map(
+          (item: any, idx: number) =>
+            `Position ${idx + 1}: ${item.description}, ${item.quantity} mal ${formatCurrency(item.unitPrice)}, ergibt ${formatCurrency(item.total || item.quantity * item.unitPrice)}`
+        )
+        .join('. ')}.`;
     }
 
     const text = `Rechnung ${invoice.invoiceNumber} für ${invoice.customer?.name || 'Unbekannt'} vom ${formatDate(invoice.date)}.
@@ -562,10 +594,18 @@ export default function InvoiceDetailPage(): React.ReactElement {
               <table className="w-full">
                 <thead>
                   <tr className="border-b-2 border-border">
-                    <th className="text-left py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Beschreibung</th>
-                    <th className="text-right py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Menge</th>
-                    <th className="text-right py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Einzelpreis</th>
-                    <th className="text-right py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Gesamt</th>
+                    <th className="text-left py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                      Beschreibung
+                    </th>
+                    <th className="text-right py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                      Menge
+                    </th>
+                    <th className="text-right py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                      Einzelpreis
+                    </th>
+                    <th className="text-right py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                      Gesamt
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -573,8 +613,12 @@ export default function InvoiceDetailPage(): React.ReactElement {
                     <tr key={item.id || idx} className="border-b border-border/50">
                       <td className="py-4 font-medium text-foreground">{item.description}</td>
                       <td className="py-4 text-right text-muted-foreground">{item.quantity}</td>
-                      <td className="py-4 text-right font-mono text-muted-foreground">{formatCurrency(item.unitPrice)}</td>
-                      <td className="py-4 text-right font-mono font-bold text-foreground">{formatCurrency(item.total || item.quantity * item.unitPrice)}</td>
+                      <td className="py-4 text-right font-mono text-muted-foreground">
+                        {formatCurrency(item.unitPrice)}
+                      </td>
+                      <td className="py-4 text-right font-mono font-bold text-foreground">
+                        {formatCurrency(item.total || item.quantity * item.unitPrice)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

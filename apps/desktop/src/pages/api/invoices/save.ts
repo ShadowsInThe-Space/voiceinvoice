@@ -61,26 +61,86 @@ export default async function handler(
 
     console.log('[Save Invoice API] Saving invoice:', invoice.number);
 
-    // Step 1: Create or find customer
+    // Step 1: Create or find customer with fuzzy matching
+    const customerName = invoice.customer.name?.trim() || 'Unbekannter Kunde';
+
+    // First try exact match
     let customer = await prisma.customer.findFirst({
-      where: { name: invoice.customer.name },
+      where: {
+        name: customerName,
+        deletedAt: null,
+      },
     });
 
+    // If no exact match, try fuzzy search (contains)
+    if (!customer) {
+      // Get all customers and find best match
+      const allCustomers = await prisma.customer.findMany({
+        where: { deletedAt: null },
+        select: { id: true, name: true },
+      });
+
+      // Normalize search name (lowercase, remove common suffixes)
+      const normalizedSearch = customerName
+        .toLowerCase()
+        .replace(/\s*(gmbh|ag|ohg|kg|e\.k\.|ug|gbr|inc\.|ltd\.?|co\.?)\s*/gi, '')
+        .trim();
+
+      // Find best matching customer
+      let bestMatch: { id: string; name: string; score: number } | null = null;
+
+      for (const c of allCustomers) {
+        const normalizedName = c.name
+          .toLowerCase()
+          .replace(/\s*(gmbh|ag|ohg|kg|e\.k\.|ug|gbr|inc\.|ltd\.?|co\.?)\s*/gi, '')
+          .trim();
+
+        // Check if one contains the other
+        if (
+          normalizedName.includes(normalizedSearch) ||
+          normalizedSearch.includes(normalizedName)
+        ) {
+          const score =
+            Math.min(normalizedName.length, normalizedSearch.length) /
+            Math.max(normalizedName.length, normalizedSearch.length);
+
+          if (!bestMatch || score > bestMatch.score) {
+            bestMatch = { id: c.id, name: c.name, score };
+          }
+        }
+      }
+
+      // Use match if score is good enough (> 60%)
+      if (bestMatch && bestMatch.score > 0.6) {
+        customer = await prisma.customer.findUnique({
+          where: { id: bestMatch.id },
+        });
+        console.log(
+          '[Save Invoice API] Fuzzy matched customer:',
+          customer?.name,
+          '(score:',
+          bestMatch.score.toFixed(2),
+          ')'
+        );
+      }
+    }
+
+    // If still no match, create new customer
     if (!customer) {
       customer = await prisma.customer.create({
         data: {
-          name: invoice.customer.name,
+          name: customerName,
           email: null,
           phone: null,
           address: null,
           city: null,
           zipCode: null,
-          country: 'Deutschland',
+          country: 'DE',
         },
       });
-      console.log('[Save Invoice API] Created customer:', customer.id);
+      console.log('[Save Invoice API] Created new customer:', customer.id, customer.name);
     } else {
-      console.log('[Save Invoice API] Found existing customer:', customer.id);
+      console.log('[Save Invoice API] Found existing customer:', customer.id, customer.name);
     }
 
     // Step 2: Create invoice

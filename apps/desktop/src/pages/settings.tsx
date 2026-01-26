@@ -74,6 +74,9 @@ export default function SettingsPage(): React.ReactElement {
   const [errorMessage, setErrorMessage] = useState('');
   const [showResetDialog, setShowResetDialog] = useState(false);
 
+  // Default API Key from environment
+  const defaultApiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY || '';
+
   // Load saved settings or defaults on mount
   useEffect(() => {
     const savedApiKey = localStorage.getItem(STORAGE_KEYS.apiKey);
@@ -83,25 +86,23 @@ export default function SettingsPage(): React.ReactElement {
     const savedProvider = localStorage.getItem(STORAGE_KEYS.ttsProvider);
 
     // PRIORITY:
-    // 1. LocalStorage (User overwrote it)
-    // 2. Environment Variable (Demo Build / Pre-configured)
-    // 3. Empty (User must input)
-
+    // 1. LocalStorage (User saved their own key)
+    // 2. Environment Variable (Default from .env)
     if (savedApiKey) {
       setApiKey(savedApiKey);
-    } else if (process.env.NEXT_PUBLIC_DEMO_API_KEY) {
-      // Auto-inject Demo Key if available and nothing saved
-      console.log('Using embedded Demo API Key');
-      setApiKey(process.env.NEXT_PUBLIC_DEMO_API_KEY);
-      // Optional: Auto-save it so it persists? 
-      // Better: Just set it in state. If user saves, it writes to storage.
+    } else if (defaultApiKey) {
+      // Use default API key from environment
+      setApiKey(defaultApiKey);
     }
 
     if (savedLocale) setLocale(savedLocale);
     if (savedVoice) setTtsVoice(savedVoice);
     if (savedRate) setTtsRate(parseFloat(savedRate));
-    if (savedProvider === 'google' || savedProvider === 'browser') {
-      setTtsProvider(savedProvider);
+    // Always default to Google TTS unless user explicitly saved browser
+    if (savedProvider === 'browser') {
+      setTtsProvider('browser');
+    } else {
+      setTtsProvider('google');
     }
 
     // Load backend settings
@@ -153,15 +154,20 @@ export default function SettingsPage(): React.ReactElement {
 
   /**
    * Validate form.
+   * API Key is required for Google Cloud TTS but we have a default.
    */
   const validateForm = useCallback((): boolean => {
-    if (!apiKey.trim()) {
-      setErrorMessage('API Key ist erforderlich');
-      return false;
+    // Only validate API key if using Google TTS and no key is set
+    if (ttsProvider === 'google' && !apiKey.trim()) {
+      // Check if we have a default to fall back to
+      if (!defaultApiKey) {
+        setErrorMessage('API Key ist erforderlich für Google Cloud TTS');
+        return false;
+      }
     }
     setErrorMessage('');
     return true;
-  }, [apiKey]);
+  }, [apiKey, ttsProvider, defaultApiKey]);
 
   /**
    * Save settings to localStorage.
@@ -205,15 +211,7 @@ export default function SettingsPage(): React.ReactElement {
         setIsSaving(false);
       }
     },
-    [
-      apiKey,
-      locale,
-      ttsVoice,
-      ttsRate,
-      ttsProvider,
-      workflowsEnabled,
-      validateForm,
-    ]
+    [apiKey, locale, ttsVoice, ttsRate, ttsProvider, workflowsEnabled, validateForm]
   );
 
   /**
@@ -388,6 +386,11 @@ export default function SettingsPage(): React.ReactElement {
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
               >
                 Google AI API Key
+                {apiKey === defaultApiKey && defaultApiKey && (
+                  <span className="ml-2 text-xs text-green-600 dark:text-green-400 font-normal">
+                    ✓ Standard-Key aktiv
+                  </span>
+                )}
               </label>
               <div className="relative">
                 <input
@@ -414,7 +417,8 @@ export default function SettingsPage(): React.ReactElement {
                 </p>
               )}
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Ihr API-Schluessel fuer Google Gemini und Cloud TTS
+                Für Google Gemini KI und Cloud TTS.{' '}
+                {defaultApiKey && 'Ein Standard-Key ist vorkonfiguriert.'}
               </p>
             </div>
           </div>
@@ -475,20 +479,22 @@ export default function SettingsPage(): React.ReactElement {
                 <button
                   type="button"
                   onClick={() => setTtsProvider('browser')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-l-md border transition-colors ${ttsProvider === 'browser'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
-                    }`}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-l-md border transition-colors ${
+                    ttsProvider === 'browser'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                  }`}
                 >
                   Browser
                 </button>
                 <button
                   type="button"
                   onClick={() => setTtsProvider('google')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-r-md border transition-colors ${ttsProvider === 'google'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
-                    }`}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-r-md border transition-colors ${
+                    ttsProvider === 'google'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                  }`}
                 >
                   Google Cloud
                 </button>
@@ -580,12 +586,13 @@ export default function SettingsPage(): React.ReactElement {
                   Aktueller Status
                 </span>
                 <span
-                  className={`px-3 py-1 text-xs font-semibold rounded-full ${licenseStatus === 'active'
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300'
-                    : licenseStatus === 'expired'
-                      ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
-                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                    }`}
+                  className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                    licenseStatus === 'active'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300'
+                      : licenseStatus === 'expired'
+                        ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                  }`}
                 >
                   {licenseStatus === 'active'
                     ? '✓ Aktiv'
@@ -620,7 +627,7 @@ export default function SettingsPage(): React.ReactElement {
                           style={{
                             width: `${Math.min(
                               ((licenseDetails.currentUsage || 0) / licenseDetails.monthlyQuota) *
-                              100,
+                                100,
                               100
                             )}%`,
                           }}
@@ -768,10 +775,11 @@ export default function SettingsPage(): React.ReactElement {
         {saveStatus && (
           <div
             role="status"
-            className={`p-4 rounded-md ${saveStatus === 'success'
-              ? 'bg-green-50 text-green-800 dark:bg-green-900/50 dark:text-green-300'
-              : 'bg-red-50 text-red-800 dark:bg-red-900/50 dark:text-red-300'
-              }`}
+            className={`p-4 rounded-md ${
+              saveStatus === 'success'
+                ? 'bg-green-50 text-green-800 dark:bg-green-900/50 dark:text-green-300'
+                : 'bg-red-50 text-red-800 dark:bg-red-900/50 dark:text-red-300'
+            }`}
           >
             {saveStatus === 'success' ? 'Einstellungen gespeichert!' : 'Fehler beim Speichern'}
           </div>
