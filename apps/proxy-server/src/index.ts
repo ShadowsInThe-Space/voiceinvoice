@@ -11,6 +11,9 @@
  * @module proxy-server
  */
 
+// Load environment variables from .env file
+import 'dotenv/config';
+
 import { buildServer } from './server';
 
 /**

@@ -7,7 +7,7 @@
  * Run with: npx tsx prisma/seed.ts
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../src/generated/prisma';
 
 const prisma = new PrismaClient();
 
@@ -67,36 +67,57 @@ function addDays(date: Date, days: number): Date {
 async function main() {
   console.log('🌱 Seeding database...\n');
 
+  // Clean up existing data
+  console.log('Cleaning up existing data...');
+  await prisma.$executeRawUnsafe('DELETE FROM InvoiceItem');
+  await prisma.$executeRawUnsafe('DELETE FROM Invoice');
+  await prisma.$executeRawUnsafe('DELETE FROM Customer');
+  await prisma.$executeRawUnsafe('DELETE FROM WorkflowExecution');
+  await prisma.$executeRawUnsafe('DELETE FROM WorkflowKPI');
+
+
   const now = new Date();
 
-  // Create customers
-  console.log('Creating 12 customers...');
+  // Create 30 customers
+  console.log('Creating 30 customers...');
   const customerIds: string[] = [];
 
-  for (const customer of CUSTOMERS) {
+  // Use defined customers + generated ones
+  for (let i = 0; i < 30; i++) {
     const id = generateId();
     const timestamp = now.toISOString();
+
+    let name, email, city;
+    if (i < CUSTOMERS.length) {
+      name = CUSTOMERS[i].name;
+      email = CUSTOMERS[i].email;
+      city = CUSTOMERS[i].city;
+    } else {
+      name = `Kunde ${String.fromCharCode(65 + (i % 26))}${i}`;
+      email = `kunde${i}@demo.de`;
+      city = randomFrom(['Berlin', 'München', 'Hamburg', 'Köln']);
+    }
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO Customer (id, name, email, city, country, createdAt, updatedAt, syncVersion)
        VALUES (?, ?, ?, ?, 'DE', ?, ?, 0)`,
       id,
-      customer.name,
-      customer.email,
-      customer.city,
+      name,
+      email,
+      city,
       timestamp,
       timestamp
     );
 
     customerIds.push(id);
-    console.log(`  ✓ ${customer.name}`);
+    if (i < 5 || i > 25) console.log(`  ✓ ${name}`);
   }
 
-  // Create 30 invoices with various statuses
-  console.log('\nCreating 30 invoices...');
+  // Create 50 invoices with various statuses
+  console.log('\nCreating 50 invoices...');
 
   const statuses = ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED'];
-  const statusWeights = [3, 6, 12, 6, 3]; // Distribution
+  const statusWeights = [5, 10, 25, 8, 2]; // Distribution for 50
   const weightedStatuses: string[] = [];
   statuses.forEach((status, i) => {
     for (let j = 0; j < statusWeights[i]; j++) {
@@ -104,7 +125,7 @@ async function main() {
     }
   });
 
-  for (let i = 1; i <= 30; i++) {
+  for (let i = 1; i <= 50; i++) {
     const id = generateId();
     const number = `INV-${i.toString().padStart(6, '0')}`;
     const customerId = randomFrom(customerIds);

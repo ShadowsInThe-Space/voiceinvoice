@@ -176,7 +176,7 @@ export async function extractInvoiceData(transcript: string): Promise<Extraction
 
   // Use Gemini 2.5 Flash for invoice extraction
   const model = client.getGenerativeModel({
-    model: 'gemini-2.5-flash-preview-05-20',
+    model: 'gemini-2.5-flash',
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: invoiceSchema,

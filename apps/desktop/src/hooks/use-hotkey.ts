@@ -47,10 +47,13 @@ export interface HotkeyConfig {
  * Checks if the keyboard event matches the hotkey configuration.
  *
  * @param {KeyboardEvent} event - The keyboard event
- * @param {HotkeyConfig} config - The hotkey configuration
+ * @param {Pick<HotkeyConfig, 'key' | 'modifiers'>} config - The hotkey key/modifiers to match
  * @returns {boolean} True if the event matches the hotkey
  */
-function matchesHotkey(event: KeyboardEvent, config: HotkeyConfig): boolean {
+function matchesHotkey(
+  event: KeyboardEvent,
+  config: Pick<HotkeyConfig, 'key'> & { modifiers?: HotkeyModifiers }
+): boolean {
   // Check if key matches (case-insensitive)
   const keyMatches = event.key.toLowerCase() === config.key.toLowerCase();
   if (!keyMatches) return false;
@@ -140,7 +143,20 @@ export function useHotkey(config: HotkeyConfig): void {
     (event: KeyboardEvent) => {
       if (!enabled) return;
 
-      if (matchesHotkey(event, { key, modifiers })) {
+      // Skip if user is typing in an input field (unless modifiers are used)
+      const target = event.target as HTMLElement;
+      const isInputField =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+      const hasModifiers = modifiers?.alt || modifiers?.ctrl || modifiers?.meta || modifiers?.shift;
+
+      // Only skip for input fields if no modifiers are required
+      if (isInputField && !hasModifiers) {
+        return;
+      }
+
+      if (matchesHotkey(event, modifiers ? { key, modifiers } : { key })) {
         if (preventDefault) {
           event.preventDefault();
         }
@@ -200,8 +216,25 @@ export function useHotkeys(configs: HotkeyConfig[]): void {
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
+      // Check if user is typing in an input field
+      const target = event.target as HTMLElement;
+      const isInputField =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+
       configs.forEach((config, index) => {
         if (!config.enabled && config.enabled !== undefined) return;
+
+        // Skip for input fields if no modifiers are required
+        const hasModifiers =
+          config.modifiers?.alt ||
+          config.modifiers?.ctrl ||
+          config.modifiers?.meta ||
+          config.modifiers?.shift;
+        if (isInputField && !hasModifiers) {
+          return;
+        }
 
         if (matchesHotkey(event, config)) {
           const preventDefault = config.preventDefault ?? true;

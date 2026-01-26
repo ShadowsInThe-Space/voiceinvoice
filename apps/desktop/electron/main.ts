@@ -14,6 +14,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import { spawn, ChildProcess } from 'child_process';
 import { createWindowConfig } from './window-manager';
 import {
   createInvoiceHandler,
@@ -33,6 +34,7 @@ import {
   getTimelineInvoicesHandler,
   getTopCustomersHandler,
 } from './ipc/analytics-handlers';
+import { ensureDatabaseExists, logDatabaseConfig } from './lib/database-path';
 
 /**
  * Main application window reference.
@@ -41,6 +43,16 @@ import {
  * and for future use (e.g., menu bar, tray icon).
  */
 let mainWindow: BrowserWindow | null = null;
+
+/**
+ * Next.js standalone server process (production only).
+ */
+let nextServerProcess: ChildProcess | null = null;
+
+/**
+ * Port for the Next.js server.
+ */
+const NEXT_SERVER_PORT = 3000;
 
 /**
  * Returns the main window instance.
@@ -55,6 +67,75 @@ export function getMainWindow(): BrowserWindow | null {
  * Whether the app is running in development mode.
  */
 const isDev = process.env.NODE_ENV === 'development';
+
+/**
+ * Starts the Next.js standalone server in production.
+ *
+ * @returns {Promise<void>} Resolves when server is ready
+ */
+async function startNextServer(): Promise<void> {
+  if (isDev) return;
+
+  // In a monorepo, Next.js standalone preserves the directory structure
+  // Use app.getAppPath() for correct path resolution in packaged app
+  const appPath = app.getAppPath();
+  const serverPath = path.join(appPath, '.next', 'standalone', 'apps', 'desktop', 'server.js');
+
+  // Check if standalone server exists
+  if (!fs.existsSync(serverPath)) {
+    console.error('Next.js standalone server not found at:', serverPath);
+    throw new Error('Standalone server not found. Run "next build" first.');
+  }
+
+  return new Promise((resolve, reject) => {
+    console.log('Starting Next.js standalone server...');
+
+    nextServerProcess = spawn('node', [serverPath], {
+      env: {
+        ...process.env,
+        PORT: String(NEXT_SERVER_PORT),
+        HOSTNAME: 'localhost',
+      },
+      cwd: path.join(appPath, '.next', 'standalone', 'apps', 'desktop'),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let serverReady = false;
+
+    nextServerProcess.stdout?.on('data', (data: Buffer) => {
+      const output = data.toString();
+      console.log('[Next.js]', output);
+
+      // Check if server is ready
+      if (output.includes('Ready') || output.includes('started server')) {
+        serverReady = true;
+        resolve();
+      }
+    });
+
+    nextServerProcess.stderr?.on('data', (data: Buffer) => {
+      console.error('[Next.js Error]', data.toString());
+    });
+
+    nextServerProcess.on('error', (err) => {
+      console.error('Failed to start Next.js server:', err);
+      reject(err);
+    });
+
+    nextServerProcess.on('exit', (code) => {
+      console.log('Next.js server exited with code:', code);
+      nextServerProcess = null;
+    });
+
+    // Timeout: resolve anyway after 5 seconds (server might be ready without message)
+    setTimeout(() => {
+      if (!serverReady) {
+        console.log('Server startup timeout - assuming ready');
+        resolve();
+      }
+    }, 5000);
+  });
+}
 
 /**
  * Path to the preload script.
@@ -102,9 +183,9 @@ function createMainWindow(): BrowserWindow {
     // Open DevTools in development
     win.webContents.openDevTools();
   } else {
-    // Production: Load from exported Next.js build
-    const indexPath = path.join(__dirname, '..', 'out', 'index.html');
-    win.loadFile(indexPath);
+    // Production: Load from Next.js standalone server
+    const serverUrl = `http://localhost:${NEXT_SERVER_PORT}`;
+    win.loadURL(serverUrl);
   }
 
   return win;
@@ -196,8 +277,26 @@ function setupHandlers(): void {
 }
 
 // App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Initialize database before setting up handlers
+  logDatabaseConfig();
+  await ensureDatabaseExists();
+
   setupHandlers();
+
+  // Start Next.js server in production before creating window
+  try {
+    await startNextServer();
+  } catch (err) {
+    console.error('Failed to start Next.js server:', err);
+    dialog.showErrorBox(
+      'Server Error',
+      'Failed to start the application server. Please try again.'
+    );
+    app.quit();
+    return;
+  }
+
   mainWindow = createMainWindow();
 
   app.on('activate', () => {
@@ -222,8 +321,23 @@ app.whenReady().then(() => {
   }
 });
 app.on('window-all-closed', () => {
+  // Stop Next.js server when all windows are closed
+  if (nextServerProcess) {
+    console.log('Stopping Next.js server...');
+    nextServerProcess.kill();
+    nextServerProcess = null;
+  }
+
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+// Cleanup on app quit
+app.on('will-quit', () => {
+  if (nextServerProcess) {
+    nextServerProcess.kill();
+    nextServerProcess = null;
   }
 });
 
@@ -231,7 +345,11 @@ app.on('window-all-closed', () => {
 app.on('web-contents-created', (_event, contents) => {
   contents.on('will-navigate', (event, url) => {
     const parsedUrl = new URL(url);
-    const isAllowed = parsedUrl.origin === 'http://localhost:3002' || url.startsWith('file://');
+    const allowedOrigins = [
+      'http://localhost:3002', // Dev server
+      `http://localhost:${NEXT_SERVER_PORT}`, // Production server
+    ];
+    const isAllowed = allowedOrigins.includes(parsedUrl.origin) || url.startsWith('file://');
 
     if (!isAllowed) {
       console.warn('[Security] Blocked navigation to:', url);

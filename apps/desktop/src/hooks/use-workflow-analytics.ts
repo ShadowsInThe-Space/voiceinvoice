@@ -176,18 +176,50 @@ export function useWorkflowAnalytics(options: WorkflowAnalyticsOptions = {}): {
   const [recentExecutions, setRecentExecutions] = useState<WorkflowExecutionRecord[]>([]);
 
   /**
-   * Fetches all analytics data via IPC.
+   * Fetches KPIs via REST API (browser fallback).
+   */
+  const fetchViaApi = useCallback(async () => {
+    const response = await fetch('/api/analytics/kpis');
+    if (!response.ok) {
+      throw new Error('Failed to fetch analytics');
+    }
+    const data = await response.json();
+    setKpis({
+      offeneMahnungenEuro: data.offeneMahnungenEuro || 0,
+      verarbeiteteRechnungen: data.verarbeiteteRechnungen || 0,
+      gematchteZahlungen: data.gematchteZahlungen || 0,
+      ueberfaelligeVertraege: data.ueberfaelligeVertraege || 0,
+    });
+    setStats({
+      totalExecutions: data.recentExecutions || 0,
+      successfulExecutions: data.gematchteZahlungen || 0,
+      failedExecutions: data.ueberfaelligeVertraege || 0,
+      avgExecutionTimeMs: 0,
+      successRate: data.successRate || 0,
+    });
+  }, []);
+
+  /**
+   * Fetches all analytics data via IPC or REST API.
    */
   const fetchData = useCallback(async () => {
-    // Check if we're in Electron context
-    if (typeof window === 'undefined' || !window.voiceinvoice?.analytics) {
-      setError('Analytics API nicht verfügbar (nur in Electron)');
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
+
+    // Check if we're in Electron context
+    if (typeof window === 'undefined' || !window.voiceinvoice?.analytics) {
+      // Fallback to REST API for browser context
+      try {
+        await fetchViaApi();
+        setLoading(false);
+        return;
+      } catch (err) {
+        console.error('[Analytics] API fallback failed:', err);
+        setError('Analytics lädt...');
+        setLoading(false);
+        return;
+      }
+    }
 
     try {
       const startDate = new Date();

@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../src/generated/prisma';
 import { VoiceInvoicePipeline, PipelineConfig } from '../../src/lib/pipeline/voice-invoice-pipeline';
 import { GeminiClient, TranscriptionResult, InvoiceParseResult } from '../../src/lib/ai/gemini-client';
 import { DatabaseService, InvoiceWithRelations } from '../../src/lib/database/database-service';

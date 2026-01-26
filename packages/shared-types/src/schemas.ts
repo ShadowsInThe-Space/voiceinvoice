@@ -21,7 +21,7 @@ export const CustomerTypeSchema = z.enum(['CUSTOMER', 'SUPPLIER', 'BOTH']);
  *
  * Tracks the lifecycle state of an invoice.
  */
-export const InvoiceStatusSchema = z.enum(['DRAFT', 'PENDING', 'PAID', 'CANCELLED', 'OVERDUE']);
+export const InvoiceStatusSchema = z.enum(['DRAFT', 'SENT', 'PENDING', 'PAID', 'CANCELLED', 'OVERDUE']);
 
 /**
  * Schema for German tax rates.
@@ -72,6 +72,13 @@ export const InvoiceDataSchema = z.object({
 
   /** Optional description or notes */
   description: z.string().optional(),
+
+  /** List of invoice items */
+  items: z.array(z.object({
+    description: z.string().min(1, 'Description is required'),
+    quantity: z.number().positive('Quantity must be positive'),
+    unitPrice: z.number().nonnegative('Price must be non-negative'),
+  })).optional(),
 });
 
 /**

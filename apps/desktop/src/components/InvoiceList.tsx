@@ -10,9 +10,9 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import type { Invoice, InvoiceStatus } from '@voiceinvoice/shared-types';
 import { cn } from '../lib/utils';
-import { 
-  Search, 
-  Trash2, 
+import {
+  Search,
+  Trash2,
   FileText,
   Calendar,
 } from 'lucide-react';
@@ -41,10 +41,43 @@ type SortOption = 'date' | 'amount' | 'invoiceNumber';
 const STATUS_CONFIG: Record<InvoiceStatus, { label: string; className: string }> = {
   DRAFT: { label: 'Entwurf', className: 'bg-muted text-muted-foreground border-muted-foreground/20' },
   PENDING: { label: 'Offen', className: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' },
+  SENT: { label: 'Versendet', className: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
   PAID: { label: 'Bezahlt', className: 'bg-primary/10 text-primary border-primary/20' },
   CANCELLED: { label: 'Storniert', className: 'bg-destructive/10 text-destructive border-destructive/20' },
   OVERDUE: { label: 'Überfällig', className: 'bg-red-500 text-white border-transparent' },
 };
+
+/** Fallback for unknown statuses */
+const DEFAULT_STATUS = { label: 'Unbekannt', className: 'bg-gray-500/10 text-gray-600 border-gray-500/20' };
+
+/** German status aliases (from voice input) */
+const STATUS_ALIASES: Record<string, InvoiceStatus> = {
+  ENTWURF: 'DRAFT',
+  OFFEN: 'PENDING',
+  VERSENDET: 'SENT',
+  BEZAHLT: 'PAID',
+  STORNIERT: 'CANCELLED',
+  ÜBERFÄLLIG: 'OVERDUE',
+  // Lowercase variants
+  draft: 'DRAFT',
+  pending: 'PENDING',
+  sent: 'SENT',
+  paid: 'PAID',
+  cancelled: 'CANCELLED',
+  overdue: 'OVERDUE',
+};
+
+/**
+ * Gets status config with fallback for unknown statuses.
+ * Supports German aliases from voice input.
+ *
+ * @param {string} status - Invoice status
+ * @returns {object} Status configuration
+ */
+function getStatusConfig(status: string): { label: string; className: string } {
+  const normalizedStatus = STATUS_ALIASES[status] || status;
+  return STATUS_CONFIG[normalizedStatus as InvoiceStatus] || DEFAULT_STATUS;
+}
 
 /**
  * Formats a date to German locale format.
@@ -282,10 +315,10 @@ export function InvoiceList({
                       data-testid={`status-${invoice.id}`}
                       className={cn(
                         "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all shadow-sm",
-                        STATUS_CONFIG[invoice.status].className
+                        getStatusConfig(invoice.status).className
                       )}
                     >
-                      {STATUS_CONFIG[invoice.status].label}
+                      {getStatusConfig(invoice.status).label}
                     </span>
                   </td>
                   {onDelete && (

@@ -50,12 +50,8 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps): React
     formData.append('file', file);
 
     try {
-      const webhookUrl = process.env.NEXT_PUBLIC_N8N_INGEST_WEBHOOK;
-      if (!webhookUrl) {
-        throw new Error('Ingestion webhook URL not configured');
-      }
-
-      const response = await fetch(webhookUrl, {
+      // Use local proxy route to avoid CORS issues with n8n
+      const response = await fetch('/api/documents/upload', {
         method: 'POST',
         body: formData,
       });

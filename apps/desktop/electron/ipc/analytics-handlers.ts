@@ -7,20 +7,35 @@
  * @module electron/ipc/analytics-handlers
  */
 
-import { PrismaClient } from '@prisma/client';
-import * as path from 'path';
+import { PrismaClient } from '../../src/generated/prisma';
+import { getDatabaseUrl, logDatabaseConfig } from '../lib/database-path';
 import type { IpcResult } from './handlers';
 
 /**
- * Initialize Prisma client with the correct database path.
+ * Prisma client instance (lazy-initialized).
  */
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: `file:${path.join(__dirname, '..', '..', 'prisma', 'data', 'voiceinvoice.db')}`,
-    },
-  },
-});
+let prisma: PrismaClient | null = null;
+
+/**
+ * Gets or creates the Prisma client with the correct database path.
+ *
+ * Uses lazy initialization to ensure app.getPath('userData') is available.
+ *
+ * @returns {PrismaClient} The Prisma client instance
+ */
+function getPrismaClient(): PrismaClient {
+  if (!prisma) {
+    logDatabaseConfig();
+    prisma = new PrismaClient({
+      datasources: {
+        db: {
+          url: getDatabaseUrl(),
+        },
+      },
+    });
+  }
+  return prisma;
+}
 
 /**
  * Latest KPI values.
@@ -120,7 +135,7 @@ export interface TopCustomer {
 export async function getWorkflowKPIsHandler(): Promise<IpcResult<LatestKPIs>> {
   try {
     // Get latest KPIs from WorkflowKPI table
-    const kpiResults = await prisma.$queryRaw<Array<{ metricName: string; metricValue: number }>>`
+    const kpiResults = await getPrismaClient().$queryRaw<Array<{ metricName: string; metricValue: number }>>`
       SELECT metricName, metricValue
       FROM WorkflowKPI
       WHERE id IN (
@@ -133,7 +148,7 @@ export async function getWorkflowKPIsHandler(): Promise<IpcResult<LatestKPIs>> {
     `;
 
     // Also get overdue invoice totals directly from Invoice table
-    const overdueResult = await prisma.$queryRaw<Array<{ total: number; count: number }>>`
+    const overdueResult = await getPrismaClient().$queryRaw<Array<{ total: number; count: number }>>`
       SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count
       FROM Invoice
       WHERE status = 'OVERDUE' AND deletedAt IS NULL
@@ -205,7 +220,7 @@ export async function getExecutionStatsHandler(
       whereClause += ` AND workflowIntent = '${workflowIntent}'`;
     }
 
-    const result = await prisma.$queryRawUnsafe<
+    const result = await getPrismaClient().$queryRawUnsafe<
       Array<{
         total: number;
         successful: number;
@@ -259,7 +274,7 @@ export async function getDailyCountsHandler(
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const results = await prisma.$queryRaw<
+    const results = await getPrismaClient().$queryRaw<
       Array<{
         date: string;
         total: number;
@@ -313,7 +328,7 @@ export async function getDailyCountsHandler(
  */
 export async function getSuccessRatesHandler(): Promise<IpcResult<WorkflowSuccessRate[]>> {
   try {
-    const results = await prisma.$queryRaw<
+    const results = await getPrismaClient().$queryRaw<
       Array<{
         workflowName: string;
         workflowIntent: string;
@@ -356,7 +371,7 @@ export async function getSuccessRatesHandler(): Promise<IpcResult<WorkflowSucces
  */
 export async function getErrorBreakdownHandler(): Promise<IpcResult<ErrorTypeBreakdown[]>> {
   try {
-    const results = await prisma.$queryRaw<
+    const results = await getPrismaClient().$queryRaw<
       Array<{
         errorType: string;
         count: number;
@@ -406,7 +421,7 @@ export async function getRecentExecutionsHandler(
       where.workflowIntent = workflowIntent;
     }
 
-    const executions = await prisma.workflowExecution.findMany({
+    const executions = await getPrismaClient().workflowExecution.findMany({
       where,
       orderBy: { triggeredAt: 'desc' },
       take: limit,
@@ -442,7 +457,7 @@ export async function getRecentExecutionsHandler(
  */
 export async function getTimelineInvoicesHandler(): Promise<IpcResult<TimelineInvoice[]>> {
   try {
-    const results = await prisma.$queryRaw<
+    const results = await getPrismaClient().$queryRaw<
       Array<{
         id: string;
         number: string;
@@ -513,7 +528,7 @@ export async function getTimelineInvoicesHandler(): Promise<IpcResult<TimelineIn
  */
 export async function getTopCustomersHandler(limit: number = 5): Promise<IpcResult<TopCustomer[]>> {
   try {
-    const results = await prisma.$queryRaw<
+    const results = await getPrismaClient().$queryRaw<
       Array<{
         id: string;
         name: string;

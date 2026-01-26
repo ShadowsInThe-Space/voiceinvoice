@@ -106,6 +106,7 @@ const WORKFLOW_RETRY_CONFIG = {
 
 /**
  * Default webhook configurations for all workflow intents.
+ * Only 3 workflows enabled for demo - matching active n8n workflows on Hetzner server.
  */
 const DEFAULT_WORKFLOW_WEBHOOKS: WorkflowWebhookConfig[] = [
   {
@@ -125,56 +126,56 @@ const DEFAULT_WORKFLOW_WEBHOOKS: WorkflowWebhookConfig[] = [
   {
     intent: 'WORKFLOW_ZAHLUNGSABGLEICH',
     path: '/webhook/zahlungsabgleich',
-    enabled: true,
+    enabled: false,
     name: 'Zahlungsabgleich-Agent',
     description: 'Vergleicht Kontoauszüge mit offenen Rechnungen',
   },
   {
     intent: 'WORKFLOW_AUSGABEN',
     path: '/webhook/ausgaben',
-    enabled: true,
+    enabled: false,
     name: 'Ausgaben-Kategorisierung',
     description: 'Kategorisiert Ausgaben automatisch für die Buchhaltung',
   },
   {
     intent: 'WORKFLOW_MONATSREPORT',
     path: '/webhook/monatsreport',
-    enabled: true,
+    enabled: false,
     name: 'Monatsabschluss-Report',
     description: 'Erstellt monatliche Finanzübersicht',
   },
   {
     intent: 'WORKFLOW_LEAD_QUALIFIZIERUNG',
     path: '/webhook/lead-qualifizierung',
-    enabled: true,
+    enabled: false,
     name: 'Lead-Qualifizierung',
     description: 'Bewertet neue Leads anhand von Kriterien',
   },
   {
     intent: 'WORKFLOW_FOLLOW_UP',
     path: '/webhook/follow-up',
-    enabled: true,
+    enabled: false,
     name: 'Follow-up-Agent',
     description: 'Sendet automatische Follow-up-E-Mails',
   },
   {
     intent: 'WORKFLOW_KUNDENFEEDBACK',
     path: '/webhook/kundenfeedback',
-    enabled: true,
+    enabled: false,
     name: 'Kundenfeedback-Sammler',
     description: 'Sammelt und analysiert Kundenfeedback',
   },
   {
     intent: 'WORKFLOW_VERTRAGS_ERINNERUNG',
     path: '/webhook/vertrags-erinnerung',
-    enabled: true,
+    enabled: false,
     name: 'Vertrags-Erinnerung',
     description: 'Erinnert vor Vertragsablauf',
   },
   {
     intent: 'WORKFLOW_KUNDENANFRAGEN',
     path: '/webhook/kundenanfragen',
-    enabled: true,
+    enabled: false,
     name: 'Kundenanfragen-Router',
     description: 'Klassifiziert und verteilt eingehende Anfragen',
   },
@@ -211,7 +212,8 @@ export function isValidBaseUrl(url: string): boolean {
  */
 export async function getWorkflowConfig(): Promise<WorkflowConfig> {
   let enabled = false;
-  let baseUrl = 'http://localhost:5678';
+  // Base URL is now server-side only (not needed in client)
+  let baseUrl = 'https://n8n.shadowsinthe.space';
   let webhooks: WorkflowWebhookConfig[] = [...DEFAULT_WORKFLOW_WEBHOOKS];
 
   // Try to load from backend if in Electron
@@ -318,7 +320,8 @@ export async function getWebhookUrl(intent: WorkflowIntent): Promise<string | nu
 }
 
 /**
- * Triggers a workflow via webhook call.
+ * Triggers a workflow via server-side API route.
+ * This keeps webhook URLs and credentials on the server side.
  *
  * @param intent - The workflow intent to trigger
  * @param params - Parameters to pass to the workflow
@@ -330,60 +333,65 @@ export async function triggerWorkflow(
 ): Promise<WorkflowResult> {
   const startTime = Date.now();
 
-  const url = await getWebhookUrl(intent);
-  if (!url) {
+  // Check if workflows are enabled
+  const config = await getWorkflowConfig();
+  if (!config.enabled) {
     return {
       success: false,
-      message: 'Workflow ist nicht konfiguriert oder deaktiviert.',
-      error: 'Workflow nicht konfiguriert',
+      message: 'Workflows sind deaktiviert. Bitte in den Einstellungen aktivieren.',
+      error: 'Workflows deaktiviert',
       errorType: 'WORKFLOW_NOT_CONFIGURED',
       executionTimeMs: Date.now() - startTime,
     };
   }
 
-  const config = await getWorkflowConfig();
   const webhook = config.webhooks.find((w: WorkflowWebhookConfig) => w.intent === intent);
+  if (!webhook?.enabled) {
+    return {
+      success: false,
+      message: `Workflow "${intent}" ist nicht aktiviert.`,
+      error: 'Workflow nicht aktiviert',
+      errorType: 'WORKFLOW_NOT_CONFIGURED',
+      executionTimeMs: Date.now() - startTime,
+    };
+  }
 
-  // Build payload
-  const payload = {
-    intent,
-    workflowName: webhook?.name ?? intent,
-    triggeredAt: new Date().toISOString(),
-    params,
-  };
-
-  // Try to call the webhook with retries
+  // Call server-side API route (keeps webhook URLs on server)
   for (let attempt = 0; attempt <= WORKFLOW_RETRY_CONFIG.maxRetries; attempt++) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), WORKFLOW_RETRY_CONFIG.timeoutMs);
 
-      const response = await fetch(url, {
+      const response = await fetch('/api/workflows/trigger', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Accept: 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          workflow: intent,
+          payload: {
+            workflowName: webhook.name,
+            ...params,
+          },
+        }),
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
-      if (response.ok) {
-        const data = await response.json().catch(() => ({}));
+      const data = await response.json().catch(() => ({}));
 
+      if (response.ok && data.success) {
         return {
           success: true,
-          message: data.message ?? `${webhook?.name ?? 'Workflow'} wurde erfolgreich ausgeführt.`,
-          data,
-          executionTimeMs: Date.now() - startTime,
+          message: data.message ?? `${webhook.name} wurde erfolgreich ausgeführt.`,
+          data: data.data,
+          executionTimeMs: data.executionTimeMs ?? Date.now() - startTime,
         };
       }
 
-      // HTTP error
-      const errorText = await response.text().catch(() => response.statusText);
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
+      // API returned error
+      throw new Error(data.error || data.message || `HTTP ${response.status}`);
     } catch (error) {
       // If this was the last attempt, return failure
       if (attempt === WORKFLOW_RETRY_CONFIG.maxRetries) {

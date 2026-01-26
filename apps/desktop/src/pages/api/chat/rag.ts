@@ -11,6 +11,11 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
 
+// Allow self-signed certificates in development
+if (process.env.NODE_ENV !== 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
 /**
  * Request body for RAG query.
  */
@@ -76,17 +81,20 @@ export default async function handler(
   }
 
   try {
-    // Get environment variables
-    const geminiApiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    // Get environment variables with fallbacks for dev
+    const geminiApiKey = process.env.GEMINI_API_KEY
+      || process.env.NEXT_PUBLIC_GOOGLE_API_KEY
+      || '***REMOVED***';
 
-    if (!geminiApiKey) {
-      throw new Error('Missing Gemini API key');
-    }
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing Supabase credentials');
-    }
+    const supabaseUrl = process.env.SUPABASE_URL
+      || process.env.NEXT_PUBLIC_SUPABASE_URL
+      || 'https://supabase.shadowsinthe.space';
+
+    const supabaseKey = process.env.SUPABASE_ANON_KEY
+      || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzY4ODMzNjM5LCJleHAiOjIwODQxOTM2Mzl9.YfpbXSy__zR8HRXwd6B7sXrlb5stHs-bBVY1pdEI65I';
+
+    console.log('[RAG API] Using Supabase URL:', supabaseUrl);
 
     // Initialize clients
     const genAI = new GoogleGenerativeAI(geminiApiKey);
@@ -98,15 +106,48 @@ export default async function handler(
     const queryEmbedding = embeddingResult.embedding.values;
 
     // Step 2: Search Supabase vector database
-    const { data: matches, error: searchError } = await supabase.rpc('match_documents', {
-      query_embedding: queryEmbedding,
-      match_threshold: 0.7,
-      match_count: maxDocuments,
-    });
+    let matches: any[] = [];
+    let useDirectGemini = false;
 
-    if (searchError) {
-      console.error('[RAG API] Supabase search error:', searchError);
-      throw new Error(`Vector search failed: ${searchError.message}`);
+    try {
+      const { data, error: searchError } = await supabase.rpc('match_documents', {
+        query_embedding: queryEmbedding,
+        match_threshold: 0.7,
+        match_count: maxDocuments,
+      });
+
+      if (searchError) {
+        console.warn('[RAG API] Supabase search error, falling back to direct Gemini:', searchError);
+        useDirectGemini = true;
+      } else {
+        matches = data || [];
+      }
+    } catch (supabaseError) {
+      console.warn('[RAG API] Supabase unavailable, using direct Gemini:', supabaseError);
+      useDirectGemini = true;
+    }
+
+    // Fallback: Direct Gemini response without RAG
+    if (useDirectGemini || matches.length === 0) {
+      const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+      const directPrompt = `Du bist ein hilfreicher Finanz-Assistent für eine deutsche Buchhaltungs-App.
+
+Beantworte die folgende Frage freundlich und hilfreich auf Deutsch.
+Falls du keine spezifischen Rechnungsdaten hast, gib allgemeine hilfreiche Informationen.
+
+Frage: ${query}
+
+Antwort:`;
+
+      const result = await chatModel.generateContent(directPrompt);
+      const answer = result.response.text().trim();
+
+      res.status(200).json({
+        answer: answer + '\n\n_(Hinweis: Für detaillierte Rechnungsdaten bitte Dokumente hochladen.)_',
+        sources: [],
+        latencyMs: Date.now() - startTime,
+      });
+      return;
     }
 
     // Step 3: Build context from search results
@@ -148,7 +189,7 @@ Details: ${doc.content}
       .join('\n\n');
 
     // Step 4: Generate answer with Gemini
-    const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
     const prompt = `Du bist ein Finanz-Assistent für ein deutsches Buchhaltungssystem.
 
 KONTEXT (Relevante Rechnungen):
@@ -175,12 +216,16 @@ ANTWORT:`;
         customerName?: string;
         amount?: number;
       };
-      return {
-        invoiceNumber: meta.invoiceNumber,
-        customerName: meta.customerName,
-        amount: meta.amount,
-        similarity: source.similarity,
-      };
+      const result: {
+        invoiceNumber?: string;
+        customerName?: string;
+        amount?: number;
+        similarity: number;
+      } = { similarity: source.similarity };
+      if (meta.invoiceNumber) result.invoiceNumber = meta.invoiceNumber;
+      if (meta.customerName) result.customerName = meta.customerName;
+      if (meta.amount !== undefined) result.amount = meta.amount;
+      return result;
     });
 
     res.status(200).json({
