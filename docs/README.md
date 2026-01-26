@@ -1,5 +1,16 @@
 # 🎙️ VoiceInvoice Enterprise – Projektbeschreibung
 
+**Aktuelle Dokumentation:** 2026-01-26
+
+## 📚 Dokumentations-Index
+
+- **[API_TRANSCRIPTION.md](./API_TRANSCRIPTION.md)** - Ausführliche Dokumentation der dualen Transkriptions-Architektur
+- **[PRODUCTION_READINESS.md](./PRODUCTION_READINESS.md)** - Production-Status und SaaS-Migration
+- **[projekt_documentation.md](./projekt_documentation.md)** - Notion MCP Mirror
+- **[Notion Documentation Hub](https://www.notion.so/2f2463490002816594abedf1f117d1d4)** - Zentrale Dokumentation
+
+---
+
 ## 🎯 Sinn und Zweck (Die "Mission")
 
 **VoiceInvoice Enterprise** ist eine sprachgesteuerte ("Voice-First") Buchhaltungssoftware, die entwickelt wurde, um den Prozess der Rechnungserstellung radikal zu vereinfachen. Das Ziel ist es, administrative Aufgaben durch modernste KI-Technologie zu automatisieren.
