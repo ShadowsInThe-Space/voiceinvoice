@@ -176,27 +176,55 @@ export function useWorkflowAnalytics(options: WorkflowAnalyticsOptions = {}): {
   const [recentExecutions, setRecentExecutions] = useState<WorkflowExecutionRecord[]>([]);
 
   /**
-   * Fetches KPIs via REST API (browser fallback).
+   * Fetches all data via REST API (browser fallback).
    */
   const fetchViaApi = useCallback(async () => {
-    const response = await fetch('/api/analytics/kpis');
+    const response = await fetch('/api/analytics/workflows');
     if (!response.ok) {
       throw new Error('Failed to fetch analytics');
     }
-    const data = await response.json();
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error('Analytics API error');
+    }
+
+    const data = result.data;
+
+    // Set KPIs
     setKpis({
-      offeneMahnungenEuro: data.offeneMahnungenEuro || 0,
-      verarbeiteteRechnungen: data.verarbeiteteRechnungen || 0,
-      gematchteZahlungen: data.gematchteZahlungen || 0,
-      ueberfaelligeVertraege: data.ueberfaelligeVertraege || 0,
+      offeneMahnungenEuro: data.kpis?.offeneMahnungenEuro || 0,
+      verarbeiteteRechnungen: data.kpis?.verarbeiteteRechnungen || 0,
+      gematchteZahlungen: data.kpis?.gematchteZahlungen || 0,
+      ueberfaelligeVertraege: data.kpis?.ueberfaelligeVertraege || 0,
     });
+
+    // Set executions and stats
+    const executions = data.recentExecutions || [];
+    setRecentExecutions(executions);
+
+    const successCount = executions.filter((e: any) => e.success).length;
+    const failCount = executions.filter((e: any) => !e.success).length;
+    const avgTime =
+      executions.length > 0
+        ? executions.reduce((sum: number, e: any) => sum + e.executionTimeMs, 0) / executions.length
+        : 0;
+
     setStats({
-      totalExecutions: data.recentExecutions || 0,
-      successfulExecutions: data.gematchteZahlungen || 0,
-      failedExecutions: data.ueberfaelligeVertraege || 0,
-      avgExecutionTimeMs: 0,
-      successRate: data.successRate || 0,
+      totalExecutions: executions.length,
+      successfulExecutions: successCount,
+      failedExecutions: failCount,
+      avgExecutionTimeMs: Math.round(avgTime),
+      successRate: executions.length > 0 ? Math.round((successCount / executions.length) * 100) : 0,
     });
+
+    // Set daily counts
+    setDailyCounts(data.dailyCounts || []);
+
+    // Set success rates
+    setSuccessRates(data.successRates || []);
+
+    // Set error breakdown
+    setErrorBreakdown(data.errorBreakdown || []);
   }, []);
 
   /**

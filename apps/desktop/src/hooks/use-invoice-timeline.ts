@@ -115,51 +115,61 @@ export function useInvoiceTimeline(options: InvoiceTimelineOptions = {}): {
   const [topCustomers, setTopCustomers] = useState<TopCustomer[]>([]);
 
   /**
-   * Fetches all timeline data via IPC.
+   * Fetches all timeline data via REST API or IPC.
    */
   const fetchData = useCallback(async () => {
-    // Check if we're in Electron context
-    if (typeof window === 'undefined' || !window.voiceinvoice?.analytics) {
-      setError('Analytics API nicht verfügbar (nur in Electron)');
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
+    // Try REST API first (works in browser and Electron)
     try {
-      // Fetch data in parallel via IPC
-      const [invoicesResult, customersResult] = await Promise.all([
-        window.voiceinvoice.analytics.getTimelineInvoices() as Promise<
-          IpcResult<TimelineInvoice[]>
-        >,
-        window.voiceinvoice.analytics.getTopCustomers(topCustomerLimit) as Promise<
-          IpcResult<TopCustomer[]>
-        >,
-      ]);
-
-      if (invoicesResult.success && invoicesResult.data) {
-        setTimelineInvoices(invoicesResult.data);
+      const response = await fetch('/api/analytics/workflows');
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          setTimelineInvoices(result.data.timelineInvoices || []);
+          setTopCustomers(result.data.topCustomers?.slice(0, topCustomerLimit) || []);
+          setLoading(false);
+          return;
+        }
       }
-
-      if (customersResult.success && customersResult.data) {
-        setTopCustomers(customersResult.data);
-      }
-
-      // Check for errors
-      if (!invoicesResult.success && invoicesResult.error) {
-        setError(invoicesResult.error.message);
-      } else if (!customersResult.success && customersResult.error) {
-        setError(customersResult.error.message);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Fehler beim Laden der Timeline-Daten';
-      setError(message);
-      console.error('[useInvoiceTimeline] Error:', err);
-    } finally {
-      setLoading(false);
+    } catch (apiError) {
+      console.warn('[useInvoiceTimeline] REST API failed, trying IPC:', apiError);
     }
+
+    // Fallback to Electron IPC if available
+    if (typeof window !== 'undefined' && window.voiceinvoice?.analytics) {
+      try {
+        const [invoicesResult, customersResult] = await Promise.all([
+          window.voiceinvoice.analytics.getTimelineInvoices() as Promise<
+            IpcResult<TimelineInvoice[]>
+          >,
+          window.voiceinvoice.analytics.getTopCustomers(topCustomerLimit) as Promise<
+            IpcResult<TopCustomer[]>
+          >,
+        ]);
+
+        if (invoicesResult.success && invoicesResult.data) {
+          setTimelineInvoices(invoicesResult.data);
+        }
+
+        if (customersResult.success && customersResult.data) {
+          setTopCustomers(customersResult.data);
+        }
+
+        if (!invoicesResult.success && invoicesResult.error) {
+          setError(invoicesResult.error.message);
+        } else if (!customersResult.success && customersResult.error) {
+          setError(customersResult.error.message);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Fehler beim Laden der Timeline-Daten';
+        setError(message);
+        console.error('[useInvoiceTimeline] IPC Error:', err);
+      }
+    }
+
+    setLoading(false);
   }, [topCustomerLimit]);
 
   // Initial load
