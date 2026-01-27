@@ -23,16 +23,51 @@ vi.mock('../src/services/gemini-service', () => ({
 import { buildServer } from '../src/server';
 import { transcribeAudio } from '../src/services/speech-service';
 import { extractInvoiceData } from '../src/services/gemini-service';
+import { generateLicenseToken } from '../src/services/license-service';
+import { getLicenseStore } from '../src/services/license-store';
 
 describe('Proxy Server', () => {
   let server: FastifyInstance;
+  let authToken: string;
+  const originalJwtSecret = process.env.JWT_SECRET;
+  const TEST_LICENSE_KEY = 'SERVER-TEST-KEY';
 
   beforeAll(async () => {
+    // Setup test auth
+    process.env.JWT_SECRET = 'test-server-secret';
+
+    // Setup license in store
+    const store = getLicenseStore() as any;
+    store.addLicense({
+      id: 'server-test-id',
+      licenseKey: TEST_LICENSE_KEY,
+      companyName: 'Server Test Corp',
+      status: 'ACTIVE',
+      monthlyQuota: 1000,
+      currentUsage: 0,
+      usageResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Generate token
+    authToken = generateLicenseToken({
+      licenseKey: TEST_LICENSE_KEY,
+      companyName: 'Server Test Corp',
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    });
+
     server = await buildServer({ logger: false });
   });
 
   afterAll(async () => {
     await server.close();
+    if (originalJwtSecret) {
+      process.env.JWT_SECRET = originalJwtSecret;
+    } else {
+      delete process.env.JWT_SECRET;
+    }
   });
 
   beforeEach(() => {
@@ -81,6 +116,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           audio: audioBase64,
           language: 'de-DE',
@@ -98,6 +136,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           language: 'de-DE',
         },
@@ -121,6 +162,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           audio: audioBase64,
         },
@@ -141,6 +185,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           audio: audioBase64,
           language: 'de-DE',
@@ -173,6 +220,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           transcript:
             'Rechnung an Firma Mustermann GmbH, zweihundert Euro netto für Beratungsleistung',
@@ -192,6 +242,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {},
       });
 
@@ -204,6 +257,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           transcript: '',
         },
@@ -220,6 +276,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           transcript: 'Some transcript text',
         },
@@ -249,6 +308,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           transcript: 'Unclear audio recording',
         },
