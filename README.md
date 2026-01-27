@@ -34,7 +34,7 @@ Sprich natürlich. Unsere fine-tuned KI extrahiert Kundendaten, Positionen, Steu
 - **Tech:** Google Chirp 3 (Transkription) + Gemini 2.5 Flash (Entity Extraction)
 - **Architektur:** Duale Implementierung (lokal + Server) für maximale Flexibilität
 
-### 🤖 Autonomer Telefon-Agent (Das "Moonshot"-Feature)
+### 🤖 Autonomer Telefon-Agent (Das "Moonshot"-Feature) (Vorbereitet - nicht aktiviert)
 
 Das weltweit erste Buchhaltungstool, das das Telefon abnimmt.
 
