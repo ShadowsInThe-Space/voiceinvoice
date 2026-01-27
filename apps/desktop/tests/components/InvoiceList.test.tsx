@@ -324,6 +324,51 @@ describe('InvoiceList', () => {
 
       expect(mockOnSelect).not.toHaveBeenCalled();
     });
+
+    it('should have accessible dialog attributes', async () => {
+      const user = userEvent.setup();
+      render(
+        <InvoiceList
+          invoices={mockInvoices}
+          onSelect={mockOnSelect}
+          onDelete={mockOnDelete}
+        />
+      );
+
+      const row = screen.getByTestId('invoice-row-inv-2');
+      const deleteButton = within(row).getByRole('button', { name: /loeschen|delete/i });
+
+      await user.click(deleteButton);
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAttribute('aria-modal', 'true');
+      expect(dialog).toHaveAttribute('aria-labelledby', 'delete-dialog-title');
+    });
+
+    it('should close dialog when pressing Escape', async () => {
+      const user = userEvent.setup();
+      render(
+        <InvoiceList
+          invoices={mockInvoices}
+          onSelect={mockOnSelect}
+          onDelete={mockOnDelete}
+        />
+      );
+
+      const row = screen.getByTestId('invoice-row-inv-2');
+      const deleteButton = within(row).getByRole('button', { name: /loeschen|delete/i });
+
+      await user.click(deleteButton);
+
+      // Verify dialog is open
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      // Press Escape
+      await user.keyboard('{Escape}');
+
+      // Verify dialog is closed
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
   });
 
   describe('sorting', () => {

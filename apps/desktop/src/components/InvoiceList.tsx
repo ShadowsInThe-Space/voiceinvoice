@@ -10,6 +10,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import type { Invoice, InvoiceStatus } from '@voiceinvoice/shared-types';
 import { cn } from '../lib/utils';
+import { useFocusTrap } from '../hooks/use-focus-trap';
 import {
   Search,
   Trash2,
@@ -127,6 +128,12 @@ export function InvoiceList({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirmId(null);
+  }, []);
+
+  const modalRef = useFocusTrap(!!deleteConfirmId, cancelDelete);
+
   // Filter and sort invoices
   const processedInvoices = useMemo(() => {
     let result = [...invoices];
@@ -180,10 +187,6 @@ export function InvoiceList({
     setDeleteConfirmId(null);
   }, [deleteConfirmId, onDelete]);
 
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirmId(null);
-  }, []);
-
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent, invoice: Invoice) => {
       if (e.key === 'Enter') {
@@ -215,6 +218,7 @@ export function InvoiceList({
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
+            aria-label="Rechnungen suchen"
             placeholder="Suchen nach Nummer oder Inhalt..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -355,11 +359,18 @@ export function InvoiceList({
       {/* Delete Dialog - Glass Effect */}
       {deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-md px-4">
-          <div className="w-full max-w-md rounded-2xl border-2 border-destructive/20 bg-card p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-dialog-title"
+            className="w-full max-w-md rounded-2xl border-2 border-destructive/20 bg-card p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200 focus:outline-none"
+            tabIndex={-1}
+          >
             <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mb-6 mx-auto">
               <Trash2 size={32} />
             </div>
-            <h3 className="text-2xl font-black text-foreground text-center mb-2 tracking-tight">
+            <h3 id="delete-dialog-title" className="text-2xl font-black text-foreground text-center mb-2 tracking-tight">
               Dokument löschen?
             </h3>
             <p className="text-muted-foreground text-center mb-8">
