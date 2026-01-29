@@ -34,6 +34,7 @@ import {
   getTimelineInvoicesHandler,
   getTopCustomersHandler,
 } from './ipc/analytics-handlers';
+import { getApiKeyHandler, setApiKeyHandler } from './ipc/security-handlers';
 import { ensureDatabaseExists, logDatabaseConfig, getDatabaseUrl } from './lib/database-path';
 
 /**
@@ -239,6 +240,8 @@ function setupHandlers(): void {
   // Settings handlers
   ipcMain.handle('settings:get', () => getSettingsHandler(context));
   ipcMain.handle('settings:update', (_event, data) => updateSettingsHandler(context, data));
+  ipcMain.handle('settings:getApiKey', () => getApiKeyHandler());
+  ipcMain.handle('settings:setApiKey', (_event, key) => setApiKeyHandler(key));
 
   // Voice handlers
   ipcMain.handle('voice:save-recording', (_event, audioData, duration, mimeType) =>

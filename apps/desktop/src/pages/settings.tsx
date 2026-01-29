@@ -36,7 +36,6 @@ const VOICE_OPTIONS = [
  * LocalStorage keys.
  */
 const STORAGE_KEYS = {
-  apiKey: 'voiceinvoice_google_api_key',
   locale: 'voiceinvoice_locale',
   ttsVoice: 'voiceinvoice_tts_voice',
   ttsRate: 'voiceinvoice_tts_rate',
@@ -79,21 +78,27 @@ export default function SettingsPage(): React.ReactElement {
 
   // Load saved settings or defaults on mount
   useEffect(() => {
-    const savedApiKey = localStorage.getItem(STORAGE_KEYS.apiKey);
+    // Load secure settings (async)
+    const loadSecureSettings = async (): Promise<void> => {
+      if (!window.voiceinvoice?.settings?.getApiKey) return;
+      try {
+        const savedApiKey = await window.voiceinvoice.settings.getApiKey();
+        if (savedApiKey) {
+          setApiKey(savedApiKey);
+        } else if (defaultApiKey) {
+          setApiKey(defaultApiKey);
+        }
+      } catch (err) {
+        console.error('Failed to load API key:', err);
+        if (defaultApiKey) setApiKey(defaultApiKey);
+      }
+    };
+    loadSecureSettings();
+
     const savedLocale = localStorage.getItem(STORAGE_KEYS.locale);
     const savedVoice = localStorage.getItem(STORAGE_KEYS.ttsVoice);
     const savedRate = localStorage.getItem(STORAGE_KEYS.ttsRate);
     const savedProvider = localStorage.getItem(STORAGE_KEYS.ttsProvider);
-
-    // PRIORITY:
-    // 1. LocalStorage (User saved their own key)
-    // 2. Environment Variable (Default from .env)
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-    } else if (defaultApiKey) {
-      // Use default API key from environment
-      setApiKey(defaultApiKey);
-    }
 
     if (savedLocale) setLocale(savedLocale);
     if (savedVoice) setTtsVoice(savedVoice);
@@ -123,7 +128,7 @@ export default function SettingsPage(): React.ReactElement {
     }
 
     // Check license status if token exists
-    const checkLicenseStatus = async () => {
+    const checkLicenseStatus = async (): Promise<void> => {
       const token = licenseApi.getToken();
       if (token) {
         try {
@@ -184,7 +189,11 @@ export default function SettingsPage(): React.ReactElement {
       setIsSaving(true);
 
       try {
-        localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
+        // Save API key securely
+        if (window.voiceinvoice?.settings?.setApiKey) {
+          await window.voiceinvoice.settings.setApiKey(apiKey);
+        }
+
         localStorage.setItem(STORAGE_KEYS.locale, locale);
         localStorage.setItem(STORAGE_KEYS.ttsVoice, ttsVoice);
         localStorage.setItem(STORAGE_KEYS.ttsRate, ttsRate.toString());
@@ -232,7 +241,11 @@ export default function SettingsPage(): React.ReactElement {
    * Confirm reset and clear all settings.
    */
   const handleResetConfirm = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEYS.apiKey);
+    // Clear secure settings
+    if (window.voiceinvoice?.settings?.setApiKey) {
+      window.voiceinvoice.settings.setApiKey('').catch(console.error);
+    }
+
     localStorage.removeItem(STORAGE_KEYS.locale);
     localStorage.removeItem(STORAGE_KEYS.ttsVoice);
     localStorage.removeItem(STORAGE_KEYS.ttsRate);

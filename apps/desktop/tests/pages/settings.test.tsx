@@ -46,14 +46,20 @@ Object.defineProperty(window, 'localStorage', {
 // Note: Set up a proper mock that works in test environment
 const settingsGetMock = vi.fn();
 const settingsUpdateMock = vi.fn();
+const settingsGetApiKeyMock = vi.fn();
+const settingsSetApiKeyMock = vi.fn();
 
 settingsGetMock.mockReturnValue(Promise.resolve({}));
 settingsUpdateMock.mockReturnValue(Promise.resolve(undefined));
+settingsGetApiKeyMock.mockReturnValue(Promise.resolve(''));
+settingsSetApiKeyMock.mockReturnValue(Promise.resolve(true));
 
 const voiceinvoiceMock = {
   settings: {
     get: settingsGetMock,
     update: settingsUpdateMock,
+    getApiKey: settingsGetApiKeyMock,
+    setApiKey: settingsSetApiKeyMock,
   },
 };
 
@@ -72,6 +78,8 @@ describe('Settings Page', () => {
     // Reset mocks
     settingsGetMock.mockReturnValue(Promise.resolve({}));
     settingsUpdateMock.mockReturnValue(Promise.resolve(undefined));
+    settingsGetApiKeyMock.mockReturnValue(Promise.resolve(''));
+    settingsSetApiKeyMock.mockReturnValue(Promise.resolve(true));
   });
 
   afterEach(() => {
@@ -113,19 +121,18 @@ describe('Settings Page', () => {
       expect(apiKeyInput).toHaveAttribute('type', 'password');
     });
 
-    it('should load saved API key from localStorage', () => {
-      localStorageMock.getItem.mockImplementation((key: string) => {
-        if (key === 'voiceinvoice_google_api_key') return 'saved-api-key-123';
-        return null;
-      });
+    it('should load saved API key from secure storage', async () => {
+      settingsGetApiKeyMock.mockReturnValue(Promise.resolve('saved-api-key-123'));
 
       render(<SettingsPage />);
 
-      const apiKeyInput = screen.getByLabelText(/google ai api key/i) as HTMLInputElement;
-      expect(apiKeyInput.value).toBe('saved-api-key-123');
+      await waitFor(() => {
+        const apiKeyInput = screen.getByLabelText(/google ai api key/i) as HTMLInputElement;
+        expect(apiKeyInput.value).toBe('saved-api-key-123');
+      });
     });
 
-    it('should save API key to localStorage on submit', async () => {
+    it('should save API key to secure storage on submit', async () => {
       const user = userEvent.setup();
       render(<SettingsPage />);
 
@@ -136,10 +143,7 @@ describe('Settings Page', () => {
       const saveButton = screen.getByRole('button', { name: /speichern/i });
       await user.click(saveButton);
 
-      expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        'voiceinvoice_google_api_key',
-        'new-api-key-456'
-      );
+      expect(settingsSetApiKeyMock).toHaveBeenCalledWith('new-api-key-456');
     });
 
     it('should toggle API key visibility', async () => {

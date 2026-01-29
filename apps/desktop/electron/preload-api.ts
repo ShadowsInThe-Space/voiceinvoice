@@ -43,6 +43,8 @@ export interface CustomerApi {
 export interface SettingsApi {
   get: () => Promise<unknown>;
   update: (data: unknown) => Promise<unknown>;
+  getApiKey: () => Promise<string>;
+  setApiKey: (key: string) => Promise<boolean>;
 }
 
 /**
@@ -146,6 +148,8 @@ export function createPreloadApi(invoke: IpcInvoker): PreloadApi {
     settings: {
       get: () => invoke('settings:get'),
       update: (data: unknown) => invoke('settings:update', data),
+      getApiKey: () => invoke('settings:getApiKey') as Promise<string>,
+      setApiKey: (key: string) => invoke('settings:setApiKey', key) as Promise<boolean>,
     },
 
     voice: {
