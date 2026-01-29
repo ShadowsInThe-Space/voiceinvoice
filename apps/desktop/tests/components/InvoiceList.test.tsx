@@ -324,6 +324,30 @@ describe('InvoiceList', () => {
 
       expect(mockOnSelect).not.toHaveBeenCalled();
     });
+
+    it('should manage focus when delete modal opens and closes', async () => {
+      const user = userEvent.setup();
+      render(
+        <InvoiceList
+          invoices={mockInvoices}
+          onSelect={mockOnSelect}
+          onDelete={mockOnDelete}
+        />
+      );
+
+      const row = screen.getByTestId('invoice-row-inv-2');
+      const deleteButton = within(row).getByRole('button', { name: /loeschen|delete/i });
+
+      deleteButton.focus();
+      await user.click(deleteButton);
+
+      const cancelButton = screen.getByRole('button', { name: /abbrechen|cancel/i });
+      await waitFor(() => expect(cancelButton).toHaveFocus());
+
+      await user.click(cancelButton);
+
+      await waitFor(() => expect(deleteButton).toHaveFocus());
+    });
   });
 
   describe('sorting', () => {

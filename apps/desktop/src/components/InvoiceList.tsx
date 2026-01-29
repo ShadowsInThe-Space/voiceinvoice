@@ -7,7 +7,7 @@
  * @module components/InvoiceList
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { Invoice, InvoiceStatus } from '@voiceinvoice/shared-types';
 import { cn } from '../lib/utils';
 import {
@@ -126,6 +126,15 @@ export function InvoiceList({
   const [sortBy, setSortBy] = useState<SortOption>('date');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const lastFocusedButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  // Restore focus when modal closes
+  useEffect(() => {
+    if (!deleteConfirmId && lastFocusedButtonRef.current) {
+      lastFocusedButtonRef.current.focus();
+      lastFocusedButtonRef.current = null;
+    }
+  }, [deleteConfirmId]);
 
   // Filter and sort invoices
   const processedInvoices = useMemo(() => {
@@ -168,8 +177,9 @@ export function InvoiceList({
     [onSelect]
   );
 
-  const handleDeleteClick = useCallback((e: React.MouseEvent, id: string) => {
+  const handleDeleteClick = useCallback((e: React.MouseEvent<HTMLButtonElement>, id: string) => {
     e.stopPropagation();
+    lastFocusedButtonRef.current = e.currentTarget;
     setDeleteConfirmId(id);
   }, []);
 
@@ -368,14 +378,15 @@ export function InvoiceList({
             <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={cancelDelete}
-                className="py-3 px-4 text-sm font-bold rounded-xl border-2 border-border hover:bg-muted transition-all"
+                autoFocus
+                className="py-3 px-4 text-sm font-bold rounded-xl border-2 border-border hover:bg-muted transition-all focus-visible:ring-2 focus-visible:ring-primary focus:outline-none"
               >
                 Abbrechen
               </button>
               <button
                 onClick={confirmDelete}
                 data-testid="confirm-delete-button"
-                className="py-3 px-4 text-sm font-black rounded-xl bg-destructive text-white shadow-lg shadow-destructive/20 hover:bg-destructive/90 transition-all"
+                className="py-3 px-4 text-sm font-black rounded-xl bg-destructive text-white shadow-lg shadow-destructive/20 hover:bg-destructive/90 transition-all focus-visible:ring-2 focus-visible:ring-destructive focus:outline-none"
               >
                 Endgültig löschen
               </button>
