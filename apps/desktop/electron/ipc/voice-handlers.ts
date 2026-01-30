@@ -142,7 +142,18 @@ export async function saveRecording(
  */
 export async function deleteRecording(filePath: string): Promise<boolean> {
   try {
-    await fs.unlink(filePath);
+    const recordingsDir = await getRecordingsDir();
+    const resolvedPath = path.resolve(filePath);
+    const resolvedRecordingsDir = path.resolve(recordingsDir);
+
+    // Security check: Ensure file is within recordings directory
+    // append separator to prevent partial directory matching
+    if (!resolvedPath.startsWith(resolvedRecordingsDir + path.sep)) {
+      console.error(`[Security] Blocked attempt to delete file outside recordings directory: ${resolvedPath}`);
+      return false;
+    }
+
+    await fs.unlink(resolvedPath);
     return true;
   } catch {
     return false;

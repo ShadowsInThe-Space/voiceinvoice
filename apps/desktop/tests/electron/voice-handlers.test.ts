@@ -105,18 +105,43 @@ describe('Voice Handlers', () => {
 
   describe('deleteRecording', () => {
     it('should delete recording and return true', async () => {
-      const result = await deleteRecording('/path/to/recording.webm');
+      // Use a path that is within the allowed recordings directory
+      const validPath = '/mock/user/data/recordings/recording.webm';
+      const result = await deleteRecording(validPath);
 
       expect(result).toBe(true);
-      expect(fs.unlink).toHaveBeenCalledWith('/path/to/recording.webm');
+      expect(fs.unlink).toHaveBeenCalledWith(validPath);
     });
 
     it('should return false on deletion failure', async () => {
       vi.mocked(fs.unlink).mockRejectedValueOnce(new Error('File not found'));
 
-      const result = await deleteRecording('/path/to/nonexistent.webm');
+      // Even if valid path, if fs.unlink fails, it should return false
+      const validPath = '/mock/user/data/recordings/nonexistent.webm';
+      const result = await deleteRecording(validPath);
 
       expect(result).toBe(false);
+    });
+
+    it('should prevent path traversal attacks', async () => {
+      // Try to delete a file outside the recordings directory
+      // This path resolves to /mock/user/data/secret.txt which is outside /mock/user/data/recordings
+      const maliciousPath = '/mock/user/data/recordings/../secret.txt';
+
+      const result = await deleteRecording(maliciousPath);
+
+      expect(result).toBe(false);
+      expect(fs.unlink).not.toHaveBeenCalled();
+    });
+
+    it('should prevent deletion of arbitrary absolute paths', async () => {
+      // Try to delete a file that is clearly outside
+      const maliciousPath = '/etc/passwd';
+
+      const result = await deleteRecording(maliciousPath);
+
+      expect(result).toBe(false);
+      expect(fs.unlink).not.toHaveBeenCalled();
     });
   });
 
