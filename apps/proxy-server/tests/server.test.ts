@@ -23,16 +23,46 @@ vi.mock('../src/services/gemini-service', () => ({
 import { buildServer } from '../src/server';
 import { transcribeAudio } from '../src/services/speech-service';
 import { extractInvoiceData } from '../src/services/gemini-service';
+import { getLicenseStore } from '../src/services/license-store';
+import { generateLicenseToken } from '../src/services/license-service';
 
 describe('Proxy Server', () => {
   let server: FastifyInstance;
+  let authToken: string;
 
   beforeAll(async () => {
+    // Setup test environment
+    process.env.JWT_SECRET = 'test-secret';
+
+    // Setup mock license store
+    const store = getLicenseStore() as any; // Cast to access mock methods
+    const testLicense = {
+      id: 'test-id',
+      licenseKey: 'TEST-KEY',
+      companyName: 'Test Company',
+      status: 'ACTIVE',
+      monthlyQuota: 1000,
+      currentUsage: 0,
+      usageResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    store.addLicense(testLicense);
+
+    // Generate valid token
+    authToken = generateLicenseToken({
+      licenseKey: testLicense.licenseKey,
+      companyName: testLicense.companyName,
+      expiresAt: testLicense.expiresAt.toISOString(),
+    });
+
     server = await buildServer({ logger: false });
   });
 
   afterAll(async () => {
     await server.close();
+    delete process.env.JWT_SECRET;
   });
 
   beforeEach(() => {
@@ -81,6 +111,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           audio: audioBase64,
           language: 'de-DE',
@@ -94,10 +127,27 @@ describe('Proxy Server', () => {
       expect(body).toHaveProperty('confidence', mockTranscript.confidence);
     });
 
+    it('should reject requests without authorization', async () => {
+      const audioBase64 = Buffer.from('fake-audio-data').toString('base64');
+      const response = await server.inject({
+        method: 'POST',
+        url: '/transcribe',
+        payload: {
+          audio: audioBase64,
+          language: 'de-DE',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('should return 400 when audio is missing', async () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           language: 'de-DE',
         },
@@ -121,6 +171,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           audio: audioBase64,
         },
@@ -141,6 +194,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           audio: audioBase64,
           language: 'de-DE',
@@ -173,6 +229,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           transcript:
             'Rechnung an Firma Mustermann GmbH, zweihundert Euro netto für Beratungsleistung',
@@ -188,10 +247,25 @@ describe('Proxy Server', () => {
       expect(body).toHaveProperty('confidence', 0.92);
     });
 
+    it('should reject requests without authorization', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/enrich',
+        payload: {
+          transcript: 'test',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('should return 400 when transcript is missing', async () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {},
       });
 
@@ -204,6 +278,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           transcript: '',
         },
@@ -220,6 +297,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           transcript: 'Some transcript text',
         },
@@ -249,6 +329,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         payload: {
           transcript: 'Unclear audio recording',
         },

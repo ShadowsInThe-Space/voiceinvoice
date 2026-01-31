@@ -8,6 +8,7 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { createLicenseAuthHook, createQuotaCheckHook } from './license';
 import { extractInvoiceData, type ExtractedInvoice } from '../services/gemini-service';
 
 /**
@@ -47,8 +48,13 @@ interface ErrorResponse {
 export async function registerEnrichRoutes(server: FastifyInstance): Promise<void> {
   server.post<{
     Body: EnrichRequest;
-  }>('/enrich', async (request: FastifyRequest<{ Body: EnrichRequest }>, reply: FastifyReply) => {
-    // Validate request body
+  }>(
+    '/enrich',
+    {
+      preHandler: [createLicenseAuthHook(), createQuotaCheckHook()],
+    },
+    async (request: FastifyRequest<{ Body: EnrichRequest }>, reply: FastifyReply) => {
+      // Validate request body
     const validation = EnrichRequestSchema.safeParse(request.body);
 
     if (!validation.success) {
