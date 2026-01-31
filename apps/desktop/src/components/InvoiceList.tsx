@@ -9,13 +9,13 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import type { Invoice, InvoiceStatus } from '@voiceinvoice/shared-types';
-import { cn } from '../lib/utils';
 import {
   Search,
   Trash2,
   FileText,
-  Calendar,
 } from 'lucide-react';
+import { STATUS_CONFIG } from './invoice-utils';
+import { InvoiceRow } from './InvoiceRow';
 
 /**
  * Props for InvoiceList component.
@@ -33,79 +33,6 @@ export interface InvoiceListProps {
  * Sort options for the invoice list.
  */
 type SortOption = 'date' | 'amount' | 'invoiceNumber';
-
-/**
- * Status configuration for display.
- * Synchronized with Dashboard for consistent branding.
- */
-const STATUS_CONFIG: Record<InvoiceStatus, { label: string; className: string }> = {
-  DRAFT: { label: 'Entwurf', className: 'bg-muted text-muted-foreground border-muted-foreground/20' },
-  PENDING: { label: 'Offen', className: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' },
-  SENT: { label: 'Versendet', className: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
-  PAID: { label: 'Bezahlt', className: 'bg-primary/10 text-primary border-primary/20' },
-  CANCELLED: { label: 'Storniert', className: 'bg-destructive/10 text-destructive border-destructive/20' },
-  OVERDUE: { label: 'Überfällig', className: 'bg-red-500 text-white border-transparent' },
-};
-
-/** Fallback for unknown statuses */
-const DEFAULT_STATUS = { label: 'Unbekannt', className: 'bg-gray-500/10 text-gray-600 border-gray-500/20' };
-
-/** German status aliases (from voice input) */
-const STATUS_ALIASES: Record<string, InvoiceStatus> = {
-  ENTWURF: 'DRAFT',
-  OFFEN: 'PENDING',
-  VERSENDET: 'SENT',
-  BEZAHLT: 'PAID',
-  STORNIERT: 'CANCELLED',
-  ÜBERFÄLLIG: 'OVERDUE',
-  // Lowercase variants
-  draft: 'DRAFT',
-  pending: 'PENDING',
-  sent: 'SENT',
-  paid: 'PAID',
-  cancelled: 'CANCELLED',
-  overdue: 'OVERDUE',
-};
-
-/**
- * Gets status config with fallback for unknown statuses.
- * Supports German aliases from voice input.
- *
- * @param {string} status - Invoice status
- * @returns {object} Status configuration
- */
-function getStatusConfig(status: string): { label: string; className: string } {
-  const normalizedStatus = STATUS_ALIASES[status] || status;
-  return STATUS_CONFIG[normalizedStatus as InvoiceStatus] || DEFAULT_STATUS;
-}
-
-/**
- * Formats a date to German locale format.
- *
- * @param {Date} date - The date object to format.
- * @returns {string} The formatted date string.
- */
-function formatDate(date: Date): string {
-  return new Date(date).toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
-
-/**
- * Formats a currency amount.
- *
- * @param {number} amount - The numeric amount to format.
- * @param {string} currency - ISO currency code (e.g. 'EUR').
- * @returns {string} The formatted currency string.
- */
-function formatCurrency(amount: number, currency: string): string {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency,
-  }).format(amount);
-}
 
 /**
  * Invoice list with filtering and sorting.
@@ -183,15 +110,6 @@ export function InvoiceList({
   const cancelDelete = useCallback(() => {
     setDeleteConfirmId(null);
   }, []);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent, invoice: Invoice) => {
-      if (e.key === 'Enter') {
-        handleSelect(invoice);
-      }
-    },
-    [handleSelect]
-  );
 
   if (invoices.length === 0) {
     return (
@@ -271,69 +189,13 @@ export function InvoiceList({
             </thead>
             <tbody className="divide-y divide-border/30">
               {processedInvoices.map((invoice) => (
-                <tr
+                <InvoiceRow
                   key={invoice.id}
-                  data-testid={`invoice-row-${invoice.id}`}
-                  onClick={() => handleSelect(invoice)}
-                  onKeyDown={(e) => handleKeyDown(e, invoice)}
-                  tabIndex={0}
-                  className={cn(
-                    "group cursor-pointer transition-all hover:bg-muted/20 focus:outline-none focus:bg-primary/5",
-                    selectedId === invoice.id && "bg-primary/5 border-l-4 border-l-primary"
-                  )}
-                >
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary group-hover:scale-110 transition-transform">
-                        <FileText className="h-5 w-5" />
-                      </div>
-                      <div className="overflow-hidden">
-                        <div className="font-bold text-foreground text-base tracking-tight">
-                          {invoice.invoiceNumber}
-                        </div>
-                        {invoice.description && (
-                          <div className="text-xs text-muted-foreground truncate max-w-[300px]">
-                            {invoice.description}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-                      <Calendar className="h-4 w-4 opacity-50" />
-                      <span>{formatDate(invoice.date)}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6 text-right">
-                    <div className="font-black text-foreground text-lg tracking-tighter">
-                      {formatCurrency(invoice.grossAmount, invoice.currency)}
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <span
-                      data-testid={`status-${invoice.id}`}
-                      className={cn(
-                        "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all shadow-sm",
-                        getStatusConfig(invoice.status).className
-                      )}
-                    >
-                      {getStatusConfig(invoice.status).label}
-                    </span>
-                  </td>
-                  {onDelete && (
-                    <td className="px-8 py-6 text-right">
-                      <button
-                        onClick={(e) => handleDeleteClick(e, invoice.id)}
-                        className="p-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all"
-                        title="Rechnung löschen"
-                        aria-label="Loeschen"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    </td>
-                  )}
-                </tr>
+                  invoice={invoice}
+                  isSelected={selectedId === invoice.id}
+                  onSelect={handleSelect}
+                  onDelete={onDelete ? handleDeleteClick : undefined}
+                />
               ))}
             </tbody>
           </table>
@@ -386,4 +248,3 @@ export function InvoiceList({
     </div>
   );
 }
-
