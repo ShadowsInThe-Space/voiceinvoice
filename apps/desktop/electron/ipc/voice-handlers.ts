@@ -142,7 +142,16 @@ export async function saveRecording(
  */
 export async function deleteRecording(filePath: string): Promise<boolean> {
   try {
-    await fs.unlink(filePath);
+    const recordingsDir = await getRecordingsDir();
+    const resolvedPath = path.resolve(filePath);
+
+    // Prevent path traversal
+    if (!resolvedPath.startsWith(path.join(recordingsDir, path.sep))) {
+      console.warn('[Security] Attempted to delete file outside recordings directory:', filePath);
+      return false;
+    }
+
+    await fs.unlink(resolvedPath);
     return true;
   } catch {
     return false;
@@ -194,7 +203,16 @@ export async function listRecordings(): Promise<RecordingMetadata[]> {
  */
 export async function readRecording(filePath: string): Promise<Buffer | null> {
   try {
-    return await fs.readFile(filePath);
+    const recordingsDir = await getRecordingsDir();
+    const resolvedPath = path.resolve(filePath);
+
+    // Prevent path traversal
+    if (!resolvedPath.startsWith(path.join(recordingsDir, path.sep))) {
+      console.warn('[Security] Attempted to read file outside recordings directory:', filePath);
+      return null;
+    }
+
+    return await fs.readFile(resolvedPath);
   } catch {
     return null;
   }

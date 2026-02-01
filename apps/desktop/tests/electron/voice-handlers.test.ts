@@ -105,18 +105,24 @@ describe('Voice Handlers', () => {
 
   describe('deleteRecording', () => {
     it('should delete recording and return true', async () => {
-      const result = await deleteRecording('/path/to/recording.webm');
+      const result = await deleteRecording('/mock/user/data/recordings/recording.webm');
 
       expect(result).toBe(true);
-      expect(fs.unlink).toHaveBeenCalledWith('/path/to/recording.webm');
+      expect(fs.unlink).toHaveBeenCalledWith('/mock/user/data/recordings/recording.webm');
     });
 
     it('should return false on deletion failure', async () => {
       vi.mocked(fs.unlink).mockRejectedValueOnce(new Error('File not found'));
 
-      const result = await deleteRecording('/path/to/nonexistent.webm');
+      const result = await deleteRecording('/mock/user/data/recordings/nonexistent.webm');
 
       expect(result).toBe(false);
+    });
+
+    it('should prevent path traversal deletion', async () => {
+      const result = await deleteRecording('../secret.txt');
+      expect(result).toBe(false);
+      expect(fs.unlink).not.toHaveBeenCalled();
     });
   });
 
@@ -147,16 +153,16 @@ describe('Voice Handlers', () => {
 
   describe('readRecording', () => {
     it('should read and return recording data', async () => {
-      const data = await readRecording('/path/to/recording.webm');
+      const data = await readRecording('/mock/user/data/recordings/recording.webm');
 
       expect(data).toBeInstanceOf(Buffer);
-      expect(fs.readFile).toHaveBeenCalledWith('/path/to/recording.webm');
+      expect(fs.readFile).toHaveBeenCalledWith('/mock/user/data/recordings/recording.webm');
     });
 
     it('should return null on read failure', async () => {
       vi.mocked(fs.readFile).mockRejectedValueOnce(new Error('File not found'));
 
-      const data = await readRecording('/path/to/nonexistent.webm');
+      const data = await readRecording('/mock/user/data/recordings/nonexistent.webm');
 
       expect(data).toBeNull();
     });
