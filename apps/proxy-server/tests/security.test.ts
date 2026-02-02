@@ -15,6 +15,16 @@ vi.mock('../src/services/gemini-service', () => ({
 import { buildServer } from '../src/server';
 import { extractInvoiceData } from '../src/services/gemini-service';
 
+// Mock license hooks to bypass auth
+vi.mock('../src/routes/license', async () => {
+  const actual = await vi.importActual('../src/routes/license');
+  return {
+    ...actual,
+    createLicenseAuthHook: () => async () => {},
+    createQuotaCheckHook: () => async () => {},
+  };
+});
+
 describe('Security Leak Test', () => {
   let server: FastifyInstance;
   const originalEnv = process.env.NODE_ENV;

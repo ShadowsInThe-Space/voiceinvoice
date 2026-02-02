@@ -24,6 +24,16 @@ import { buildServer } from '../src/server';
 import { transcribeAudio } from '../src/services/speech-service';
 import { extractInvoiceData } from '../src/services/gemini-service';
 
+// Mock license hooks to bypass auth during functional tests
+vi.mock('../src/routes/license', async () => {
+  const actual = await vi.importActual('../src/routes/license');
+  return {
+    ...actual,
+    createLicenseAuthHook: () => async () => {},
+    createQuotaCheckHook: () => async () => {},
+  };
+});
+
 describe('Proxy Server', () => {
   let server: FastifyInstance;
 
