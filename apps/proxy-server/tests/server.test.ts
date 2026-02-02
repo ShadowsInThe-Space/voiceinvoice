@@ -23,11 +23,62 @@ vi.mock('../src/services/gemini-service', () => ({
 import { buildServer } from '../src/server';
 import { transcribeAudio } from '../src/services/speech-service';
 import { extractInvoiceData } from '../src/services/gemini-service';
+import { getLicenseStore, MockLicenseStore } from '../src/services/license-store';
+import { generateLicenseToken } from '../src/services/license-service';
 
 describe('Proxy Server', () => {
   let server: FastifyInstance;
+  let validToken: string;
+  let depletedToken: string;
 
   beforeAll(async () => {
+    process.env.JWT_SECRET = 'test-secret';
+
+    // Setup mock license store
+    const store = getLicenseStore() as MockLicenseStore;
+    store.reset();
+
+    // Add valid license
+    store.addLicense({
+      id: 'test-id-1',
+      licenseKey: 'TEST-KEY-VALID',
+      companyName: 'Test Company',
+      status: 'ACTIVE',
+      monthlyQuota: 100,
+      currentUsage: 0,
+      usageResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Add depleted license
+    store.addLicense({
+      id: 'test-id-2',
+      licenseKey: 'TEST-KEY-DEPLETED',
+      companyName: 'Depleted Company',
+      status: 'ACTIVE',
+      monthlyQuota: 10,
+      currentUsage: 10,
+      usageResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Generate tokens
+    validToken = generateLicenseToken({
+      licenseKey: 'TEST-KEY-VALID',
+      companyName: 'Test Company',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    depletedToken = generateLicenseToken({
+      licenseKey: 'TEST-KEY-DEPLETED',
+      companyName: 'Depleted Company',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    });
+
     server = await buildServer({ logger: false });
   });
 
@@ -81,6 +132,7 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: { Authorization: `Bearer ${validToken}` },
         payload: {
           audio: audioBase64,
           language: 'de-DE',
@@ -98,6 +150,7 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: { Authorization: `Bearer ${validToken}` },
         payload: {
           language: 'de-DE',
         },
@@ -121,6 +174,7 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: { Authorization: `Bearer ${validToken}` },
         payload: {
           audio: audioBase64,
         },
@@ -141,6 +195,7 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: { Authorization: `Bearer ${validToken}` },
         payload: {
           audio: audioBase64,
           language: 'de-DE',
@@ -150,6 +205,39 @@ describe('Proxy Server', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body).toHaveProperty('error');
+    });
+
+    it('should return 401 when token is missing', async () => {
+      const audioBase64 = Buffer.from('fake-audio-data').toString('base64');
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/transcribe',
+        payload: {
+          audio: audioBase64,
+          language: 'de-DE',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('should return 429 when quota is exceeded', async () => {
+      const audioBase64 = Buffer.from('fake-audio-data').toString('base64');
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/transcribe',
+        headers: { Authorization: `Bearer ${depletedToken}` },
+        payload: {
+          audio: audioBase64,
+          language: 'de-DE',
+        },
+      });
+
+      expect(response.statusCode).toBe(429);
+      const body = JSON.parse(response.body);
+      expect(body.error).toContain('quota exceeded');
     });
   });
 
@@ -173,6 +261,7 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: { Authorization: `Bearer ${validToken}` },
         payload: {
           transcript:
             'Rechnung an Firma Mustermann GmbH, zweihundert Euro netto für Beratungsleistung',
@@ -192,6 +281,7 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: { Authorization: `Bearer ${validToken}` },
         payload: {},
       });
 
@@ -204,6 +294,7 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: { Authorization: `Bearer ${validToken}` },
         payload: {
           transcript: '',
         },
@@ -220,6 +311,7 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: { Authorization: `Bearer ${validToken}` },
         payload: {
           transcript: 'Some transcript text',
         },
@@ -249,6 +341,7 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: { Authorization: `Bearer ${validToken}` },
         payload: {
           transcript: 'Unclear audio recording',
         },
@@ -257,6 +350,31 @@ describe('Proxy Server', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.confidence).toBeLessThan(0.5);
+    });
+
+    it('should return 401 when token is missing', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/enrich',
+        payload: {
+          transcript: 'test',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('should return 429 when quota is exceeded', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/enrich',
+        headers: { Authorization: `Bearer ${depletedToken}` },
+        payload: {
+          transcript: 'test',
+        },
+      });
+
+      expect(response.statusCode).toBe(429);
     });
   });
 
