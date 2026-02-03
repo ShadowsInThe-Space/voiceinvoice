@@ -20,14 +20,56 @@ vi.mock('../src/services/gemini-service', () => ({
   checkAvailability: vi.fn().mockResolvedValue(true),
 }));
 
+// Mock the license store
+vi.mock('../src/services/license-store', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/services/license-store')>();
+  return {
+    ...original,
+    getLicenseStore: vi.fn(),
+  };
+});
+
 import { buildServer } from '../src/server';
 import { transcribeAudio } from '../src/services/speech-service';
 import { extractInvoiceData } from '../src/services/gemini-service';
+import { createMockLicenseStore, MockLicenseStore, getLicenseStore } from '../src/services/license-store';
+import { generateLicenseToken, LicenseTokenPayload } from '../src/services/license-service';
 
 describe('Proxy Server', () => {
   let server: FastifyInstance;
+  let mockStore: MockLicenseStore;
+  let validToken: string;
 
   beforeAll(async () => {
+    // Setup mock store
+    mockStore = createMockLicenseStore();
+    vi.mocked(getLicenseStore).mockReturnValue(mockStore);
+
+    // Setup JWT secret
+    vi.stubEnv('JWT_SECRET', 'test-secret-key-for-jwt-signing-32chars!');
+
+    // Add a valid license to the store
+    mockStore.addLicense({
+      id: 'test-license-id',
+      licenseKey: 'TEST-LICENSE-KEY',
+      companyName: 'Test Company',
+      status: 'ACTIVE',
+      monthlyQuota: 1000,
+      currentUsage: 0,
+      usageResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Generate a valid token
+    const payload: LicenseTokenPayload = {
+      licenseKey: 'TEST-LICENSE-KEY',
+      companyName: 'Test Company',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    };
+    validToken = generateLicenseToken(payload);
+
     server = await buildServer({ logger: false });
   });
 
@@ -37,6 +79,10 @@ describe('Proxy Server', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // We don't reset the store here because we reuse the license for all tests,
+    // but if we were modifying state significantly we might want to.
+    // However, rate limiting might affect tests if we don't reset usage.
+    // For now, quota is high (1000) so it shouldn't matter.
   });
 
   describe('GET /health', () => {
@@ -81,6 +127,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
         payload: {
           audio: audioBase64,
           language: 'de-DE',
@@ -98,6 +147,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
         payload: {
           language: 'de-DE',
         },
@@ -121,6 +173,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
         payload: {
           audio: audioBase64,
         },
@@ -141,6 +196,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/transcribe',
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
         payload: {
           audio: audioBase64,
           language: 'de-DE',
@@ -173,6 +231,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
         payload: {
           transcript:
             'Rechnung an Firma Mustermann GmbH, zweihundert Euro netto für Beratungsleistung',
@@ -192,6 +253,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
         payload: {},
       });
 
@@ -204,6 +268,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
         payload: {
           transcript: '',
         },
@@ -220,6 +287,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
         payload: {
           transcript: 'Some transcript text',
         },
@@ -249,6 +319,9 @@ describe('Proxy Server', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/enrich',
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
         payload: {
           transcript: 'Unclear audio recording',
         },
