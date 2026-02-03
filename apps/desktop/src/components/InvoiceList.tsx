@@ -7,7 +7,7 @@
  * @module components/InvoiceList
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { Invoice, InvoiceStatus } from '@voiceinvoice/shared-types';
 import { cn } from '../lib/utils';
 import {
@@ -126,6 +126,26 @@ export function InvoiceList({
   const [sortBy, setSortBy] = useState<SortOption>('date');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Handle Escape key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && deleteConfirmId) {
+        setDeleteConfirmId(null);
+      }
+    };
+
+    if (deleteConfirmId) {
+      document.addEventListener('keydown', handleKeyDown);
+      // Focus cancel button when modal opens for safety
+      setTimeout(() => cancelButtonRef.current?.focus(), 50);
+    }
+
+    return (): void => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [deleteConfirmId]);
 
   // Filter and sort invoices
   const processedInvoices = useMemo(() => {
@@ -327,7 +347,7 @@ export function InvoiceList({
                         onClick={(e) => handleDeleteClick(e, invoice.id)}
                         className="p-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all"
                         title="Rechnung löschen"
-                        aria-label="Loeschen"
+                        aria-label={`Rechnung ${invoice.invoiceNumber} löschen`}
                       >
                         <Trash2 className="h-5 w-5" />
                       </button>
@@ -354,19 +374,32 @@ export function InvoiceList({
 
       {/* Delete Dialog - Glass Effect */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-md px-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-md px-4"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-dialog-title"
+          aria-describedby="delete-dialog-desc"
+        >
           <div className="w-full max-w-md rounded-2xl border-2 border-destructive/20 bg-card p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mb-6 mx-auto">
               <Trash2 size={32} />
             </div>
-            <h3 className="text-2xl font-black text-foreground text-center mb-2 tracking-tight">
+            <h3
+              id="delete-dialog-title"
+              className="text-2xl font-black text-foreground text-center mb-2 tracking-tight"
+            >
               Dokument löschen?
             </h3>
-            <p className="text-muted-foreground text-center mb-8">
+            <p
+              id="delete-dialog-desc"
+              className="text-muted-foreground text-center mb-8"
+            >
               Diese Aktion entfernt die Rechnung <span className="font-bold text-foreground">unwiderruflich</span> aus Ihrem System.
             </p>
             <div className="grid grid-cols-2 gap-4">
               <button
+                ref={cancelButtonRef}
                 onClick={cancelDelete}
                 className="py-3 px-4 text-sm font-bold rounded-xl border-2 border-border hover:bg-muted transition-all"
               >
