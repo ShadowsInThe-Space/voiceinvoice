@@ -71,4 +71,7 @@ squashfs-root/
 archive/
 server_database.sqlite
 
-CLAUDE.md 
+# Worktrees
+.worktrees/
+
+CLAUDE.md
