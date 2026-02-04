@@ -39,7 +39,6 @@ const pullSchema = z.object({
  * @param server - Fastify instance
  */
 export async function registerSyncRoutes(server: FastifyInstance): Promise<void> {
-
   /**
    * POST /api/sync/push
    *
@@ -47,32 +46,36 @@ export async function registerSyncRoutes(server: FastifyInstance): Promise<void>
    */
   server.post<{
     Body: { entry: SyncQueueEntry };
-  }>('/api/sync/push', {
-    preHandler: createLicenseAuthHook()
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    // Validate body
-    const parseResult = pushSchema.safeParse(request.body);
-    if (!parseResult.success) {
-      return reply.status(400).send({
-        error: parseResult.error.errors[0]?.message || 'Invalid request body',
-        statusCode: 400,
-      });
+  }>(
+    '/api/sync/push',
+    {
+      preHandler: createLicenseAuthHook(),
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      // Validate body
+      const parseResult = pushSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        return reply.status(400).send({
+          error: parseResult.error.errors[0]?.message || 'Invalid request body',
+          statusCode: 400,
+        });
+      }
+
+      const { entry } = parseResult.data;
+      const license = (request as any).license as LicenseTokenPayload;
+
+      const result = await pushEntity(license.licenseKey, entry);
+
+      if (!result.success) {
+        return reply.status(500).send({
+          error: result.error || 'Failed to push entity',
+          statusCode: 500,
+        });
+      }
+
+      return reply.status(200).send(result);
     }
-
-    const { entry } = request.body;
-    const license = (request as any).license as LicenseTokenPayload;
-
-    const result = await pushEntity(license.licenseKey, entry);
-
-    if (!result.success) {
-      return reply.status(500).send({
-        error: result.error || 'Failed to push entity',
-        statusCode: 500,
-      });
-    }
-
-    return reply.status(200).send(result);
-  });
+  );
 
   /**
    * GET /api/sync/pull
@@ -81,29 +84,33 @@ export async function registerSyncRoutes(server: FastifyInstance): Promise<void>
    */
   server.get<{
     Querystring: { since?: string };
-  }>('/api/sync/pull', {
-    preHandler: createLicenseAuthHook()
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const parseResult = pullSchema.safeParse(request.query);
-    if (!parseResult.success) {
-      return reply.status(400).send({
-        error: 'Invalid query parameters',
-        statusCode: 400,
-      });
-    }
+  }>(
+    '/api/sync/pull',
+    {
+      preHandler: createLicenseAuthHook(),
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const parseResult = pullSchema.safeParse(request.query);
+      if (!parseResult.success) {
+        return reply.status(400).send({
+          error: 'Invalid query parameters',
+          statusCode: 400,
+        });
+      }
 
-    const sinceStr = parseResult.data.since;
-    const since = sinceStr ? parseInt(sinceStr, 10) : null;
-    const license = (request as any).license as LicenseTokenPayload;
+      const sinceStr = parseResult.data.since;
+      const since = sinceStr ? parseInt(sinceStr, 10) : null;
+      const license = (request as any).license as LicenseTokenPayload;
 
-    try {
-      const result = await pullChanges(license.licenseKey, since);
-      return reply.status(200).send(result);
-    } catch (error) {
-      return reply.status(500).send({
-        error: 'Failed to pull changes',
-        statusCode: 500,
-      });
+      try {
+        const result = await pullChanges(license.licenseKey, since);
+        return reply.status(200).send(result);
+      } catch (error) {
+        return reply.status(500).send({
+          error: 'Failed to pull changes',
+          statusCode: 500,
+        });
+      }
     }
-  });
+  );
 }
