@@ -11,6 +11,13 @@ import { z } from 'zod';
 import { validateLicense, LicenseTokenPayload } from '../services/license-service';
 
 /**
+ * Extended FastifyRequest with license information.
+ */
+interface FastifyRequestWithLicense extends FastifyRequest {
+  license?: LicenseTokenPayload;
+}
+
+/**
  * Creates a Fastify preHandler hook for license-based authentication.
  *
  * @returns Fastify preHandler hook
@@ -36,7 +43,7 @@ export function createLicenseAuthHook(): preHandlerHookHandler {
     }
 
     // Attach license info to request for downstream handlers
-    (request as any).license = {
+    (request as FastifyRequestWithLicense).license = {
       licenseKey,
       tenantId: licenseKey, // In this simple impl, licenseKey acts as tenantId
     } as LicenseTokenPayload;

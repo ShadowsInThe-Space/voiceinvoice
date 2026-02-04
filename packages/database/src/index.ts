@@ -5,7 +5,6 @@
  * PostgreSQL (server) databases. This module handles client
  * initialization and connection management.
  *
- * @packageDocumentation
  * @module @voiceinvoice/database
  */
 
@@ -24,8 +23,8 @@ export const DATABASE_VERSION = '0.1.0';
 export interface PrismaClientInterface {
   $connect(): Promise<void>;
   $disconnect(): Promise<void>;
-  $queryRaw(...args: any[]): Promise<any>;
-  $executeRaw(...args: any[]): Promise<any>;
+  $queryRaw(...args: unknown[]): Promise<unknown>;
+  $executeRaw(...args: unknown[]): Promise<number>;
 }
 
 /**
@@ -39,14 +38,19 @@ export interface DatabaseConfig {
 }
 
 /**
- * Custom database error class.
+ * Custom database error class for database-related errors.
+ *
+ * @param message - Error message describing what went wrong
+ * @param code - Optional error code (e.g., 'NOT_INITIALIZED', 'CONNECTION_FAILED')
+ * @param cause - Optional underlying error that caused this error
  */
 export class DatabaseError extends Error {
   /**
+   * Creates a new DatabaseError instance.
    *
-   * @param message
-   * @param code
-   * @param cause
+   * @param message - Error message describing what went wrong.
+   * @param code - Optional error code (e.g., 'NOT_INITIALIZED', 'CONNECTION_FAILED').
+   * @param cause - Optional underlying error that caused this error.
    */
   constructor(
     message: string,
@@ -357,7 +361,7 @@ export async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
         errorMessage.includes('timeout') ||
         errorMessage.includes('connection') ||
         errorMessage.includes('econnrefused') ||
-        (lastError as any).code === 'P2024'; // Prisma timeout error
+        ('code' in lastError && lastError.code === 'P2024'); // Prisma timeout error
 
       if (!isTransient || attempt >= maxRetries) {
         throw new DatabaseError(
