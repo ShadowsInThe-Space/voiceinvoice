@@ -54,9 +54,7 @@ export async function registerTranscribeRoutes(server: FastifyInstance): Promise
     Body: TranscribeRequest;
   }>(
     '/transcribe',
-    {
-      preHandler: createLicenseAuthHook(),
-    },
+    { preHandler: createLicenseAuthHook() },
     async (request: FastifyRequest<{ Body: TranscribeRequest }>, reply: FastifyReply) => {
       // Validate request body
       const validation = TranscribeRequestSchema.safeParse(request.body);
