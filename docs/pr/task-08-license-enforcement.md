@@ -40,4 +40,4 @@
 
 ## Review
 
-- Für tiefere Security/Architektur-Review: Erwähne @claude im PR
+- Security/Architektur-Review: @claude
