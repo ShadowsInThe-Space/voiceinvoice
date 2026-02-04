@@ -175,3 +175,112 @@ export function requiresUserConfirmation(decision: RoutingDecision): boolean {
 export function requiresManualInput(decision: RoutingDecision): boolean {
   return decision.route === 'manual';
 }
+
+/**
+ * Statistics for routing decisions analytics.
+ *
+ * Used to track routing patterns and identify potential
+ * threshold adjustments or model improvements.
+ */
+export interface RoutingStatistics {
+  /** Total number of routing decisions */
+  total: number;
+
+  /** Count per route type */
+  byRoute: Record<Route, number>;
+
+  /** Count per intent type */
+  byIntent: Record<Intent, number>;
+
+  /** Count per classification method */
+  byMethod: Record<'RULES' | 'GEMINI', number>;
+
+  /** Average confidence per route */
+  avgConfidenceByRoute: Record<Route, number>;
+
+  /** Percentage of decisions that were auto-saved */
+  autoSaveRate: number;
+
+  /** Percentage of decisions requiring manual input */
+  manualRate: number;
+}
+
+/**
+ * Aggregates routing decisions into statistics for analytics.
+ *
+ * This function is useful for:
+ * - Monitoring routing patterns over time
+ * - Identifying if thresholds need adjustment
+ * - Detecting drops in classification confidence
+ *
+ * @param decisions - Array of routing decisions to aggregate
+ * @returns Aggregated statistics
+ *
+ * @example
+ * const stats = aggregateRoutingStatistics(recentDecisions);
+ * if (stats.manualRate > 0.3) {
+ *   console.warn('High manual input rate - consider model retraining');
+ * }
+ */
+export function aggregateRoutingStatistics(decisions: RoutingDecision[]): RoutingStatistics {
+  if (decisions.length === 0) {
+    return {
+      total: 0,
+      byRoute: { auto_save: 0, preview: 0, manual: 0 },
+      byIntent: {} as Record<Intent, number>,
+      byMethod: { RULES: 0, GEMINI: 0 },
+      avgConfidenceByRoute: { auto_save: 0, preview: 0, manual: 0 },
+      autoSaveRate: 0,
+      manualRate: 0,
+    };
+  }
+
+  const byRoute: Record<Route, number> = { auto_save: 0, preview: 0, manual: 0 };
+  const byIntent: Record<Intent, number> = {} as Record<Intent, number>;
+  const byMethod: Record<'RULES' | 'GEMINI', number> = { RULES: 0, GEMINI: 0 };
+  const confidenceSums: Record<Route, number> = { auto_save: 0, preview: 0, manual: 0 };
+
+  for (const decision of decisions) {
+    byRoute[decision.route]++;
+    byIntent[decision.intent] = (byIntent[decision.intent] || 0) + 1;
+    byMethod[decision.method]++;
+    confidenceSums[decision.route] += decision.confidence;
+  }
+
+  const avgConfidenceByRoute: Record<Route, number> = {
+    auto_save: byRoute.auto_save > 0 ? confidenceSums.auto_save / byRoute.auto_save : 0,
+    preview: byRoute.preview > 0 ? confidenceSums.preview / byRoute.preview : 0,
+    manual: byRoute.manual > 0 ? confidenceSums.manual / byRoute.manual : 0,
+  };
+
+  return {
+    total: decisions.length,
+    byRoute,
+    byIntent,
+    byMethod,
+    avgConfidenceByRoute,
+    autoSaveRate: byRoute.auto_save / decisions.length,
+    manualRate: byRoute.manual / decisions.length,
+  };
+}
+
+/**
+ * Makes routing decisions for multiple intent results in batch.
+ *
+ * Useful for processing multiple voice commands or
+ * re-evaluating historical data with new thresholds.
+ *
+ * @param intentResults - Array of intent classification results
+ * @param thresholds - Optional custom thresholds
+ * @returns Array of routing decisions
+ *
+ * @example
+ * const decisions = batchRoute(intentResults, { autoSave: 0.90, preview: 0.65 });
+ * const stats = aggregateRoutingStatistics(decisions);
+ */
+export function batchRoute(
+  intentResults: IntentResult[],
+  thresholds: RoutingThresholds = DEFAULT_ROUTING_THRESHOLDS
+): RoutingDecision[] {
+  return intentResults.map((result) => makeRoutingDecision(result, thresholds));
+}
