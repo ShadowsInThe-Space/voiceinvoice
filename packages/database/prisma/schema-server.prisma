@@ -62,7 +62,8 @@ model Tenant {
 
 model User {
   id        String   @id @default(uuid())
-  email     String   @unique
+  email     String
+  /// Hashed password using bcrypt. Never store plaintext passwords.
   password  String
   name      String?
 
@@ -72,6 +73,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, email])
   @@index([tenantId])
 }
 
@@ -136,10 +138,10 @@ model Invoice {
   invoiceNumber     String
 
   customerId        String
-  customer          Customer      @relation(fields: [customerId], references: [id])
+  customer          Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
   categoryId        String?
-  category          Category?     @relation(fields: [categoryId], references: [id])
+  category          Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   date              DateTime
   dueDate           DateTime?
@@ -154,7 +156,7 @@ model Invoice {
   description       String?
 
   recordingId       String?
-  recording         Recording?    @relation(fields: [recordingId], references: [id])
+  recording         Recording?    @relation(fields: [recordingId], references: [id], onDelete: SetNull)
 
   transcription     String?       @db.Text
   enrichedData      Json?         // JSON string in types, but Json type in Postgres is better
@@ -170,6 +172,7 @@ model Invoice {
 
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId])
+  @@index([tenantId, status])
 }
 
 model Recording {
@@ -205,7 +208,7 @@ model Category {
   color     String?
 
   parentId  String?
-  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children  Category[] @relation("CategoryHierarchy")
 
   tenantId  String
@@ -245,6 +248,7 @@ model BankTransaction {
   createdAt        DateTime @default(now())
 
   @@index([tenantId])
+  @@index([tenantId, reconciled])
 }
 
 model AppSettings {
@@ -278,4 +282,5 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([tenantId])
+  @@index([tenantId, entityType, entityId])
 }
