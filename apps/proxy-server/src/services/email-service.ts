@@ -6,7 +6,11 @@
  * @module services/email-service
  */
 
+import { randomUUID } from 'crypto';
 import type { LicensePlan } from './stripe-service';
+
+const DEFAULT_RETRY_ATTEMPTS = 3;
+const DEFAULT_RETRY_BASE_DELAY_MS = 200;
 
 /**
  * Email payload shape for webhook delivery.
@@ -26,6 +30,8 @@ export interface EmailPayload {
   templateVersion?: string;
   /** Optional tags for analytics */
   tags?: string[];
+  /** Optional message id for idempotency */
+  messageId?: string;
 }
 
 /**
@@ -58,6 +64,55 @@ function getEmailFrom(): string {
  */
 function getSupportEmail(): string {
   return process.env.SUPPORT_EMAIL || 'support@voiceinvoice.de';
+}
+
+/**
+ * Get the number of retry attempts for email delivery.
+ *
+ * @returns Retry attempts
+ */
+function getRetryAttempts(): number {
+  const parsed = Number.parseInt(process.env.EMAIL_RETRY_ATTEMPTS ?? '', 10);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return DEFAULT_RETRY_ATTEMPTS;
+}
+
+/**
+ * Get the base delay for email retries.
+ *
+ * @returns Base delay in milliseconds
+ */
+function getRetryBaseDelayMs(): number {
+  const parsed = Number.parseInt(process.env.EMAIL_RETRY_BASE_DELAY_MS ?? '', 10);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return DEFAULT_RETRY_BASE_DELAY_MS;
+}
+
+/**
+ * Calculate exponential backoff delay.
+ *
+ * @param attempt - Attempt number (1-based)
+ * @param baseDelayMs - Base delay in milliseconds
+ * @returns Delay in milliseconds
+ */
+function getRetryDelayMs(attempt: number, baseDelayMs: number): number {
+  return baseDelayMs * Math.pow(2, attempt - 1);
+}
+
+/**
+ * Sleep helper for retry backoff.
+ *
+ * @param delayMs - Delay in milliseconds
+ */
+async function sleep(delayMs: number): Promise<void> {
+  if (delayMs <= 0) {
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 /**
@@ -106,6 +161,7 @@ export function buildLicenseEmail(to: string, licenseKey: string, plan: LicenseP
     text,
     templateVersion: 'license-v1',
     tags: ['license', plan.id.toLowerCase()],
+    messageId: randomUUID(),
   };
 }
 
@@ -118,18 +174,36 @@ export function buildLicenseEmail(to: string, licenseKey: string, plan: LicenseP
  */
 export async function sendEmail(payload: EmailPayload): Promise<void> {
   const webhookUrl = getEmailWebhookUrl();
+  const attempts = getRetryAttempts();
+  const baseDelayMs = getRetryBaseDelayMs();
 
-  const response = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    throw new Error(`Email webhook failed with status ${response.status}`);
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        return;
+      }
+
+      lastError = new Error(`Email webhook failed with status ${response.status}`);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Email webhook failed');
+    }
+
+    if (attempt < attempts) {
+      await sleep(getRetryDelayMs(attempt, baseDelayMs));
+    }
   }
+
+  throw lastError ?? new Error('Email webhook failed');
 }
 
 /**

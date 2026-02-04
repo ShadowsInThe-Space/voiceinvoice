@@ -18,9 +18,13 @@ describe('Email Service', () => {
     process.env.EMAIL_WEBHOOK_URL = 'https://example.com/email-webhook';
     process.env.EMAIL_FROM = 'VoiceInvoice <no-reply@voiceinvoice.de>';
     process.env.SUPPORT_EMAIL = 'support@voiceinvoice.de';
+    process.env.EMAIL_RETRY_ATTEMPTS = '3';
+    process.env.EMAIL_RETRY_BASE_DELAY_MS = '0';
   });
 
   afterEach(() => {
+    delete process.env.EMAIL_RETRY_ATTEMPTS;
+    delete process.env.EMAIL_RETRY_BASE_DELAY_MS;
     vi.unstubAllGlobals();
   });
 
@@ -32,6 +36,7 @@ describe('Email Service', () => {
     expect(payload.text).toContain(licenseKey);
     expect(payload.html).toContain(licenseKey);
     expect(payload.text).toContain('support@voiceinvoice.de');
+    expect(payload.messageId).toBeDefined();
   });
 
   it('should send email via webhook with required payload fields', async () => {
@@ -55,6 +60,22 @@ describe('Email Service', () => {
     expect(body.text).toContain(licenseKey);
     expect(body.html).toContain(licenseKey);
     expect(body.templateVersion).toBe('license-v1');
+    expect(body.messageId).toBeDefined();
+  });
+
+  it('should retry when webhook returns non-2xx', async () => {
+    const payload = buildLicenseEmail(recipient, licenseKey, LICENSE_PLANS.STARTER);
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 502 })
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    await sendEmail(payload);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('should throw when EMAIL_WEBHOOK_URL is missing', async () => {
