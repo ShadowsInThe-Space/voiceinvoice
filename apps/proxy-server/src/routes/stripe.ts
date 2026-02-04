@@ -18,6 +18,7 @@ import {
   formatPrice,
   STRIPE_ERRORS,
 } from '../services/stripe-service';
+import { sendLicenseEmail } from '../services/email-service';
 import { getLicenseStore, License } from '../services/license-store';
 import { randomBytes } from 'crypto';
 
@@ -264,8 +265,11 @@ export async function registerStripeRoutes(server: FastifyInstance): Promise<voi
                   'License created from Stripe payment'
                 );
 
-                // TODO: Send license key via email to payment.email
-                // await sendLicenseEmail(payment.email, licenseKey, plan);
+                if (payment.email) {
+                  await sendLicenseEmail(payment.email, licenseKey, plan);
+                } else {
+                  server.log.warn({ sessionId: session.id }, 'No email found for license delivery');
+                }
               } catch (processErr) {
                 server.log.error(
                   { err: processErr, sessionId: session.id },
