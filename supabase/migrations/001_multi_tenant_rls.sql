@@ -70,9 +70,19 @@ CREATE POLICY tenant_isolation_delete ON encrypted_documents
   USING (tenant_id = current_setting('app.tenant_id', true));
 
 -- Function to set tenant context (must be called before any query)
+-- SECURITY: Validates that the provided tenant_id matches the JWT claim
 CREATE OR REPLACE FUNCTION set_tenant_context(p_tenant_id TEXT)
 RETURNS VOID AS $$
+DECLARE
+  jwt_tenant_id TEXT;
 BEGIN
+  -- Tenant-ID aus JWT extrahieren und validieren
+  jwt_tenant_id := current_setting('request.jwt.claims', true)::json->>'tenant_id';
+
+  IF jwt_tenant_id IS NULL OR jwt_tenant_id != p_tenant_id THEN
+    RAISE EXCEPTION 'Unauthorized: tenant_id mismatch';
+  END IF;
+
   PERFORM set_config('app.tenant_id', p_tenant_id, true);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
