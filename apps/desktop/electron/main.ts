@@ -33,6 +33,7 @@ import {
   getRecentExecutionsHandler,
   getTimelineInvoicesHandler,
   getTopCustomersHandler,
+  triggerAggregationHandler,
 } from './ipc/analytics-handlers';
 import { ensureDatabaseExists, logDatabaseConfig, getDatabaseUrl } from './lib/database-path';
 
@@ -259,6 +260,7 @@ function setupHandlers(): void {
   );
   ipcMain.handle('analytics:getTimelineInvoices', () => getTimelineInvoicesHandler());
   ipcMain.handle('analytics:getTopCustomers', (_event, limit) => getTopCustomersHandler(limit));
+  ipcMain.handle('analytics:triggerAggregation', () => triggerAggregationHandler());
 
   // File handlers
   ipcMain.handle(
