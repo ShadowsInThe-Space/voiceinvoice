@@ -81,3 +81,14 @@ export {
   type ErrorHandler,
   type ConflictHandler,
 } from './sync-engine';
+
+// HTTP Sync Client exports
+export { HttpSyncApiClient, type HttpSyncClientOptions } from './http-sync-client';
+
+// Encrypted Sync Client exports (E2E encryption support)
+export {
+  EncryptedSyncClient,
+  createEncryptedSyncClientFromEnv,
+  type EncryptedSyncConfig,
+  type EncryptedSyncPayload,
+} from './encrypted-sync-client';
