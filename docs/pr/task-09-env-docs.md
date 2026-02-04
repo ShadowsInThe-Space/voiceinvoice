@@ -24,3 +24,8 @@
 
 - [x] Docs/.env.example aktualisiert
 - [x] Keine Secrets committet
+
+## Review Notes
+
+- @claude Bitte Security/Architektur-Review der Env-Doku.
+- @jules Bitte Logik-Check auf Vollstaendigkeit der Env-Variablen.
