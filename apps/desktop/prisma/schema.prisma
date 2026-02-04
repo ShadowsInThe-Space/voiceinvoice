@@ -201,3 +201,39 @@ model WorkflowAggregation {
   @@unique([workflowIntent, periodType, periodStart])
   @@index([periodType, periodStart])
 }
+
+// ============================================
+// Bank Transaction Models (Google Drive Import)
+// ============================================
+
+// Stores imported bank transactions from CSV files
+model BankTransaction {
+  id               String    @id @default(cuid())
+  importDate       DateTime  @default(now())
+  sourceFile       String?   // Original CSV filename
+
+  // Transaction data
+  transactionDate  DateTime
+  valueDate        DateTime?
+  counterparty     String
+  counterpartyIban String?
+  amount           Float
+  currency         String    @default("EUR")
+  purpose          String?
+
+  // Invoice matching
+  matchedInvoiceId String?
+  matchConfidence  Float?
+  reconciled       Boolean   @default(false)
+
+  // Sync-ready fields
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  syncVersion      Int       @default(0)
+  deletedAt        DateTime?
+
+  @@index([transactionDate])
+  @@index([matchedInvoiceId])
+  @@index([reconciled])
+  @@index([deletedAt])
+}
