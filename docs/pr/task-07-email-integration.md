@@ -21,6 +21,11 @@
 - [ ] Coverage meets thresholds
 - [ ] Docs updated if needed
 
+## Review
+
+- [ ] @claude Bitte Security/Architecture-Review
+- [ ] @jules Bitte Bug/Logic-Review
+
 ## Email Deliverability
 
 - [ ] SPF/DKIM/DMARC konfiguriert
