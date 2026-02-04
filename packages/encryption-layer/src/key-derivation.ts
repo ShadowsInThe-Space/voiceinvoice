@@ -20,6 +20,7 @@ const TENANT_SALT = 'voiceinvoice-tenant-v1';
  * @param licenseKey - The user's license key
  * @param deviceId - Unique device identifier
  * @returns 32-byte (256-bit) encryption key
+ * @throws Error if licenseKey or deviceId is empty
  *
  * @example
  * ```typescript
@@ -28,6 +29,10 @@ const TENANT_SALT = 'voiceinvoice-tenant-v1';
  * ```
  */
 export function deriveEncryptionKey(licenseKey: string, deviceId: string): Uint8Array {
+  if (!licenseKey || licenseKey.trim() === '' || !deviceId || deviceId.trim() === '') {
+    throw new Error('licenseKey and deviceId must not be empty');
+  }
+
   const inputKeyMaterial = new TextEncoder().encode(`${licenseKey}:${deviceId}`);
   const salt = new TextEncoder().encode(ENCRYPTION_SALT);
   const info = new TextEncoder().encode('encryption');
@@ -43,16 +48,21 @@ export function deriveEncryptionKey(licenseKey: string, deviceId: string): Uint8
  * the same tenant ID, enabling multi-device access to the same data.
  *
  * @param licenseKey - The user's license key
- * @returns 16-character hex string tenant ID
+ * @returns 32-character hex string tenant ID (128-bit)
+ * @throws Error if licenseKey is empty
  *
  * @example
  * ```typescript
  * const tenantId = deriveTenantId('LIC-1234-5678');
- * // Returns something like 'a1b2c3d4e5f67890'
+ * // Returns something like 'a1b2c3d4e5f67890a1b2c3d4e5f67890'
  * ```
  */
 export function deriveTenantId(licenseKey: string): string {
+  if (!licenseKey || licenseKey.trim() === '') {
+    throw new Error('licenseKey must not be empty');
+  }
+
   const hash = sha256(new TextEncoder().encode(`${TENANT_SALT}:${licenseKey}`));
-  // Take first 8 bytes (64 bits) and convert to hex for 16-char tenant ID
-  return Buffer.from(hash.slice(0, 8)).toString('hex');
+  // Take first 16 bytes (128 bits) and convert to hex for 32-char tenant ID
+  return Buffer.from(hash.slice(0, 16)).toString('hex');
 }
