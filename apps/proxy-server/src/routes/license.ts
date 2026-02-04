@@ -8,7 +8,9 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastify';
 import { z } from 'zod';
+import { deriveTenantId } from '../services/tenant-id';
 import { validateLicense, LicenseTokenPayload } from '../services/license-service';
+import { signLicenseToken, verifyLicenseToken } from '../services/license-token';
 
 /**
  * Extended FastifyRequest with license information.
@@ -24,29 +26,45 @@ interface FastifyRequestWithLicense extends FastifyRequest {
  */
 export function createLicenseAuthHook(): preHandlerHookHandler {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    const licenseKey = request.headers['x-license-key'] as string | undefined;
+    const authHeader = request.headers.authorization;
+    const authValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
 
-    if (!licenseKey) {
+    if (!authValue || !authValue.startsWith('Bearer ')) {
       return reply.status(401).send({
-        error: 'License key required',
+        error: 'Authorization token required',
         statusCode: 401,
       });
     }
 
-    const result = await validateLicense(licenseKey);
+    const token = authValue.slice('Bearer '.length).trim();
 
-    if (!result.isValid) {
+    let payload: LicenseTokenPayload;
+    try {
+      payload = verifyLicenseToken(token);
+    } catch (error) {
+      return reply.status(401).send({
+        error: 'Invalid or expired token',
+        statusCode: 401,
+      });
+    }
+
+    const validation = await validateLicense(payload.licenseKey);
+    if (!validation.isValid) {
       return reply.status(403).send({
-        error: `License invalid: ${result.error}`,
+        error: `License invalid: ${validation.error}`,
         statusCode: 403,
       });
     }
 
-    // Attach license info to request for downstream handlers
-    (request as FastifyRequestWithLicense).license = {
-      licenseKey,
-      tenantId: licenseKey, // In this simple impl, licenseKey acts as tenantId
-    } as LicenseTokenPayload;
+    const tenantHeader = request.headers['x-tenant-id'] as string | undefined;
+    if (tenantHeader && tenantHeader !== payload.tenantId) {
+      return reply.status(403).send({
+        error: 'Tenant mismatch',
+        statusCode: 403,
+      });
+    }
+
+    (request as FastifyRequestWithLicense).license = payload;
   };
 }
 
@@ -61,19 +79,25 @@ const ValidateLicenseSchema = z.object({
 type ValidateLicenseRequest = z.infer<typeof ValidateLicenseSchema>;
 
 /**
+ * License response structure.
+ */
+interface LicenseResponse {
+  licenseKey: string;
+  companyName: string;
+  status: string;
+  monthlyQuota: number;
+  currentUsage: number;
+  remainingQuota: number;
+  usageResetDate: string;
+  expiresAt: string;
+}
+
+/**
  * Response structure for license validation.
  */
 interface ValidateLicenseResponse {
-  isValid: boolean;
-  error?: string | undefined;
-  details?:
-    | {
-        companyName: string;
-        expiresAt: string; // ISO string
-        monthlyQuota: number;
-        currentUsage: number;
-      }
-    | undefined;
+  token: string;
+  license: LicenseResponse;
 }
 
 /**
@@ -82,48 +106,64 @@ interface ValidateLicenseResponse {
  * @param server - Fastify instance
  */
 export async function registerLicenseRoutes(server: FastifyInstance): Promise<void> {
+  const handler = async (
+    request: FastifyRequest<{ Body: ValidateLicenseRequest }>,
+    reply: FastifyReply
+  ) => {
+    const validation = ValidateLicenseSchema.safeParse(request.body);
+
+    if (!validation.success) {
+      return reply.status(400).send({
+        error: 'Invalid request body',
+        statusCode: 400,
+        details: validation.error.issues,
+      });
+    }
+
+    const { licenseKey } = validation.data;
+
+    try {
+      const result = await validateLicense(licenseKey);
+
+      if (!result.isValid || !result.license) {
+        return reply.status(403).send({
+          error: result.error || 'Invalid license',
+          statusCode: 403,
+        });
+      }
+
+      const tenantId = deriveTenantId(licenseKey);
+      const token = signLicenseToken({ licenseKey, tenantId }, result.license.expiresAt);
+
+      const response: ValidateLicenseResponse = {
+        token,
+        license: {
+          licenseKey: result.license.licenseKey,
+          companyName: result.license.companyName,
+          status: result.license.status,
+          monthlyQuota: result.license.monthlyQuota,
+          currentUsage: result.license.currentUsage,
+          remainingQuota: Math.max(0, result.license.monthlyQuota - result.license.currentUsage),
+          usageResetDate: result.license.usageResetDate.toISOString(),
+          expiresAt: result.license.expiresAt.toISOString(),
+        },
+      };
+
+      return reply.status(200).send(response);
+    } catch (error) {
+      server.log.error({ err: error }, 'License validation failed');
+      return reply.status(500).send({
+        error: 'Internal server error',
+        statusCode: 500,
+      });
+    }
+  };
+
   server.post<{
     Body: ValidateLicenseRequest;
-  }>(
-    '/license/validate',
-    async (request: FastifyRequest<{ Body: ValidateLicenseRequest }>, reply: FastifyReply) => {
-      // Validate request body
-      const validation = ValidateLicenseSchema.safeParse(request.body);
+  }>('/license/validate', handler);
 
-      if (!validation.success) {
-        return reply.status(400).send({
-          error: 'Invalid request body',
-          statusCode: 400,
-          details: validation.error.issues,
-        });
-      }
-
-      const { licenseKey } = validation.data;
-
-      try {
-        const result = await validateLicense(licenseKey);
-
-        const response: ValidateLicenseResponse = {
-          isValid: result.isValid,
-          error: result.error,
-          details: result.details
-            ? {
-                ...result.details,
-                expiresAt: result.details.expiresAt.toISOString(),
-              }
-            : undefined,
-        };
-
-        // Return 200 even if invalid, as the check itself succeeded.
-        // The isValid flag indicates the status.
-        return reply.status(200).send(response);
-      } catch (error) {
-        server.log.error({ err: error }, 'License validation failed');
-        return reply.status(500).send({
-          error: 'Internal server error',
-          statusCode: 500,
-        });
-      }
-    }
-  );
+  server.post<{
+    Body: ValidateLicenseRequest;
+  }>('/api/license/validate', handler);
 }

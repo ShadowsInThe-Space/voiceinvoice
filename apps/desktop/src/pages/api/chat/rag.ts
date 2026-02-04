@@ -129,40 +129,51 @@ export default async function handler(
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzY4ODMzNjM5LCJleHAiOjIwODQxOTM2Mzl9.YfpbXSy__zR8HRXwd6B7sXrlb5stHs-bBVY1pdEI65I';
 
+    const authHeader = req.headers.authorization;
+    const authValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+    const hasLicenseToken =
+      typeof authValue === 'string' && authValue.trim().toLowerCase().startsWith('bearer ');
+
+    if (!hasLicenseToken) {
+      console.warn('[RAG API] No license token provided; using local context only.');
+    }
+
     console.log('[RAG API] Using Supabase URL:', supabaseUrl);
 
     // Initialize clients
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = hasLicenseToken ? createClient(supabaseUrl, supabaseKey) : null;
 
     // Step 1: Generate embedding for user query
     const embeddingModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
     const embeddingResult = await embeddingModel.embedContent(query);
     const queryEmbedding = embeddingResult.embedding.values;
 
-    // Step 2: Search Supabase vector database
+    // Step 2: Search Supabase vector database (requires license)
     let matches: any[] = [];
-    let useDirectGemini = false;
+    let useDirectGemini = !hasLicenseToken;
 
-    try {
-      const { data, error: searchError } = await supabase.rpc('match_documents', {
-        query_embedding: queryEmbedding,
-        match_threshold: 0.7,
-        match_count: maxDocuments,
-      });
+    if (supabase) {
+      try {
+        const { data, error: searchError } = await supabase.rpc('match_documents', {
+          query_embedding: queryEmbedding,
+          match_threshold: 0.7,
+          match_count: maxDocuments,
+        });
 
-      if (searchError) {
-        console.warn(
-          '[RAG API] Supabase search error, falling back to direct Gemini:',
-          searchError
-        );
+        if (searchError) {
+          console.warn(
+            '[RAG API] Supabase search error, falling back to direct Gemini:',
+            searchError
+          );
+          useDirectGemini = true;
+        } else {
+          matches = data || [];
+        }
+      } catch (supabaseError) {
+        console.warn('[RAG API] Supabase unavailable, using direct Gemini:', supabaseError);
         useDirectGemini = true;
-      } else {
-        matches = data || [];
       }
-    } catch (supabaseError) {
-      console.warn('[RAG API] Supabase unavailable, using direct Gemini:', supabaseError);
-      useDirectGemini = true;
     }
 
     // Fallback: Query local database and use Gemini

@@ -105,12 +105,18 @@ export function ChatInterface(): React.ReactElement {
     setIsLoading(true);
 
     try {
-      // Call RAG Mock API (uses local SQLite for offline/demo mode)
-      const response = await fetch('/api/chat/rag-mock', {
+      // Call RAG API (uses Supabase when licensed, falls back to local SQLite)
+      const token = localStorage.getItem('voiceinvoice_license_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch('/api/chat/rag', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ query: text }),
       });
 

@@ -7,7 +7,7 @@
  * @module services/license-store
  */
 
-import { LICENSE_ERRORS } from './license-service';
+import { LICENSE_ERRORS } from './license-errors';
 
 /**
  * License data structure matching the Prisma schema.
