@@ -1,0 +1,27 @@
+# VoiceInvoice Proxy Server - Local Development Database
+# Start with: docker-compose -f docker-compose.dev.yml up -d
+# Stop with: docker-compose -f docker-compose.dev.yml down
+
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: voiceinvoice-proxy-db
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_USER=voiceinvoice
+      - POSTGRES_PASSWORD=voiceinvoice_dev
+      - POSTGRES_DB=voiceinvoice_proxy
+    volumes:
+      - proxy_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U voiceinvoice -d voiceinvoice_proxy']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  proxy_db_data:
