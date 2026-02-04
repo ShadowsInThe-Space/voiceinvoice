@@ -33,13 +33,32 @@ describe('Key Derivation', () => {
 
       expect(key).toBeInstanceOf(Uint8Array);
     });
+
+    it('should throw error when licenseKey is empty', () => {
+      expect(() => deriveEncryptionKey('', deviceId)).toThrow(
+        'licenseKey and deviceId must not be empty'
+      );
+    });
+
+    it('should throw error when deviceId is empty', () => {
+      expect(() => deriveEncryptionKey(licenseKey, '')).toThrow(
+        'licenseKey and deviceId must not be empty'
+      );
+    });
+
+    it('should throw error when both parameters are empty', () => {
+      expect(() => deriveEncryptionKey('', '')).toThrow(
+        'licenseKey and deviceId must not be empty'
+      );
+    });
   });
 
   describe('deriveTenantId', () => {
-    it('should derive tenant ID from license key', () => {
+    it('should derive 128-bit tenant ID from license key (32 hex chars)', () => {
       const tenantId = deriveTenantId(licenseKey);
 
-      expect(tenantId).toMatch(/^[a-f0-9]{16}$/);
+      // 128-bit = 16 bytes = 32 hex characters
+      expect(tenantId).toMatch(/^[a-f0-9]{32}$/);
     });
 
     it('should derive deterministic tenant ID', () => {
@@ -54,6 +73,10 @@ describe('Key Derivation', () => {
       const tenantId2 = deriveTenantId('LIC-OTHER-9999');
 
       expect(tenantId1).not.toBe(tenantId2);
+    });
+
+    it('should throw error when licenseKey is empty', () => {
+      expect(() => deriveTenantId('')).toThrow('licenseKey must not be empty');
     });
   });
 });
