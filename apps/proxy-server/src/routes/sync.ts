@@ -1,96 +1,109 @@
 /**
  * Sync Routes
  *
- * Endpoints for synchronizing data between desktop client and server.
- * PROTECTED: Requires valid Bearer Token (License Token).
+ * API endpoints for data synchronization.
  *
  * @module routes/sync
  */
 
-import { FastifyInstance } from 'fastify';
-import {
-  verifyLicenseToken,
-  extractBearerToken,
-  LICENSE_ERRORS,
-} from '../services/license-service';
-import { pushEntity, pullChanges, PushInput } from '../services/sync-service';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import { createLicenseAuthHook } from './license';
+import { pushEntity, pullChanges, SyncQueueEntry } from '../services/sync-service';
+import { LicenseTokenPayload } from '../services/license-service';
 
 /**
- * Register sync routes on the Fastify server.
- *
- * @param server - Fastify server instance
+ * Schema for POST /api/sync/push request body.
  */
-export async function registerSyncRoutes(server: FastifyInstance) {
-  // Middleware to verify license token
-  server.addHook('onRequest', async (request, reply) => {
-    // Only apply to /api/sync/* routes
-    if (!request.url.startsWith('/api/sync/')) {
-      return;
+const pushSchema = z.object({
+  entry: z.object({
+    id: z.string(),
+    entityType: z.string(),
+    entityId: z.string(),
+    operation: z.enum(['CREATE', 'UPDATE', 'DELETE']),
+    data: z.any().optional(),
+    timestamp: z.number(),
+  }),
+});
+
+/**
+ * Schema for GET /api/sync/pull query string.
+ */
+const pullSchema = z.object({
+  since: z.string().optional(),
+});
+
+/**
+ * Register sync-related routes.
+ *
+ * @param server - Fastify instance
+ */
+export async function registerSyncRoutes(server: FastifyInstance): Promise<void> {
+
+  /**
+   * POST /api/sync/push
+   *
+   * Pushes a single entity change to the server.
+   */
+  server.post<{
+    Body: { entry: SyncQueueEntry };
+  }>('/api/sync/push', {
+    preHandler: createLicenseAuthHook()
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    // Validate body
+    const parseResult = pushSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        error: parseResult.error.errors[0]?.message || 'Invalid request body',
+        statusCode: 400,
+      });
     }
 
-    const authHeader = request.headers.authorization;
-    const token = extractBearerToken(authHeader);
+    const { entry } = request.body;
+    const license = (request as any).license as LicenseTokenPayload;
 
-    if (!token) {
-      return reply.code(401).send({ error: LICENSE_ERRORS.NO_TOKEN });
+    const result = await pushEntity(license.licenseKey, entry);
+
+    if (!result.success) {
+      return reply.status(500).send({
+        error: result.error || 'Failed to push entity',
+        statusCode: 500,
+      });
     }
 
-    const payload = verifyLicenseToken(token);
-    if (!payload) {
-      return reply.code(401).send({ error: LICENSE_ERRORS.INVALID_TOKEN });
-    }
-
-    // Attach license info to request
-    (request as any).licenseKey = payload.licenseKey;
+    return reply.status(200).send(result);
   });
 
-  // POST /api/sync/push
-  server.post<{ Body: Omit<PushInput, 'licenseKey'> }>(
-    '/api/sync/push',
-    {
-      schema: {
-        body: {
-          type: 'object',
-          required: ['entityType', 'entityId', 'operation', 'timestamp'],
-          properties: {
-            entityType: { type: 'string' },
-            entityId: { type: 'string' },
-            operation: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE'] },
-            data: { type: 'object', additionalProperties: true },
-            timestamp: { type: 'number' },
-          },
-        },
-      },
-    },
-    async (request, reply) => {
-      const licenseKey = (request as any).licenseKey;
-      const result = await pushEntity({
-        ...request.body,
-        licenseKey,
+  /**
+   * GET /api/sync/pull
+   *
+   * Pulls changes since a given timestamp.
+   */
+  server.get<{
+    Querystring: { since?: string };
+  }>('/api/sync/pull', {
+    preHandler: createLicenseAuthHook()
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const parseResult = pullSchema.safeParse(request.query);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        error: 'Invalid query parameters',
+        statusCode: 400,
       });
-
-      if (!result.success) {
-        return reply.code(400).send({ error: result.error });
-      }
-
-      return { success: true, data: result.serverData };
     }
-  );
 
-  // GET /api/sync/pull
-  server.get<{ Querystring: { since?: string; types?: string } }>(
-    '/api/sync/pull',
-    async (request) => {
-      const licenseKey = (request as any).licenseKey;
-      const { since, types } = request.query;
+    const sinceStr = parseResult.data.since;
+    const since = sinceStr ? parseInt(sinceStr, 10) : null;
+    const license = (request as any).license as LicenseTokenPayload;
 
-      const result = await pullChanges({
-        licenseKey,
-        since: since ? parseInt(since, 10) : null,
-        types: types ? types.split(',') : undefined,
+    try {
+      const result = await pullChanges(license.licenseKey, since);
+      return reply.status(200).send(result);
+    } catch (error) {
+      return reply.status(500).send({
+        error: 'Failed to pull changes',
+        statusCode: 500,
       });
-
-      return result;
     }
-  );
+  });
 }
