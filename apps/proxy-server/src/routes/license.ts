@@ -6,7 +6,7 @@
  * @module routes/license
  */
 
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastify';
 import { z } from 'zod';
 import { validateLicense, LicenseTokenPayload } from '../services/license-service';
 
@@ -26,12 +26,14 @@ type ValidateLicenseRequest = z.infer<typeof ValidateLicenseSchema>;
 interface ValidateLicenseResponse {
   isValid: boolean;
   error?: string | undefined;
-  details?: {
-    companyName: string;
-    expiresAt: string; // ISO string
-    monthlyQuota: number;
-    currentUsage: number;
-  } | undefined;
+  details?:
+    | {
+        companyName: string;
+        expiresAt: string; // ISO string
+        monthlyQuota: number;
+        currentUsage: number;
+      }
+    | undefined;
 }
 
 /**
