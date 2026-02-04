@@ -326,12 +326,25 @@ export function useWorkflowAnalytics(options: WorkflowAnalyticsOptions = {}): {
   }, [days, workflowIntent]);
 
   /**
-   * Triggers aggregation update (placeholder).
+   * Triggers aggregation update.
    */
   const triggerAggregation = useCallback(async () => {
-    // TODO: Implement aggregation trigger via IPC
-    console.log('[useWorkflowAnalytics] Aggregation triggered');
-  }, []);
+    if (typeof window === 'undefined' || !window.voiceinvoice?.analytics) {
+      console.warn('[Analytics] Aggregation trigger not available (not in Electron)');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await window.voiceinvoice.analytics.triggerAggregation();
+      // Refresh data after aggregation
+      await fetchData();
+    } catch (err) {
+      console.error('[useWorkflowAnalytics] Failed to trigger aggregation:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchData]);
 
   // Initial load
   useEffect(() => {
