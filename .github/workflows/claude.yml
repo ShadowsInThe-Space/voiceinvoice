@@ -36,8 +36,8 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
-          # API Key ist bereits konfiguriert
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # OAuth Token für Claude Pro/Max Abo
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
           # Konfiguriere Claude für dieses TypeScript/Electron Projekt
           claude_args: |
