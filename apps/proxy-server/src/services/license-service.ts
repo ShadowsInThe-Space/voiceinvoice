@@ -6,7 +6,7 @@
  * @module services/license-service
  */
 
-import { prisma } from './prisma';
+import { getPrismaClient } from './prisma';
 
 export interface LicenseValidationResult {
   isValid: boolean;
@@ -28,6 +28,25 @@ export interface LicenseTokenPayload {
 }
 
 /**
+ * Token payload for license-based authentication.
+ */
+export interface LicenseTokenPayload {
+  licenseKey: string;
+  tenantId: string;
+}
+
+/**
+ * Standard license error messages.
+ */
+export const LICENSE_ERRORS = {
+  LICENSE_NOT_FOUND: 'License not found',
+  QUOTA_EXCEEDED: 'Monthly quota exceeded',
+  EXPIRED: 'License has expired',
+  INACTIVE: 'License is inactive',
+  INVALID_KEY: 'Invalid license key',
+} as const;
+
+/**
  * Validates a license key.
  * checks existence, status, and expiration.
  *
@@ -36,6 +55,7 @@ export interface LicenseTokenPayload {
  */
 export async function validateLicense(licenseKey: string): Promise<LicenseValidationResult> {
   try {
+    const prisma = getPrismaClient();
     const license = await prisma.license.findUnique({
       where: { licenseKey },
     });
