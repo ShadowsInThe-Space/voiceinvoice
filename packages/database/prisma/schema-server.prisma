@@ -1,5 +1,5 @@
 // Server-side PostgreSQL schema for VoiceInvoice Enterprise
-// Multi-tenant database with tenantId for data isolation
+// Multi-tenant schema with license tracking
 
 generator client {
   provider = "prisma-client-js"
@@ -11,352 +11,276 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Customer or supplier entity for invoice management.
-/// Supports German accounting requirements with tax IDs and VAT numbers.
-model Customer {
-  id              String    @id @default(uuid())
-  /// Tenant identifier for multi-tenant isolation
-  tenantId        String
-  /// Classification: CUSTOMER, SUPPLIER, or BOTH
-  type            String
+// Enums based on shared-types
 
-  /// Legal company name
+enum CustomerType {
+  CUSTOMER
+  SUPPLIER
+  BOTH
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  CANCELLED
+  OVERDUE
+}
+
+enum PrivacyMode {
+  STRICT
+  STANDARD
+  MINIMAL
+}
+
+enum LicenseStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  INVALID
+}
+
+// Core Multi-Tenancy Models
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  license          License?
+  appSettings      AppSettings?
+
+  customers        Customer[]
+  invoices         Invoice[]
+  recordings       Recording[]
+  categories       Category[]
+  bankTransactions BankTransaction[]
+  auditLogs        AuditLog[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String
+  /// Hashed password using bcrypt. Never store plaintext passwords.
+  password  String
+  name      String?
+
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model License {
+  id              String        @id @default(uuid())
+  licenseKey      String        @unique
+  status          LicenseStatus @default(ACTIVE)
+
+  monthlyQuota    Int           @default(1000)
+  currentUsage    Int           @default(0)
+  usageResetDate  DateTime
+  expiresAt       DateTime
+
+  tenantId        String        @unique
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([licenseKey])
+  @@index([status])
+}
+
+// Domain Models
+
+model Customer {
+  id              String       @id @default(uuid())
+  type            CustomerType
+
   companyName     String
   contactPerson   String?
   email           String?
   phone           String?
 
-  /// German tax number (Steuernummer)
   taxNumber       String?
-  /// EU VAT identification number
   vatId           String?
-  /// Bank account IBAN
   iban            String?
-  /// Bank identifier code
   bic             String?
 
   street          String?
   zip             String?
   city            String?
-  /// ISO 3166-1 alpha-2 country code
-  country         String    @default("DE")
+  country         String       @default("DE")
 
-  /// Privacy token for anonymized references
-  anonymizedToken String?   @unique
+  anonymizedToken String?
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  tenantId        String
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  /// Invoices associated with this customer
   invoices        Invoice[]
 
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([tenantId, anonymizedToken])
   @@index([tenantId])
-  @@index([tenantId, companyName])
-  @@index([tenantId, email])
-  @@index([tenantId, type])
+  @@index([companyName])
 }
 
-/// Invoice document for billing customers.
-/// Supports German invoice requirements (Rechnung).
 model Invoice {
-  id              String        @id @default(uuid())
-  /// Tenant identifier for multi-tenant isolation
-  tenantId        String
+  id                String        @id @default(uuid())
+  invoiceNumber     String
 
-  /// Sequential invoice number (Rechnungsnummer)
-  invoiceNumber   String
+  customerId        String
+  customer          Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
-  /// Invoice status: DRAFT, SENT, PAID, OVERDUE, CANCELLED
-  status          String        @default("DRAFT")
+  categoryId        String?
+  category          Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
-  /// Invoice date (Rechnungsdatum)
-  invoiceDate     DateTime      @default(now())
+  date              DateTime
+  dueDate           DateTime?
 
-  /// Payment due date (Faelligkeitsdatum)
-  dueDate         DateTime
+  netAmount         Decimal       @db.Decimal(10, 2)
+  taxRate           Int           // 0, 7, 19
+  taxAmount         Decimal       @db.Decimal(10, 2)
+  grossAmount       Decimal       @db.Decimal(10, 2)
+  currency          String        @default("EUR")
 
-  /// Invoice currency (ISO 4217)
-  currency        String        @default("EUR")
+  status            InvoiceStatus
+  description       String?
 
-  /// Net amount before tax (Nettobetrag)
-  netAmount       Float         @default(0)
+  recordingId       String?
+  recording         Recording?    @relation(fields: [recordingId], references: [id], onDelete: SetNull)
 
-  /// Tax amount (Steuerbetrag)
-  taxAmount       Float         @default(0)
+  transcription     String?       @db.Text
+  enrichedData      Json?         // JSON string in types, but Json type in Postgres is better
 
-  /// Gross amount including tax (Bruttobetrag)
-  grossAmount     Float         @default(0)
+  bankTransactionId String?       @unique
+  bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id])
 
-  /// Optional notes or payment terms
-  notes           String?
+  tenantId          String
+  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  /// Reference to customer
-  customerId      String
-  customer        Customer      @relation(fields: [customerId], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
-  /// Line items on this invoice
-  items           InvoiceItem[]
-
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  /// Unique invoice number per tenant
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId])
   @@index([tenantId, status])
-  @@index([tenantId, customerId])
-  @@index([tenantId, invoiceDate])
-  @@index([tenantId, dueDate])
 }
 
-/// Individual line item on an invoice.
-model InvoiceItem {
-  id              String   @id @default(uuid())
-  /// Tenant identifier for multi-tenant isolation
-  tenantId        String
-
-  /// Item description
-  description     String
-
-  /// Quantity of items
-  quantity        Float    @default(1)
-
-  /// Unit of measurement (e.g., "hours", "pieces", "kg")
-  unit            String   @default("pcs")
-
-  /// Price per unit (Einzelpreis)
-  unitPrice       Float
-
-  /// Tax rate as percentage (e.g., 19 for 19%)
-  taxRate         Float    @default(19)
-
-  /// Net amount for this item (quantity * unitPrice)
-  netAmount       Float
-
-  /// Tax amount for this item
-  taxAmount       Float
-
-  /// Gross amount for this item
-  grossAmount     Float
-
-  /// Sort order within the invoice
-  sortOrder       Int      @default(0)
-
-  /// Reference to parent invoice
-  invoiceId       String
-  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([tenantId])
-  @@index([tenantId, invoiceId])
-  @@index([tenantId, sortOrder])
-}
-
-/// Voice recording for invoice creation via speech-to-text.
 model Recording {
-  id              String    @id @default(uuid())
-  /// Tenant identifier for multi-tenant isolation
-  tenantId        String
+  id                   String   @id @default(uuid())
+  audioPath            String
+  audioFormat          String
+  duration             Int      // milliseconds
+  sampleRate           Int
 
-  /// Original audio file path or URL
-  audioUrl        String?
+  transcription        String?  @db.Text
+  language             String
 
-  /// Transcribed text from speech recognition
-  transcription   String?
+  enrichedData         Json?
+  confidence           Float?
 
-  /// Extracted entities from AI processing
-  extractedData   String?   @db.Text
+  anonymizedTranscript String?  @db.Text
+  privacyTokenMap      Json?
 
-  /// Processing status: PENDING, PROCESSING, COMPLETED, FAILED
-  status          String    @default("PENDING")
+  tenantId             String
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  /// Error message if processing failed
-  errorMessage    String?
+  invoices             Invoice[]
 
-  /// Duration of recording in seconds
-  durationSeconds Float?
-
-  /// File size in bytes
-  fileSizeBytes   Int?
-
-  /// Audio format (e.g., "webm", "wav", "mp3")
-  audioFormat     String?
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt            DateTime @default(now())
 
   @@index([tenantId])
-  @@index([tenantId, status])
-  @@index([tenantId, createdAt])
 }
 
-/// Category for organizing invoices and expenses.
 model Category {
-  id              String    @id @default(uuid())
-  /// Tenant identifier for multi-tenant isolation
-  tenantId        String
+  id        String     @id @default(uuid())
+  name      String
+  code      String?
+  color     String?
 
-  /// Category name
-  name            String
+  parentId  String?
+  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Category[] @relation("CategoryHierarchy")
 
-  /// Category description
-  description     String?
+  tenantId  String
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  /// Category type: INCOME, EXPENSE, BOTH
-  type            String    @default("BOTH")
+  invoices  Invoice[]
 
-  /// Color for UI display (hex format)
-  color           String?
+  createdAt DateTime   @default(now())
 
-  /// Icon name for UI display
-  icon            String?
-
-  /// Parent category for hierarchical structure
-  parentId        String?
-
-  /// Sort order for display
-  sortOrder       Int       @default(0)
-
-  /// Whether category is active
-  isActive        Boolean   @default(true)
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  /// Unique category name per tenant
-  @@unique([tenantId, name])
   @@index([tenantId])
-  @@index([tenantId, type])
-  @@index([tenantId, parentId])
-  @@index([tenantId, isActive])
 }
 
-/// Bank transaction for matching with invoices.
 model BankTransaction {
-  id              String    @id @default(uuid())
-  /// Tenant identifier for multi-tenant isolation
-  tenantId        String
+  id               String   @id @default(uuid())
+  importDate       DateTime
+  sourceFile       String?
 
-  /// Bank account identifier
-  accountId       String?
+  transactionDate  DateTime
+  valueDate        DateTime
 
-  /// Transaction reference from bank
-  reference       String?
+  counterparty     String
+  counterpartyIban String?
 
-  /// Transaction description
-  description     String?
+  amount           Decimal  @db.Decimal(10, 2)
+  currency         String
+  purpose          String?
 
-  /// Transaction amount (positive for credit, negative for debit)
-  amount          Float
+  // matchedInvoiceId in types is handled by One-to-One relation in Invoice
+  invoice          Invoice?
 
-  /// Transaction currency
-  currency        String    @default("EUR")
+  matchConfidence  Float?
+  reconciled       Boolean  @default(false)
 
-  /// Transaction date
-  transactionDate DateTime
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  /// Booking date
-  bookingDate     DateTime?
-
-  /// Counter party name
-  counterPartyName String?
-
-  /// Counter party IBAN
-  counterPartyIban String?
-
-  /// Matched invoice ID
-  matchedInvoiceId String?
-
-  /// Match confidence (0-1)
-  matchConfidence Float?
-
-  /// Match status: PENDING, MATCHED, UNMATCHED, MANUAL
-  matchStatus     String    @default("PENDING")
-
-  /// Raw transaction data from bank API
-  rawData         String?   @db.Text
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt        DateTime @default(now())
 
   @@index([tenantId])
-  @@index([tenantId, accountId])
-  @@index([tenantId, transactionDate])
-  @@index([tenantId, matchStatus])
-  @@index([tenantId, matchedInvoiceId])
+  @@index([tenantId, reconciled])
 }
 
-/// Application settings per tenant.
 model AppSettings {
-  id              String    @id @default(uuid())
-  /// Tenant identifier for multi-tenant isolation
-  tenantId        String
+  id                String        @id @default(uuid())
 
-  /// Setting key
-  key             String
+  n8nWebhookUrl     String?
+  n8nEnabled        Boolean       @default(false)
 
-  /// Setting value (JSON string)
-  value           String    @db.Text
+  bankFolderPath    String?
+  bankSyncEnabled   Boolean       @default(false)
 
-  /// Setting description
-  description     String?
+  privacyMode       PrivacyMode   @default(STANDARD)
 
-  /// Setting category for grouping
-  category        String?
+  tenantId          String        @unique
+  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  /// Whether setting is sensitive (should be encrypted)
-  isSensitive     Boolean   @default(false)
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  /// Unique setting key per tenant
-  @@unique([tenantId, key])
-  @@index([tenantId])
-  @@index([tenantId, category])
+  updatedAt         DateTime      @updatedAt
 }
 
-/// Audit log for tracking changes and actions.
 model AuditLog {
-  id              String    @id @default(uuid())
-  /// Tenant identifier for multi-tenant isolation
-  tenantId        String
+  id         String   @id @default(uuid())
+  action     String
+  entityType String
+  entityId   String?
+  details    Json?
+  agentName  String?
 
-  /// User who performed the action
-  userId          String?
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  /// Action type: CREATE, UPDATE, DELETE, LOGIN, EXPORT, etc.
-  action          String
-
-  /// Entity type affected
-  entityType      String
-
-  /// Entity ID affected
-  entityId        String?
-
-  /// Previous values (JSON string)
-  previousValues  String?   @db.Text
-
-  /// New values (JSON string)
-  newValues       String?   @db.Text
-
-  /// IP address of the request
-  ipAddress       String?
-
-  /// User agent string
-  userAgent       String?
-
-  /// Additional metadata
-  metadata        String?   @db.Text
-
-  createdAt       DateTime  @default(now())
+  createdAt  DateTime @default(now())
 
   @@index([tenantId])
-  @@index([tenantId, userId])
-  @@index([tenantId, action])
-  @@index([tenantId, entityType])
-  @@index([tenantId, entityId])
-  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
 }
