@@ -7,10 +7,15 @@
  * @module components/InvoiceList
  */
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import type { Invoice, InvoiceStatus } from '@voiceinvoice/shared-types';
 import { cn } from '../lib/utils';
-import { Search, Trash2, FileText, Calendar } from 'lucide-react';
+import {
+  Search,
+  Trash2,
+  FileText,
+  Calendar,
+} from 'lucide-react';
 
 /**
  * Props for InvoiceList component.
@@ -34,25 +39,16 @@ type SortOption = 'date' | 'amount' | 'invoiceNumber';
  * Synchronized with Dashboard for consistent branding.
  */
 const STATUS_CONFIG: Record<InvoiceStatus, { label: string; className: string }> = {
-  DRAFT: {
-    label: 'Entwurf',
-    className: 'bg-muted text-muted-foreground border-muted-foreground/20',
-  },
+  DRAFT: { label: 'Entwurf', className: 'bg-muted text-muted-foreground border-muted-foreground/20' },
   PENDING: { label: 'Offen', className: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' },
   SENT: { label: 'Versendet', className: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
   PAID: { label: 'Bezahlt', className: 'bg-primary/10 text-primary border-primary/20' },
-  CANCELLED: {
-    label: 'Storniert',
-    className: 'bg-destructive/10 text-destructive border-destructive/20',
-  },
+  CANCELLED: { label: 'Storniert', className: 'bg-destructive/10 text-destructive border-destructive/20' },
   OVERDUE: { label: 'Überfällig', className: 'bg-red-500 text-white border-transparent' },
 };
 
 /** Fallback for unknown statuses */
-const DEFAULT_STATUS = {
-  label: 'Unbekannt',
-  className: 'bg-gray-500/10 text-gray-600 border-gray-500/20',
-};
+const DEFAULT_STATUS = { label: 'Unbekannt', className: 'bg-gray-500/10 text-gray-600 border-gray-500/20' };
 
 /** German status aliases (from voice input) */
 const STATUS_ALIASES: Record<string, InvoiceStatus> = {
@@ -112,113 +108,6 @@ function formatCurrency(amount: number, currency: string): string {
 }
 
 /**
- * Memoized table row component to prevent re-renders of the entire list
- * when selecting a single item or when unrelated state changes.
- */
-const InvoiceRow = React.memo(
-  ({
-    invoice,
-    isSelected,
-    onSelect,
-    onDeleteClick,
-  }: {
-    invoice: Invoice;
-    isSelected: boolean;
-    onSelect: (invoice: Invoice) => void;
-    onDeleteClick?: (e: React.MouseEvent, id: string) => void;
-  }) => {
-    const handleClick = useCallback(() => {
-      onSelect(invoice);
-    }, [onSelect, invoice]);
-
-    const handleKeyDown = useCallback(
-      (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-          onSelect(invoice);
-        }
-      },
-      [onSelect, invoice]
-    );
-
-    const handleDelete = useCallback(
-      (e: React.MouseEvent) => {
-        if (onDeleteClick) {
-          onDeleteClick(e, invoice.id);
-        }
-      },
-      [onDeleteClick, invoice.id]
-    );
-
-    return (
-      <tr
-        data-testid={`invoice-row-${invoice.id}`}
-        onClick={handleClick}
-        onKeyDown={handleKeyDown}
-        tabIndex={0}
-        className={cn(
-          'group cursor-pointer transition-all hover:bg-muted/20 focus:outline-none focus:bg-primary/5',
-          isSelected && 'bg-primary/5 border-l-4 border-l-primary'
-        )}
-      >
-        <td className="px-8 py-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary group-hover:scale-110 transition-transform">
-              <FileText className="h-5 w-5" />
-            </div>
-            <div className="overflow-hidden">
-              <div className="font-bold text-foreground text-base tracking-tight">
-                {invoice.invoiceNumber}
-              </div>
-              {invoice.description && (
-                <div className="text-xs text-muted-foreground truncate max-w-[300px]">
-                  {invoice.description}
-                </div>
-              )}
-            </div>
-          </div>
-        </td>
-        <td className="px-8 py-6">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-            <Calendar className="h-4 w-4 opacity-50" />
-            <span>{formatDate(invoice.date)}</span>
-          </div>
-        </td>
-        <td className="px-8 py-6 text-right">
-          <div className="font-black text-foreground text-lg tracking-tighter">
-            {formatCurrency(invoice.grossAmount, invoice.currency)}
-          </div>
-        </td>
-        <td className="px-8 py-6">
-          <span
-            data-testid={`status-${invoice.id}`}
-            className={cn(
-              'inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all shadow-sm',
-              getStatusConfig(invoice.status).className
-            )}
-          >
-            {getStatusConfig(invoice.status).label}
-          </span>
-        </td>
-        {onDeleteClick && (
-          <td className="px-8 py-6 text-right">
-            <button
-              onClick={handleDelete}
-              className="p-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all"
-              title="Rechnung löschen"
-              aria-label={`Rechnung ${invoice.invoiceNumber} löschen`}
-            >
-              <Trash2 className="h-5 w-5" />
-            </button>
-          </td>
-        )}
-      </tr>
-    );
-  }
-);
-
-InvoiceRow.displayName = 'InvoiceRow';
-
-/**
  * Invoice list with filtering and sorting.
  *
  * @param {InvoiceListProps} props - The component props.
@@ -227,7 +116,11 @@ InvoiceRow.displayName = 'InvoiceRow';
  * @param {Function} [props.onDelete] - Callback when an invoice is deleted.
  * @returns {JSX.Element} The rendered list component.
  */
-export function InvoiceList({ invoices, onSelect, onDelete }: InvoiceListProps): JSX.Element {
+export function InvoiceList({
+  invoices,
+  onSelect,
+  onDelete,
+}: InvoiceListProps): JSX.Element {
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | ''>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('date');
@@ -291,22 +184,14 @@ export function InvoiceList({ invoices, onSelect, onDelete }: InvoiceListProps):
     setDeleteConfirmId(null);
   }, []);
 
-  // Handle Escape key to close delete confirmation dialog (A11y)
-  useEffect(() => {
-    const handleEscapeKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && deleteConfirmId) {
-        setDeleteConfirmId(null);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent, invoice: Invoice) => {
+      if (e.key === 'Enter') {
+        handleSelect(invoice);
       }
-    };
-
-    if (deleteConfirmId) {
-      document.addEventListener('keydown', handleEscapeKey);
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscapeKey);
-    };
-  }, [deleteConfirmId]);
+    },
+    [handleSelect]
+  );
 
   if (invoices.length === 0) {
     return (
@@ -339,9 +224,7 @@ export function InvoiceList({ invoices, onSelect, onDelete }: InvoiceListProps):
 
         <div className="flex flex-wrap gap-3 w-full xl:w-auto">
           <div className="flex items-center gap-2 bg-muted/20 px-3 py-1 rounded-xl border-2 border-transparent focus-within:border-primary transition-all">
-            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">
-              Status
-            </span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Status</span>
             <select
               aria-label="Status Filter"
               value={statusFilter}
@@ -358,9 +241,7 @@ export function InvoiceList({ invoices, onSelect, onDelete }: InvoiceListProps):
           </div>
 
           <div className="flex items-center gap-2 bg-muted/20 px-3 py-1 rounded-xl border-2 border-transparent focus-within:border-primary transition-all">
-            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">
-              Sortierung
-            </span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Sortierung</span>
             <select
               aria-label="Sortieren nach"
               value={sortBy}
@@ -381,49 +262,78 @@ export function InvoiceList({ invoices, onSelect, onDelete }: InvoiceListProps):
           <table className="w-full text-left border-collapse" role="table">
             <thead>
               <tr className="bg-muted/30 border-b border-border/50">
-                <th
-                  className="px-8 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]"
-                  role="columnheader"
-                >
-                  Dokument
-                </th>
-                <th
-                  className="px-8 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]"
-                  role="columnheader"
-                >
-                  Datum
-                </th>
-                <th
-                  className="px-8 py-5 text-right text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]"
-                  role="columnheader"
-                >
-                  Bruttobetrag
-                </th>
-                <th
-                  className="px-8 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]"
-                  role="columnheader"
-                >
-                  Status
-                </th>
-                {onDelete && (
-                  <th
-                    className="px-8 py-5 text-right text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]"
-                    role="columnheader"
-                  >
-                    Aktion
-                  </th>
-                )}
+                <th className="px-8 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]" role="columnheader">Dokument</th>
+                <th className="px-8 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]" role="columnheader">Datum</th>
+                <th className="px-8 py-5 text-right text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]" role="columnheader">Bruttobetrag</th>
+                <th className="px-8 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]" role="columnheader">Status</th>
+                {onDelete && <th className="px-8 py-5 text-right text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]" role="columnheader">Aktion</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
               {processedInvoices.map((invoice) => (
-                <InvoiceRow
+                <tr
                   key={invoice.id}
-                  invoice={invoice}
-                  isSelected={selectedId === invoice.id}
-                  onSelect={handleSelect}
-                  onDeleteClick={onDelete ? handleDeleteClick : undefined}
-                />
+                  data-testid={`invoice-row-${invoice.id}`}
+                  onClick={() => handleSelect(invoice)}
+                  onKeyDown={(e) => handleKeyDown(e, invoice)}
+                  tabIndex={0}
+                  className={cn(
+                    "group cursor-pointer transition-all hover:bg-muted/20 focus:outline-none focus:bg-primary/5",
+                    selectedId === invoice.id && "bg-primary/5 border-l-4 border-l-primary"
+                  )}
+                >
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary group-hover:scale-110 transition-transform">
+                        <FileText className="h-5 w-5" />
+                      </div>
+                      <div className="overflow-hidden">
+                        <div className="font-bold text-foreground text-base tracking-tight">
+                          {invoice.invoiceNumber}
+                        </div>
+                        {invoice.description && (
+                          <div className="text-xs text-muted-foreground truncate max-w-[300px]">
+                            {invoice.description}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
+                      <Calendar className="h-4 w-4 opacity-50" />
+                      <span>{formatDate(invoice.date)}</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-6 text-right">
+                    <div className="font-black text-foreground text-lg tracking-tighter">
+                      {formatCurrency(invoice.grossAmount, invoice.currency)}
+                    </div>
+                  </td>
+                  <td className="px-8 py-6">
+                    <span
+                      data-testid={`status-${invoice.id}`}
+                      className={cn(
+                        "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all shadow-sm",
+                        getStatusConfig(invoice.status).className
+                      )}
+                    >
+                      {getStatusConfig(invoice.status).label}
+                    </span>
+                  </td>
+                  {onDelete && (
+                    <td className="px-8 py-6 text-right">
+                      <button
+                        onClick={(e) => handleDeleteClick(e, invoice.id)}
+                        className="p-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all"
+                        title="Rechnung löschen"
+                        aria-label={`Rechnung ${invoice.invoiceNumber} löschen`}
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </td>
+                  )}
+                </tr>
               ))}
             </tbody>
           </table>
@@ -433,9 +343,7 @@ export function InvoiceList({ invoices, onSelect, onDelete }: InvoiceListProps):
       {/* Footer Info */}
       <div className="flex justify-between items-center px-4">
         <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-          {processedInvoices.length === 1
-            ? '1 Dokument gefunden'
-            : `${processedInvoices.length} Dokumente gefunden`}
+          {processedInvoices.length === 1 ? '1 Dokument gefunden' : `${processedInvoices.length} Dokumente gefunden`}
         </div>
         {processedInvoices.length === 0 && invoices.length > 0 && (
           <div className="text-sm font-medium text-destructive italic">
@@ -444,14 +352,14 @@ export function InvoiceList({ invoices, onSelect, onDelete }: InvoiceListProps):
         )}
       </div>
 
-      {/* Delete Dialog - Glass Effect with A11y */}
+      {/* Delete Dialog - Glass Effect */}
       {deleteConfirmId && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-md px-4"
-          role="alertdialog"
+          role="dialog"
           aria-modal="true"
           aria-labelledby="delete-dialog-title"
-          aria-describedby="delete-dialog-desc"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-md px-4"
+          onKeyDown={(e) => e.key === 'Escape' && cancelDelete()}
         >
           <div className="w-full max-w-md rounded-2xl border-2 border-destructive/20 bg-card p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mb-6 mx-auto">
@@ -463,15 +371,14 @@ export function InvoiceList({ invoices, onSelect, onDelete }: InvoiceListProps):
             >
               Dokument löschen?
             </h3>
-            <p id="delete-dialog-desc" className="text-muted-foreground text-center mb-8">
-              Diese Aktion entfernt die Rechnung{' '}
-              <span className="font-bold text-foreground">unwiderruflich</span> aus Ihrem System.
+            <p className="text-muted-foreground text-center mb-8">
+              Diese Aktion entfernt die Rechnung <span className="font-bold text-foreground">unwiderruflich</span> aus Ihrem System.
             </p>
             <div className="grid grid-cols-2 gap-4">
               <button
-                onClick={cancelDelete}
-                className="py-3 px-4 text-sm font-bold rounded-xl border-2 border-border hover:bg-muted transition-all"
                 autoFocus
+                onClick={cancelDelete}
+                className="py-3 px-4 text-sm font-bold rounded-xl border-2 border-border hover:bg-muted transition-all focus-visible:ring-2 focus-visible:ring-primary"
               >
                 Abbrechen
               </button>
@@ -489,3 +396,4 @@ export function InvoiceList({ invoices, onSelect, onDelete }: InvoiceListProps):
     </div>
   );
 }
+
