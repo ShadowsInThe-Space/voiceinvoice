@@ -9,6 +9,7 @@
 
 import { PrismaClient } from '@/generated/prisma';
 import { getDatabaseUrl, logDatabaseConfig } from '../lib/database-path';
+import { WorkflowAnalyticsService } from '../../src/lib/database/workflow-analytics';
 import type { IpcResult } from './handlers';
 
 /**
@@ -199,6 +200,30 @@ export async function getWorkflowKPIsHandler(): Promise<IpcResult<LatestKPIs>> {
       success: false,
       error: {
         message: `Failed to fetch KPIs: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      },
+    };
+  }
+}
+
+/**
+ * Triggers aggregation update.
+ */
+export async function triggerAggregationHandler(): Promise<IpcResult<void>> {
+  try {
+    const service = new WorkflowAnalyticsService(getPrismaClient());
+
+    // Update aggregations for all periods
+    await service.updateAggregations('daily');
+    await service.updateAggregations('weekly');
+    await service.updateAggregations('monthly');
+
+    return { success: true };
+  } catch (error) {
+    console.error('[triggerAggregationHandler] Error:', error);
+    return {
+      success: false,
+      error: {
+        message: `Failed to trigger aggregation: ${error instanceof Error ? error.message : 'Unknown error'}`,
       },
     };
   }

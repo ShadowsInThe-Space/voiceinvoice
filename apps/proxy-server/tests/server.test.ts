@@ -20,6 +20,17 @@ vi.mock('../src/services/gemini-service', () => ({
   checkAvailability: vi.fn().mockResolvedValue(true),
 }));
 
+// Mock the auth middleware to bypass checks during integration tests
+vi.mock('../src/routes/license', () => ({
+  registerLicenseRoutes: vi.fn(),
+  createLicenseAuthHook: vi.fn().mockReturnValue(async () => {
+    // Pass-through
+  }),
+  createQuotaCheckHook: vi.fn().mockReturnValue(async () => {
+    // Pass-through
+  }),
+}));
+
 import { buildServer } from '../src/server';
 import { transcribeAudio } from '../src/services/speech-service';
 import { extractInvoiceData } from '../src/services/gemini-service';
