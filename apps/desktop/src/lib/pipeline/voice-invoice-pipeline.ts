@@ -30,6 +30,7 @@ import {
   type WorkflowIntent,
 } from '@voiceinvoice/ai-orchestrator';
 import { triggerWorkflow, type WorkflowResult, type WorkflowParams } from '../workflow';
+import { anonymize, deanonymize } from '@voiceinvoice/privacy-engine';
 
 /**
  * Result returned from pipeline processing.
@@ -268,12 +269,20 @@ export class VoiceInvoicePipeline {
    *
    * Routes to workflow, invoice, or analytics processing based on intent.
    *
-   * @param transcription - The transcription text
+   * @param transcription - The transcription text (original)
    * @returns Pipeline result
    */
   private async processTranscriptionInternal(transcription: string): Promise<PipelineResult> {
-    // Step 1: Classify intent
-    const intentResult = await this.orchestrator.classifyIntent(transcription);
+    // --- Privacy Layer Integration ---
+    // Fetch known customers for masking
+    const customers = await this.databaseService.getAllCustomers();
+    const knownEntities = customers.map((c) => c.name);
+
+    // Anonymize transcription before sending to Gemini/Orchestrator
+    const { anonymizedText, tokenMap } = anonymize(transcription, knownEntities);
+
+    // Step 1: Classify intent (using anonymized text)
+    const intentResult = await this.orchestrator.classifyIntent(anonymizedText);
 
     // Step 2: Route based on intent
     if (AgentOrchestrator.isWorkflowIntent(intentResult.intent) && this.enableWorkflows) {
@@ -281,12 +290,14 @@ export class VoiceInvoicePipeline {
       return this.processWorkflowIntent(
         intentResult.intent as WorkflowIntent,
         intentResult,
-        transcription
+        transcription, // Use original for user display/result?
+        anonymizedText, // Use anonymized for processing?
+        tokenMap
       );
     }
 
     if (intentResult.intent === 'ANALYTICS') {
-      // Analytics intent - return message for now (could be extended)
+      // Analytics intent - return message for now
       return {
         success: true,
         intent: intentResult.intent,
@@ -310,39 +321,44 @@ export class VoiceInvoicePipeline {
     }
 
     // Default: Invoice processing
-    return this.processInvoiceIntent(intentResult, transcription);
+    return this.processInvoiceIntent(intentResult, transcription, anonymizedText, tokenMap);
   }
 
   /**
    * Processes a workflow intent by triggering the n8n workflow.
-   *
-   * @param intent - The workflow intent
-   * @param intentResult - Full intent classification result
-   * @param transcription - Original transcription
-   * @returns Pipeline result with workflow execution details
    */
   private async processWorkflowIntent(
     intent: WorkflowIntent,
     intentResult: IntentResult,
-    transcription: string
+    transcription: string,
+    anonymizedText: string,
+    tokenMap: Record<string, string>
   ): Promise<PipelineResult> {
     // Extract parameters from transcription for the workflow
+    // Use anonymized text to protect PII
     const params: WorkflowParams = {
-      transcription,
+      transcription: anonymizedText,
       // Could add entity extraction here for more parameters
     };
 
     // Trigger the workflow
     const workflowResult = await triggerWorkflow(intent, params);
 
+    // De-anonymize the response message if it contains tokens?
+    // Not implemented yet, assuming workflow returns generic message or we need to handle it.
+    let message = workflowResult.message;
+    if (message) {
+        message = deanonymize(message, tokenMap);
+    }
+
     const result: PipelineResult = {
       success: workflowResult.success,
       intent,
       intentResult,
       workflowResult,
-      transcription,
+      transcription, // Return original transcription
       confidence: intentResult.confidence,
-      message: workflowResult.message,
+      message,
     };
 
     if (!workflowResult.success && workflowResult.error) {
@@ -354,17 +370,15 @@ export class VoiceInvoicePipeline {
 
   /**
    * Processes an invoice intent by parsing and creating the invoice.
-   *
-   * @param intentResult - Intent classification result
-   * @param transcription - Original transcription
-   * @returns Pipeline result with created invoice
    */
   private async processInvoiceIntent(
     intentResult: IntentResult,
-    transcription: string
+    transcription: string,
+    anonymizedText: string,
+    tokenMap: Record<string, string>
   ): Promise<PipelineResult> {
-    // Parse invoice data
-    const parseResult = await this.parseInvoiceData(transcription);
+    // Parse invoice data using anonymized text
+    const parseResult = await this.parseInvoiceData(anonymizedText);
 
     if (!parseResult.success || !parseResult.invoice) {
       return {
@@ -376,9 +390,12 @@ export class VoiceInvoicePipeline {
       };
     }
 
+    // De-anonymize the parsed invoice data to restore original values
+    const deanonymizedInvoice = this.deanonymizeInvoice(parseResult.invoice, tokenMap);
+
     // Create invoice in database
     try {
-      const invoice = await this.createInvoiceFromParsed(parseResult.invoice, transcription);
+      const invoice = await this.createInvoiceFromParsed(deanonymizedInvoice, transcription);
 
       return {
         success: true,
@@ -403,10 +420,35 @@ export class VoiceInvoicePipeline {
   }
 
   /**
+   * Restores original values in the parsed invoice.
+   */
+  private deanonymizeInvoice(invoice: ParsedInvoice, tokenMap: Record<string, string>): ParsedInvoice {
+    const result = { ...invoice };
+
+    if (result.customerName) {
+      result.customerName = deanonymize(result.customerName, tokenMap);
+    }
+    if (result.customerAddress) {
+      result.customerAddress = deanonymize(result.customerAddress, tokenMap);
+    }
+    if (result.notes) {
+      result.notes = deanonymize(result.notes, tokenMap);
+    }
+    if (result.paymentTerms) {
+      result.paymentTerms = deanonymize(result.paymentTerms, tokenMap);
+    }
+    if (result.items) {
+      result.items = result.items.map((item) => ({
+        ...item,
+        description: deanonymize(item.description, tokenMap),
+      }));
+    }
+
+    return result;
+  }
+
+  /**
    * Converts a Blob to base64 string.
-   *
-   * @param blob - The blob to convert
-   * @returns Base64 encoded string
    */
   async convertBlobToBase64(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -424,10 +466,6 @@ export class VoiceInvoicePipeline {
 
   /**
    * Transcribes audio using the Gemini client.
-   *
-   * @param audioBase64 - Base64 encoded audio
-   * @param mimeType - Audio MIME type
-   * @returns Transcription result
    */
   private async transcribeAudio(
     audioBase64: string,
@@ -440,9 +478,6 @@ export class VoiceInvoicePipeline {
 
   /**
    * Parses invoice data from transcription text.
-   *
-   * @param text - The transcription text
-   * @returns Invoice parse result
    */
   private async parseInvoiceData(text: string): Promise<InvoiceParseResult> {
     return this.geminiClient.parseInvoice(text);
@@ -450,10 +485,6 @@ export class VoiceInvoicePipeline {
 
   /**
    * Creates an invoice in the database from parsed data.
-   *
-   * @param parsedInvoice - The parsed invoice data
-   * @param transcription - Original transcription
-   * @returns The created invoice
    */
   private async createInvoiceFromParsed(
     parsedInvoice: ParsedInvoice,
@@ -499,9 +530,6 @@ export class VoiceInvoicePipeline {
 
   /**
    * Finds an existing customer or creates a new one.
-   *
-   * @param parsedInvoice - The parsed invoice data
-   * @returns Customer ID
    */
   private async findOrCreateCustomer(parsedInvoice: ParsedInvoice): Promise<string> {
     // Search for existing customer by name
@@ -548,8 +576,6 @@ export class VoiceInvoicePipeline {
 
   /**
    * Returns whether the pipeline is currently processing.
-   *
-   * @returns True if processing is in progress
    */
   isProcessing(): boolean {
     return this.state.isProcessing;
@@ -557,8 +583,6 @@ export class VoiceInvoicePipeline {
 
   /**
    * Returns the last processing result.
-   *
-   * @returns The last result or null if no processing has occurred
    */
   getLastResult(): PipelineResult | null {
     return this.state.lastResult;

@@ -1,17 +1,18 @@
 /**
  * Privacy Engine for VoiceInvoice Enterprise.
  *
- * Implements PII detection and anonymization strategies:
- * - Email addresses
- * - Phone numbers (German format: +49, 0xxx)
- * - IBAN numbers
- * - Tax IDs (Steuernummer, USt-IdNr)
+ * Implements dual-layer anonymization strategy:
+ * 1. PII Pattern Detection (Regex) for Email, Phone, IBAN
+ * 2. Client-side customer name masking with fuzzy matching
  *
  * This module ensures GDPR compliance by processing all
  * personal data before transmission to external services.
  *
+ * @packageDocumentation
  * @module @voiceinvoice/privacy-engine
  */
+
+import { ClientPrivacyLayer } from './dual-layer-privacy';
 
 // ============================================
 // Types and Interfaces
@@ -42,10 +43,14 @@ export interface TokenMap {
  * Options for the anonymize function.
  */
 export interface AnonymizeOptions {
-  /** Strategy for anonymization: mask, redact, or hash */
+  /** Strategy for anonymization: mask, redact, or hash (default: redact) */
   strategy?: AnonymizeStrategy;
   /** Specific PII patterns to detect (default: all) */
   patterns?: PIIPattern[];
+  /** List of known entities (e.g. customers) to fuzzy match and mask */
+  knownEntities?: string[];
+  /** Fuzzy matching threshold (0.0-1.0) for entities */
+  fuzzyThreshold?: number;
 }
 
 /**
@@ -78,9 +83,6 @@ export interface AnonymizationResult {
   /** Number of entities anonymized */
   entityCount: number;
 }
-
-// Legacy alias for backward compatibility
-export type AnonymizeResult = AnonymizationResult;
 
 // ============================================
 // PII Detection Patterns
@@ -213,14 +215,11 @@ function isValidMatch(type: PIIPattern, value: string): boolean {
 }
 
 // ============================================
-// Anonymization
+// Anonymization Helpers
 // ============================================
 
 /**
  * Generates a simple hash for a value.
- * Uses a basic hash function for demonstration purposes.
- * @param value - The string value to hash
- * @returns An 8-character uppercase alphanumeric hash
  */
 function generateHash(value: string): string {
   let hash = 0;
@@ -235,9 +234,6 @@ function generateHash(value: string): string {
 
 /**
  * Masks a value according to its PII type.
- * @param type - The type of PII being masked
- * @param value - The value to mask
- * @returns The masked value with sensitive parts replaced by asterisks
  */
 function maskValue(type: PIIPattern, value: string): string {
   switch (type) {
@@ -275,32 +271,27 @@ function maskValue(type: PIIPattern, value: string): string {
   }
 }
 
+// ============================================
+// Main Anonymization Function
+// ============================================
+
 /**
  * Anonymizes text by replacing sensitive entities with tokens.
  *
- * Supports three strategies:
- * - mask: Replace with asterisks while keeping some identifying parts
- * - redact: Replace entirely with type labels
- * - hash: Replace with one-way hash tokens for reversible anonymization
+ * Supports dual-layer anonymization:
+ * 1. Pattern-based PII masking (Email, Phone, IBAN)
+ * 2. Entity-based fuzzy masking (e.g. Customer Names)
  *
  * @param text - The text to anonymize
- * @param options - Anonymization options
+ * @param knownEntitiesOrOptions - List of known entities OR options object
+ * @param options - Anonymization options (if first arg is array)
  * @returns The anonymized text, token map, and entity count
- *
- * @example
- * const result = anonymize('Email: john@example.com', { strategy: 'redact' });
- * // result.anonymizedText: 'Email: [EMAIL_REDACTED]'
- *
- * @example
- * const result = anonymize('Email: john@example.com', { strategy: 'mask' });
- * // result.anonymizedText: 'Email: j***@e***.com'
- *
- * @example
- * const result = anonymize('Email: john@example.com', { strategy: 'hash' });
- * // result.anonymizedText: 'Email: [A1B2C3D4]'
- * // result.tokenMap: { 'A1B2C3D4': 'john@example.com' }
  */
-export function anonymize(text: string, options?: AnonymizeOptions): AnonymizationResult {
+export function anonymize(
+  text: string,
+  knownEntitiesOrOptions?: string[] | AnonymizeOptions,
+  options?: AnonymizeOptions
+): AnonymizationResult {
   if (!text) {
     return {
       anonymizedText: '',
@@ -309,28 +300,34 @@ export function anonymize(text: string, options?: AnonymizeOptions): Anonymizati
     };
   }
 
-  const strategy = options?.strategy ?? 'redact';
-  const patterns = options?.patterns;
+  // Parse arguments to support both signatures:
+  // 1. anonymize(text, knownEntities, options)
+  // 2. anonymize(text, options)
+  let knownEntities: string[] = [];
+  let config: AnonymizeOptions = {};
 
-  // Detect all PII in the text
-  const matches = detectPII(text, patterns);
-
-  if (matches.length === 0) {
-    return {
-      anonymizedText: text,
-      tokenMap: {},
-      entityCount: 0,
-    };
+  if (Array.isArray(knownEntitiesOrOptions)) {
+    knownEntities = knownEntitiesOrOptions;
+    if (options) config = options;
+  } else if (knownEntitiesOrOptions && typeof knownEntitiesOrOptions === 'object') {
+    config = knownEntitiesOrOptions;
+    if (config.knownEntities) knownEntities = config.knownEntities;
   }
 
+  const strategy = config.strategy ?? 'redact';
+  const patterns = config.patterns;
+
+  // --- Layer 1: PII Pattern Detection ---
+  const matches = detectPII(text, patterns);
+
+  let result = text;
   const tokenMap: TokenMap = {};
   const typeCounters: Record<string, number> = {};
   const hashCache: Record<string, string> = {};
+  let piiCount = matches.length;
 
-  // Track replacements to avoid position shifts affecting later replacements
-  let result = text;
+  // Apply PII masking
   let offset = 0;
-
   for (const match of matches) {
     const adjustedStart = match.start - offset;
     const adjustedEnd = match.end - offset;
@@ -343,17 +340,18 @@ export function anonymize(text: string, options?: AnonymizeOptions): Anonymizati
         break;
 
       case 'redact': {
-        // Track count per type for unique tokens
         typeCounters[match.type] = (typeCounters[match.type] || 0) + 1;
         const count = typeCounters[match.type];
-        // Use _1, _2 etc only when there are multiple of same type
         const suffix = matches.filter((m) => m.type === match.type).length > 1 ? `_${count}` : '';
-        replacement = `[${match.type}_REDACTED${suffix}]`;
+        // Token format: [EMAIL_REDACTED_1]
+        // Keys in tokenMap: EMAIL_REDACTED_1
+        const tokenKey = `${match.type}_REDACTED${suffix}`;
+        replacement = `[${tokenKey}]`;
+        tokenMap[tokenKey] = match.value;
         break;
       }
 
       case 'hash': {
-        // Generate consistent hash for same values
         if (!hashCache[match.value]) {
           hashCache[match.value] = generateHash(match.value);
         }
@@ -364,17 +362,47 @@ export function anonymize(text: string, options?: AnonymizeOptions): Anonymizati
       }
     }
 
-    // Perform the replacement
     result = result.slice(0, adjustedStart) + replacement + result.slice(adjustedEnd);
-
-    // Update offset for position shifts
     offset += match.value.length - replacement.length;
+  }
+
+  // --- Layer 2: Entity Fuzzy Matching (ClientPrivacyLayer) ---
+  let entityCount = 0;
+  if (knownEntities && knownEntities.length > 0) {
+    const clientLayer = new ClientPrivacyLayer({
+      fuzzyThreshold: config.fuzzyThreshold ?? 0.7,
+      usePhoneticMatching: true,
+    });
+
+    clientLayer.addCustomerNames(knownEntities);
+
+    // Pass the already PII-masked text to the client layer
+    const clientResult = clientLayer.maskCustomerNames(result);
+
+    result = clientResult.maskedText;
+    entityCount = clientResult.matches.length;
+
+    // Merge tokens from client layer
+    // ClientPrivacyLayer generates tokens like [CUSTOMER_abc123]
+    // The TokenManager map keys are the token IDs (e.g. tok_abc123 or similar)
+    // BUT exportTokenMap returns map where Key=ID, Value={placeholder, original...}
+
+    const layerTokenManager = clientLayer.getTokenManager();
+    const layerTokens = layerTokenManager.exportTokenMap();
+
+    for (const [id, data] of Object.entries(layerTokens)) {
+        // We need to map the token string used in text to the original value.
+        // The text contains `[CUSTOMER_xyz]`. `data.placeholder` is `[CUSTOMER_xyz]`.
+        // `deanonymize` expects tokenMap keys to be `CUSTOMER_xyz`.
+        const tokenKey = data.placeholder.replace(/^\[|\]$/g, '');
+        tokenMap[tokenKey] = data.original;
+    }
   }
 
   return {
     anonymizedText: result,
     tokenMap,
-    entityCount: matches.length,
+    entityCount: piiCount + entityCount,
   };
 }
 
@@ -387,13 +415,6 @@ export function anonymize(text: string, options?: AnonymizeOptions): Anonymizati
  * @param anonymizedText - Text containing tokens
  * @param tokenMap - Mapping of tokens to original values
  * @returns Text with original values restored
- *
- * @example
- * const original = deanonymize(
- *   'Invoice for [CUSTOMER_1]',
- *   { 'CUSTOMER_1': 'Acme Corp' }
- * );
- * // Returns: 'Invoice for Acme Corp'
  */
 export function deanonymize(anonymizedText: string, tokenMap: TokenMap): string {
   if (!anonymizedText || Object.keys(tokenMap).length === 0) {
@@ -402,28 +423,33 @@ export function deanonymize(anonymizedText: string, tokenMap: TokenMap): string 
 
   let result = anonymizedText;
   for (const [token, value] of Object.entries(tokenMap)) {
-    // Handle both [TOKEN] and TOKEN formats
-    result = result.replace(new RegExp(`\\[${token}\\]`, 'g'), value);
+    // Escape the token for use in RegExp
+    const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Handle [TOKEN] format
+    // We try to replace `[TOKEN]` first
+    result = result.replace(new RegExp(`\\[${escapedToken}\\]`, 'g'), value);
+    // Also try replacing just `TOKEN` if brackets are missing or different?
+    // The previous implementation did `split([token]).join(value)` which implies it expected `[TOKEN]`.
+    // The original implementation did `replace(new RegExp(\\[${token}\\], 'g'), value)`.
+    // We stick to bracketed replacement as that's what we generate.
   }
   return result;
 }
 
 /**
- * Privacy Engine version for compatibility checking.
+ * Privacy Engine version.
  */
-export const PRIVACY_ENGINE_VERSION = '0.1.0';
+export const PRIVACY_ENGINE_VERSION = '0.1.1'; // Bumped version
 
 // ============================================
 // Dual-Layer Privacy Exports
 // ============================================
 
 export {
-  // Classes
   ServerPrivacyLayer,
   ClientPrivacyLayer,
   DualLayerPrivacy,
   PrivacyTokenManager,
-  // Types
   type ChirpRedactionConfig,
   type FuzzyMatchConfig,
   type PrivacyToken,
@@ -439,9 +465,5 @@ export {
   type TextProcessingResult,
   type DualLayerConfig,
 } from './dual-layer-privacy';
-
-// ============================================
-// Chirp Client Exports
-// ============================================
 
 export { GoogleChirpClient, INVOICE_PHRASE_HINTS } from './chirp-client';
