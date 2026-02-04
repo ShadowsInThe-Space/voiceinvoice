@@ -1,0 +1,245 @@
+{
+  "name": "Universal Voice/Text Agent",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice-command",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Empfang",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "voice-command-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.audioData }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-input",
+      "name": "IF: Audio vorhanden?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.OPENAI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "value": "={{ $json.audioData }}"
+            },
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "language",
+              "value": "de"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "whisper-transcribe",
+      "name": "Whisper: Transkribieren",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 200]
+    },
+    {
+      "parameters": {},
+      "id": "merge-inputs",
+      "name": "Merge: Text & Audio",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [880, 300],
+      "parameters": {
+        "mode": "append"
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Du bist ein Intent-Classifier für Invoice-Management. Extrahiere:\n\n1. intent: 'rechnung_erinnerung' oder 'termin_erinnerung'\n2. kunde: Name/ID (Fuzzy Match)\n3. details: Rechnungsnr. etc.\n4. dringlichkeit: 'normal', 'dringend'\n\nInput ist entweder Transkript oder Textnachricht."
+            },
+            {
+              "role": "user",
+              "content": "={{ $json.text }}"
+            }
+          ]
+        },
+        "options": {
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "gpt-intent",
+      "name": "GPT-4: Intent",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "rechnung_erinnerung",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputLabel": "Rechnung"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "termin_erinnerung",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputLabel": "Termin"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-intent",
+      "name": "Switch: Routing",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"Workflow gestartet\",\n  \"intent\": \"={{ $json.intent }}\",\n  \"input_type\": \"={{ $('IF: Audio vorhanden?').first().json.audioData ? 'audio' : 'text' }}\"\n}",
+        "options": {}
+      },
+      "id": "response-success",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1600, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: Empfang": {
+      "main": [
+        [
+          {
+            "node": "IF: Audio vorhanden?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Audio vorhanden?": {
+      "main": [
+        [
+          {
+            "node": "Whisper: Transkribieren",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge: Text & Audio",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Whisper: Transkribieren": {
+      "main": [
+        [
+          {
+            "node": "Merge: Text & Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge: Text & Audio": {
+      "main": [
+        [
+          {
+            "node": "GPT-4: Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4: Intent": {
+      "main": [
+        [
+          {
+            "node": "Switch: Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: Routing": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
