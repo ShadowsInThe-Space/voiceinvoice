@@ -5,6 +5,7 @@
 ## 📚 Dokumentations-Index
 
 - **[API_TRANSCRIPTION.md](./API_TRANSCRIPTION.md)** - Ausführliche Dokumentation der dualen Transkriptions-Architektur
+- **[ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md)** - Übersicht aller Umgebungsvariablen
 - **[PRODUCTION_READINESS.md](./PRODUCTION_READINESS.md)** - Production-Status und SaaS-Migration
 - **[projekt_documentation.md](./projekt_documentation.md)** - Notion MCP Mirror
 - **[Notion Documentation Hub](https://www.notion.so/2f2463490002816594abedf1f117d1d4)** - Zentrale Dokumentation

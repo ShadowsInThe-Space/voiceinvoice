@@ -2,11 +2,17 @@
 
 ## Summary
 
--
+- Fehlende Env-Variablen in den .env.example Dateien ergänzt.
+- Zentrale Env-Dokumentation unter `docs/ENVIRONMENT_VARIABLES.md` ergänzt.
+- Docs-Index aktualisiert.
 
 ## Scope
 
--
+- `apps/desktop/.env.example`
+- `apps/proxy-server/.env.example`
+- `ops/.env.example`
+- `docs/ENVIRONMENT_VARIABLES.md`
+- `docs/README.md`
 
 ## Test Plan (TDD)
 
@@ -16,5 +22,5 @@
 
 ## Checklist
 
-- [ ] Docs/.env.example aktualisiert
-- [ ] Keine Secrets committet
+- [x] Docs/.env.example aktualisiert
+- [x] Keine Secrets committet
