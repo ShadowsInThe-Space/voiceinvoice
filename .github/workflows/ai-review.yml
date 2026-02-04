@@ -1,0 +1,144 @@
+name: AI Code Review Chain
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  # 1. Analysiere PR-Größe und Pfade
+  analyze:
+    runs-on: ubuntu-latest
+    outputs:
+      review_level: ${{ steps.check.outputs.level }}
+      lines_changed: ${{ steps.check.outputs.lines }}
+      has_critical: ${{ steps.check.outputs.critical }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine review level
+        id: check
+        run: |
+          # Zähle geänderte Zeilen
+          LINES=$(git diff --stat origin/${{ github.base_ref }}...HEAD | tail -1 | grep -oP '\d+(?= insertion)' || echo 0)
+
+          # Prüfe kritische Pfade
+          CRITICAL=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E "(privacy-engine|database|ai-orchestrator|/lib/ai/|/lib/voice/|/lib/pipeline/|/migrations/)" || true)
+
+          if [[ -n "$CRITICAL" ]] || [[ $LINES -gt 500 ]]; then
+            echo "level=full" >> $GITHUB_OUTPUT
+            echo "critical=true" >> $GITHUB_OUTPUT
+          elif [[ $LINES -gt 100 ]]; then
+            echo "level=medium" >> $GITHUB_OUTPUT
+            echo "critical=false" >> $GITHUB_OUTPUT
+          else
+            echo "level=light" >> $GITHUB_OUTPUT
+            echo "critical=false" >> $GITHUB_OUTPUT
+          fi
+          echo "lines=$LINES" >> $GITHUB_OUTPUT
+
+          echo "::notice::Review Level: $(grep level $GITHUB_OUTPUT | cut -d= -f2), Lines: $LINES, Critical: ${CRITICAL:-none}"
+
+  # 2. Jules für Bug-Analyse (medium + full)
+  jules-review:
+    needs: analyze
+    if: needs.analyze.outputs.review_level != 'light'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Jules Bug Analysis
+        uses: google-labs-code/jules-invoke@v1
+        with:
+          prompt: |
+            Analysiere diesen Pull Request auf:
+            1. Bugs und Logic-Fehler
+            2. Potenzielle Runtime-Exceptions
+            3. Edge Cases die nicht behandelt werden
+
+            Erstelle einen strukturierten Report mit:
+            - Gefundene Probleme (nach Schweregrad)
+            - Betroffene Dateien und Zeilen
+            - Vorgeschlagene Fixes
+
+            Review-Level: ${{ needs.analyze.outputs.review_level }}
+            Geänderte Zeilen: ${{ needs.analyze.outputs.lines_changed }}
+
+            Bei kritischen Findings empfehle: "Für Security-Review: @claude"
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          include_last_commit: true
+          include_commit_log: true
+
+  # 3. Claude für tiefe Review (nur full)
+  claude-review:
+    needs: [analyze, jules-review]
+    if: needs.analyze.outputs.review_level == 'full'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Claude Deep Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --system-prompt "Du bist ein Senior Code Reviewer für VoiceInvoice (Electron + Next.js 14 Buchhaltungs-App).
+
+            FOKUS:
+            - Security-Vulnerabilities (XSS, Injection, Auth-Bypasses)
+            - Architektur-Entscheidungen und SOLID-Prinzipien
+            - Test-Coverage und Test-Qualität
+            - Business-Logik-Fehler
+            - GDPR/Datenschutz-Compliance
+
+            IGNORIEREN (wird von anderen Agents geprüft):
+            - Code-Style (Copilot)
+            - Einfache Bugs (Jules)
+
+            Antworte auf Deutsch. Sei präzise und konstruktiv."
+
+  # 4. Summary Comment
+  summary:
+    needs: [analyze, jules-review, claude-review]
+    if: always() && needs.analyze.outputs.review_level != 'light'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Post Review Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const level = '${{ needs.analyze.outputs.review_level }}';
+            const lines = '${{ needs.analyze.outputs.lines_changed }}';
+            const critical = '${{ needs.analyze.outputs.has_critical }}';
+
+            const body = `## 🤖 AI Review Chain Complete
+
+            | Metric | Value |
+            |--------|-------|
+            | Review Level | **${level.toUpperCase()}** |
+            | Lines Changed | ${lines} |
+            | Critical Paths | ${critical === 'true' ? '⚠️ Yes' : '✅ No'} |
+
+            ### Agents Involved:
+            - ${level !== 'light' ? '✅' : '⏭️'} **Jules** - Bug Analysis
+            - ${level === 'full' ? '✅' : '⏭️'} **Claude** - Security & Architecture
+            - ✅ **Copilot** - Code Style (automatic)
+
+            ---
+            *Powered by [AI Review Chain](https://github.com/anthropics/claude-code-action)*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
