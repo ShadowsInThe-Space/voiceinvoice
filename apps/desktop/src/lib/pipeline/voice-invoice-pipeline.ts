@@ -23,6 +23,14 @@ import type {
   InvoiceWithRelations,
 } from '../database/database-service';
 import type { PrivacyEngine, ConsentType } from '../privacy/privacy-engine';
+import {
+  AgentOrchestrator,
+  type Intent,
+  type IntentResult,
+  type WorkflowIntent,
+} from '@voiceinvoice/ai-orchestrator';
+import { triggerWorkflow, type WorkflowResult, type WorkflowParams } from '../workflow';
+import { anonymize } from '@voiceinvoice/privacy-engine';
 
 /**
  * Result returned from pipeline processing.
@@ -31,14 +39,17 @@ export interface PipelineResult {
   /** Whether the pipeline completed successfully */
   success: boolean;
 
-  /** The created invoice (if successful) */
+  /** Detected intent from the transcription */
+  intent?: Intent;
+
+  /** Intent classification details */
+  intentResult?: IntentResult;
+
+  /** The created invoice (if intent is INVOICE and successful) */
   invoice?: InvoiceWithRelations;
 
-  /** The parsed invoice data (if review is required) */
-  parsedInvoice?: ParsedInvoice;
-
-  /** Whether the result requires user review (confidence < 0.85) */
-  requiresReview?: boolean;
+  /** Workflow execution result (if intent is WORKFLOW_*) */
+  workflowResult?: WorkflowResult;
 
   /** The transcription text */
   transcription?: string;
@@ -48,6 +59,9 @@ export interface PipelineResult {
 
   /** Error message (if failed) */
   error?: string;
+
+  /** Human-readable message for voice output */
+  message?: string;
 }
 
 /**
@@ -63,11 +77,17 @@ export interface PipelineConfig {
   /** Privacy engine for consent and encryption */
   privacyEngine?: PrivacyEngine;
 
+  /** Agent orchestrator for intent classification (optional, created if not provided) */
+  orchestrator?: AgentOrchestrator;
+
   /** Default language for transcription (default: de-DE) */
   language?: string;
 
   /** Default tax rate (default: 19) */
   defaultTaxRate?: number;
+
+  /** Whether to enable workflow triggers (default: true) */
+  enableWorkflows?: boolean;
 }
 
 /**
@@ -98,8 +118,10 @@ export class VoiceInvoicePipeline {
   private geminiClient: GeminiClient;
   private databaseService: DatabaseService;
   private privacyEngine?: PrivacyEngine;
+  private orchestrator: AgentOrchestrator;
   private language: string;
   private defaultTaxRate: number;
+  private enableWorkflows: boolean;
   private state: PipelineState;
 
   /**
@@ -113,8 +135,10 @@ export class VoiceInvoicePipeline {
     if (config.privacyEngine) {
       this.privacyEngine = config.privacyEngine;
     }
+    this.orchestrator = config.orchestrator ?? new AgentOrchestrator();
     this.language = config.language ?? 'de-DE';
     this.defaultTaxRate = config.defaultTaxRate ?? 19;
+    this.enableWorkflows = config.enableWorkflows ?? true;
     this.state = {
       isProcessing: false,
       lastResult: null,
@@ -243,51 +267,135 @@ export class VoiceInvoicePipeline {
   /**
    * Internal method to process transcription text.
    *
+   * Routes to workflow, invoice, or analytics processing based on intent.
+   *
    * @param transcription - The transcription text
    * @returns Pipeline result
    */
   private async processTranscriptionInternal(transcription: string): Promise<PipelineResult> {
-    // Step 4: Parse invoice data
+    // Step 1: Classify intent
+    const intentResult = await this.orchestrator.classifyIntent(transcription);
+
+    // Step 2: Route based on intent
+    if (AgentOrchestrator.isWorkflowIntent(intentResult.intent) && this.enableWorkflows) {
+      // Handle workflow intent
+      return this.processWorkflowIntent(
+        intentResult.intent as WorkflowIntent,
+        intentResult,
+        transcription
+      );
+    }
+
+    if (intentResult.intent === 'ANALYTICS') {
+      // Analytics intent - return message for now (could be extended)
+      return {
+        success: true,
+        intent: intentResult.intent,
+        intentResult,
+        transcription,
+        confidence: intentResult.confidence,
+        message: 'Analytics-Anfrage erkannt. Diese Funktion wird bald verfügbar sein.',
+      };
+    }
+
+    if (intentResult.intent === 'UNKNOWN' && intentResult.confidence < 0.5) {
+      // Low confidence - ask user for clarification
+      return {
+        success: false,
+        intent: intentResult.intent,
+        intentResult,
+        transcription,
+        confidence: intentResult.confidence,
+        error: 'Ich konnte Ihre Anfrage nicht verstehen. Bitte versuchen Sie es erneut.',
+      };
+    }
+
+    // Default: Invoice processing
+    return this.processInvoiceIntent(intentResult, transcription);
+  }
+
+  /**
+   * Processes a workflow intent by triggering the n8n workflow.
+   *
+   * @param intent - The workflow intent
+   * @param intentResult - Full intent classification result
+   * @param transcription - Original transcription
+   * @returns Pipeline result with workflow execution details
+   */
+  private async processWorkflowIntent(
+    intent: WorkflowIntent,
+    intentResult: IntentResult,
+    transcription: string
+  ): Promise<PipelineResult> {
+    // Extract parameters from transcription for the workflow
+    const params: WorkflowParams = {
+      transcription,
+      // Could add entity extraction here for more parameters
+    };
+
+    // Trigger the workflow
+    const workflowResult = await triggerWorkflow(intent, params);
+
+    const result: PipelineResult = {
+      success: workflowResult.success,
+      intent,
+      intentResult,
+      workflowResult,
+      transcription,
+      confidence: intentResult.confidence,
+      message: workflowResult.message,
+    };
+
+    if (!workflowResult.success && workflowResult.error) {
+      result.error = workflowResult.error;
+    }
+
+    return result;
+  }
+
+  /**
+   * Processes an invoice intent by parsing and creating the invoice.
+   *
+   * @param intentResult - Intent classification result
+   * @param transcription - Original transcription
+   * @returns Pipeline result with created invoice
+   */
+  private async processInvoiceIntent(
+    intentResult: IntentResult,
+    transcription: string
+  ): Promise<PipelineResult> {
+    // Parse invoice data
     const parseResult = await this.parseInvoiceData(transcription);
 
     if (!parseResult.success || !parseResult.invoice) {
       return {
         success: false,
+        intent: intentResult.intent,
+        intentResult,
         error: parseResult.error ?? 'Could not extract invoice data',
         transcription,
       };
     }
 
-    // Check confidence threshold (0.85)
-    // If confidence is low, return parsed data for user review instead of saving
-    if (parseResult.confidence < 0.85) {
-      return {
-        success: true,
-        parsedInvoice: parseResult.invoice,
-        requiresReview: true,
-        transcription,
-        confidence: parseResult.confidence,
-      };
-    }
-
-    // Step 5 & 6: Create invoice in database
+    // Create invoice in database
     try {
-      const invoice = await this.createInvoiceFromParsed(
-        parseResult.invoice,
-        transcription
-      );
+      const invoice = await this.createInvoiceFromParsed(parseResult.invoice, transcription);
 
       return {
         success: true,
+        intent: intentResult.intent,
+        intentResult,
         invoice,
         transcription,
         confidence: parseResult.confidence,
-        requiresReview: false,
+        message: `Rechnung für ${parseResult.invoice.customerName} wurde erstellt.`,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Database error';
       return {
         success: false,
+        intent: intentResult.intent,
+        intentResult,
         error: `Failed to save invoice: ${errorMessage}`,
         transcription,
         confidence: parseResult.confidence,
@@ -357,7 +465,12 @@ export class VoiceInvoicePipeline {
 
     // Map parsed invoice to database input
     const items = parsedInvoice.items.map((item) => {
-      const dbItem: { description: string; quantity: number; unitPrice: number; category?: string } = {
+      const dbItem: {
+        description: string;
+        quantity: number;
+        unitPrice: number;
+        category?: string;
+      } = {
         description: item.description,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
@@ -368,11 +481,15 @@ export class VoiceInvoicePipeline {
       return dbItem;
     });
 
+    // DSGVO: Anonymize transcription before storing in database
+    // This removes PII (emails, phone numbers, IBANs, tax IDs) from the stored text
+    const anonymizationResult = anonymize(transcription, { strategy: 'redact' });
+
     const invoiceInput: CreateInvoiceInput = {
       customerId,
       items,
       taxRate: this.defaultTaxRate,
-      transcription,
+      transcription: anonymizationResult.anonymizedText,
     };
 
     if (parsedInvoice.notes) {
@@ -402,16 +519,32 @@ export class VoiceInvoicePipeline {
       return existingCustomers[0].id;
     }
 
-    // Create new customer
+    // Create new customer with all extracted fields
     const customerInput: CreateCustomerInput = {
       name: parsedInvoice.customerName,
     };
 
+    // Add all optional customer fields if present
     if (parsedInvoice.customerEmail) {
       customerInput.email = parsedInvoice.customerEmail;
     }
+    if (parsedInvoice.customerPhone) {
+      customerInput.phone = parsedInvoice.customerPhone;
+    }
     if (parsedInvoice.customerAddress) {
       customerInput.address = parsedInvoice.customerAddress;
+    }
+    if (parsedInvoice.customerCity) {
+      customerInput.city = parsedInvoice.customerCity;
+    }
+    if (parsedInvoice.customerZipCode) {
+      customerInput.zipCode = parsedInvoice.customerZipCode;
+    }
+    if (parsedInvoice.customerCountry) {
+      customerInput.country = parsedInvoice.customerCountry;
+    }
+    if (parsedInvoice.customerTaxId) {
+      customerInput.taxId = parsedInvoice.customerTaxId;
     }
 
     const newCustomer = await this.databaseService.createCustomer(customerInput);
