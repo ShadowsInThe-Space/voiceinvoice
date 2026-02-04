@@ -9,7 +9,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { transcribeAudio } from '../services/speech-service';
-import { createLicenseAuthHook, createQuotaCheckHook } from './license';
 
 /**
  * Request body schema for transcription.
@@ -54,9 +53,6 @@ export async function registerTranscribeRoutes(server: FastifyInstance): Promise
     Body: TranscribeRequest;
   }>(
     '/transcribe',
-    {
-      preHandler: [createLicenseAuthHook(), createQuotaCheckHook()],
-    },
     async (request: FastifyRequest<{ Body: TranscribeRequest }>, reply: FastifyReply) => {
       // Validate request body
       const validation = TranscribeRequestSchema.safeParse(request.body);
@@ -90,6 +86,7 @@ export async function registerTranscribeRoutes(server: FastifyInstance): Promise
 
         server.log.error({ err: error }, 'Transcription failed');
 
+        // In production, don't leak internal error details
         const isProduction = process.env.NODE_ENV === 'production';
         const errorResponse: ErrorResponse = {
           error: isProduction ? 'Internal server error' : `Transcription failed: ${errorMessage}`,
