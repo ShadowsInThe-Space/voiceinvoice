@@ -15,3 +15,13 @@ export {
   getEncryptedFields,
   ENCRYPTED_FIELDS,
 } from './field-encryption';
+
+// Recovery phrase for key backup
+export {
+  generateRecoveryPhrase,
+  validateRecoveryPhrase,
+  formatRecoveryPhrase,
+  parseRecoveryPhrase,
+  isValidWord,
+  getWordList,
+} from './recovery-phrase';
