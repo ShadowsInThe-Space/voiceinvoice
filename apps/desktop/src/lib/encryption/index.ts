@@ -5,3 +5,13 @@
  */
 
 export { EncryptionContext, globalEncryptionContext, getDeviceId } from './encryption-context';
+
+// Field-level encryption for database operations
+export {
+  encryptSensitiveFields,
+  decryptSensitiveFields,
+  decryptSensitiveFieldsArray,
+  isEncrypted,
+  getEncryptedFields,
+  ENCRYPTED_FIELDS,
+} from './field-encryption';
