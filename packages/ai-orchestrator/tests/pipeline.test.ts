@@ -250,17 +250,17 @@ describe('PipelineOrchestrator', () => {
       expect(onError).toHaveBeenCalled();
     });
 
-    it('should handle classification errors gracefully', async () => {
+    it('should handle null input gracefully', async () => {
       const onError = vi.fn();
-
       const pipeline = new PipelineOrchestrator({
         callbacks: { onError },
+        enableCleaning: false,
       });
 
-      // Force an error by passing invalid input
       // @ts-expect-error - intentionally passing invalid input
       const result = await pipeline.processText(null);
 
+      // Null input causes a classification error which is handled gracefully
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
     });
@@ -347,16 +347,18 @@ describe('PipelineOrchestrator', () => {
     });
 
     it('should route medium confidence to preview', async () => {
-      const pipeline = new PipelineOrchestrator();
+      // Disable cleaning to test raw input classification
+      const pipeline = new PipelineOrchestrator({ enableCleaning: false });
 
-      // Simple phrase with lower confidence
+      // Simple phrase with lower confidence (~0.65)
       const result = await pipeline.processText('Rechnung');
 
       expect(result.routing?.route).toBe('preview');
     });
 
     it('should route unknown intent to manual', async () => {
-      const pipeline = new PipelineOrchestrator();
+      // Disable cleaning to test raw input classification
+      const pipeline = new PipelineOrchestrator({ enableCleaning: false });
 
       const result = await pipeline.processText('Hallo wie geht es');
 
@@ -369,6 +371,7 @@ describe('PipelineOrchestrator', () => {
           autoSave: 0.9, // High threshold
           preview: 0.8,
         },
+        enableCleaning: false, // Disable cleaning to test raw input
       });
 
       // Simple "Rechnung" has confidence around 0.65 - below both thresholds

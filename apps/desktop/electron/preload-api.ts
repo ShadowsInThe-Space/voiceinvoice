@@ -77,6 +77,7 @@ export interface AnalyticsApi {
   getRecentExecutions: (limit?: number, workflowIntent?: string) => Promise<unknown>;
   getTimelineInvoices: () => Promise<unknown>;
   getTopCustomers: (limit?: number) => Promise<unknown>;
+  triggerAggregation: () => Promise<unknown>;
 }
 
 /**
@@ -180,6 +181,7 @@ export function createPreloadApi(invoke: IpcInvoker): PreloadApi {
         invoke('analytics:getRecentExecutions', limit, workflowIntent),
       getTimelineInvoices: () => invoke('analytics:getTimelineInvoices'),
       getTopCustomers: (limit?: number) => invoke('analytics:getTopCustomers', limit),
+      triggerAggregation: () => invoke('analytics:triggerAggregation'),
     },
   };
 }

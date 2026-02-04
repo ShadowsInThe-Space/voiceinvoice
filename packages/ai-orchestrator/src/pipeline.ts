@@ -201,8 +201,14 @@ export class PipelineOrchestrator {
    * @param config - Partial configuration (merged with defaults)
    */
   constructor(config: Partial<PipelineConfig> = {}) {
+    // Explicitly merge routing thresholds to handle partial configs
+    const routingThresholds: RoutingThresholds = {
+      autoSave: config.routingThresholds?.autoSave ?? DEFAULT_ROUTING_THRESHOLDS.autoSave,
+      preview: config.routingThresholds?.preview ?? DEFAULT_ROUTING_THRESHOLDS.preview,
+    };
+
     this.config = {
-      routingThresholds: config.routingThresholds ?? { ...DEFAULT_ROUTING_THRESHOLDS },
+      routingThresholds,
       transcriptionHandler: config.transcriptionHandler,
       enableCleaning: config.enableCleaning ?? true, // Enable cleaning by default
       callbacks: config.callbacks ?? {},
