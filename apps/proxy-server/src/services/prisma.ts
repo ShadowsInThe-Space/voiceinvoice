@@ -7,7 +7,7 @@
  * @module services/prisma
  */
 
-import { PrismaClient } from '../../generated/client';
+import { PrismaClient } from '../../../packages/database/generated/server';
 
 // Singleton instance
 let _prisma: PrismaClient | null = null;

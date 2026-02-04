@@ -19,6 +19,7 @@ import { registerEnrichRoutes } from './routes/enrich';
 import { registerLicenseRoutes } from './routes/license';
 import { registerSyncRoutes } from './routes/sync';
 import { registerStripeRoutes } from './routes/stripe';
+import { registerStripePortalRoutes } from './routes/stripe-portal';
 import { createPrismaLicenseStore, setLicenseStore } from './services/license-store';
 import { getPrismaClient } from './services/prisma';
 
@@ -128,6 +129,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   await registerLicenseRoutes(server);
   await registerSyncRoutes(server);
   await registerStripeRoutes(server);
+  await registerStripePortalRoutes(server);
 
   // Global error handler
   server.setErrorHandler((error: FastifyError, _request, reply) => {
