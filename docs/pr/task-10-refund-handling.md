@@ -2,21 +2,27 @@
 
 ## Summary
 
--
+- Add payment record tracking linked to Stripe payment intents
+- Handle `refund.created`/`refund.updated` webhook events with partial refunds
+- Suspend license when refunds reach the paid amount
 
 ## Scope
 
--
+- `apps/proxy-server/src/services/payment-record-store.ts`
+- `apps/proxy-server/src/services/refund-service.ts`
+- `apps/proxy-server/src/routes/stripe.ts`
+- `apps/proxy-server/tests/services/payment-record-store.test.ts`
+- `apps/proxy-server/tests/services/refund-service.test.ts`
 
 ## Test Plan (TDD)
 
-- [ ] Red: Tests fuer Refund-Events und Lizenz-Deaktivierung
-- [ ] Green: Minimal implementation to pass tests
-- [ ] Refactor: Cleanup and improve structure
+- [x] Red: `tests/services/payment-record-store.test.ts`
+- [x] Green: `tests/services/refund-service.test.ts`
+- [ ] Integration: `tests/routes/stripe.test.ts` (refund events)
 
 ## Checklist
 
-- [ ] Unit tests added/updated
+- [x] Unit tests added/updated
 - [ ] Integration tests added/updated
 - [ ] Coverage meets thresholds
 - [ ] Stripe Webhook Handling getestet
