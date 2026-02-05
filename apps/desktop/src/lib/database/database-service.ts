@@ -194,6 +194,19 @@ export class DatabaseService {
   }
 
   /**
+   * Gets all customer names (excludes soft-deleted).
+   * Optimized for anonymization to avoid fetching full customer objects.
+   */
+  async getAllCustomerNames(): Promise<string[]> {
+    const customers = await this.prisma.customer.findMany({
+      where: { deletedAt: null },
+      select: { name: true },
+      orderBy: { name: 'asc' },
+    });
+    return customers.map((c) => c.name);
+  }
+
+  /**
    * Updates a customer.
    * @param id
    * @param input
