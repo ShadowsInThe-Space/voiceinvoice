@@ -26,3 +26,8 @@
 - [ ] Integration tests added/updated
 - [ ] Coverage meets thresholds
 - [ ] Stripe Webhook Handling getestet
+
+## Review Notes
+
+- @jules: Bitte Logik- und Edge-Case-Review der Refund-Handling-Implementierung.
+- @claude: Bitte Security/Architektur-Review (Webhook-Events, Idempotenz, Lizenzstatus).
