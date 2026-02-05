@@ -250,8 +250,7 @@ export class VoiceInvoicePipeline {
    */
   private async processTranscriptionInternal(transcription: string): Promise<PipelineResult> {
     // Fetch known customers for masking
-    const customers = await this.databaseService.getAllCustomers();
-    const knownEntities = customers.map((c) => c.name);
+    const knownEntities = await this.databaseService.getAllCustomerNames();
 
     // Anonymize transcription before sending to Gemini
     const { anonymizedText, tokenMap } = anonymize(transcription, knownEntities);

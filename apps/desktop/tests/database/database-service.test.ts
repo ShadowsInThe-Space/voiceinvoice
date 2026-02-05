@@ -194,6 +194,25 @@ describe('DatabaseService', () => {
       });
     });
 
+    describe('getAllCustomerNames', () => {
+      it('should return all non-deleted customer names', async () => {
+        await db.createCustomer({ name: 'Alpha' });
+        await db.createCustomer({ name: 'Beta' });
+        const toDelete = await db.createCustomer({ name: 'Gamma' });
+        await db.softDeleteCustomer(toDelete.id);
+
+        const names = await db.getAllCustomerNames();
+
+        expect(names).toEqual(['Alpha', 'Beta']);
+      });
+
+      it('should return empty array when no customers', async () => {
+        const names = await db.getAllCustomerNames();
+
+        expect(names).toEqual([]);
+      });
+    });
+
     describe('updateCustomer', () => {
       it('should update customer fields', async () => {
         const created = await db.createCustomer({ name: 'Original Name' });
