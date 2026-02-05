@@ -10,7 +10,7 @@
  * Uses a hybrid approach with rule-based heuristics for common
  * patterns and Gemini fallback for complex cases.
  *
- * @packageDocumentation
+ * @file AI Orchestrator for VoiceInvoice Enterprise (intent routing + entity extraction).
  * @module @voiceinvoice/ai-orchestrator
  */
 

@@ -6,7 +6,7 @@
  *
  * Designed for Gemini Function Calling integration (mock for now).
  *
- * @packageDocumentation
+ * @file Rule-based entity extraction for German invoice dictation.
  * @module @voiceinvoice/ai-orchestrator/entity-extraction
  */
 
