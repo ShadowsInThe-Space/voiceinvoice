@@ -116,6 +116,8 @@ export interface ProcessedPayment {
   paymentIntentId: string;
   /** Idempotency key */
   idempotencyKey: string;
+  /** Stripe Customer ID */
+  stripeCustomerId: string;
 }
 
 /**
@@ -319,6 +321,7 @@ export async function processCompletedCheckout(sessionId: string): Promise<Proce
     currency: session.currency || 'eur',
     paymentIntentId: paymentIntent?.id || '',
     idempotencyKey: metadata.idempotencyKey || '',
+    stripeCustomerId: (session.customer as string) || '',
   };
 }
 
