@@ -8,7 +8,7 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { validateLicense } from '../services/license-service';
+import { validateLicense, LicenseTokenPayload } from '../services/license-service';
 
 /**
  * Request body schema for license validation.
@@ -84,4 +84,50 @@ export async function registerLicenseRoutes(server: FastifyInstance): Promise<vo
       }
     }
   );
+}
+
+/**
+ * Creates a preHandler hook that validates the license key in headers.
+ *
+ * @returns Fastify preHandler hook
+ */
+export function createLicenseAuthHook(): (
+  request: FastifyRequest,
+  reply: FastifyReply
+) => Promise<unknown> {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const licenseKey = request.headers['x-license-key'] as string;
+
+    if (!licenseKey) {
+      return reply.status(401).send({
+        error: 'Missing license key',
+        statusCode: 401,
+      });
+    }
+
+    try {
+      const result = await validateLicense(licenseKey);
+
+      if (!result.isValid) {
+        return reply.status(403).send({
+          error: result.error || 'Invalid license',
+          statusCode: 403,
+        });
+      }
+
+      // Attach license details to request
+      const licensePayload: LicenseTokenPayload = {
+        licenseKey,
+        ...result.details!,
+      };
+
+      Object.assign(request, { license: licensePayload });
+    } catch (error) {
+      request.log.error({ err: error }, 'License auth failed');
+      return reply.status(500).send({
+        error: 'Internal authentication error',
+        statusCode: 500,
+      });
+    }
+  };
 }
