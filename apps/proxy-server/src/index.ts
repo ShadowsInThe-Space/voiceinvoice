@@ -14,6 +14,10 @@
 // Load environment variables from .env file
 import 'dotenv/config';
 
+// Initialize Sentry Error Tracking (must be first)
+import { initSentry } from './lib/sentry';
+initSentry();
+
 import { buildServer } from './server';
 
 /**
