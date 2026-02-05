@@ -18,7 +18,7 @@
 
 - [x] Red: `tests/services/payment-record-store.test.ts`
 - [x] Green: `tests/services/refund-service.test.ts`
-- [ ] Integration: `tests/routes/stripe.test.ts` (refund events)
+- [x] Integration: `tests/routes/stripe.test.ts` (refund events)
 
 ## Checklist
 
