@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import type { Invoice, InvoiceStatus, TaxRate } from '@voiceinvoice/shared-types';
-import { FileText, Calendar, DollarSign, Tag, Info, CheckCircle2 } from 'lucide-react';
+import { FileText, Calendar, DollarSign, Tag, Info, CheckCircle2, ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 /**
@@ -236,16 +236,19 @@ export function InvoiceForm({
                 <label htmlFor="status" className="text-sm font-black uppercase tracking-widest text-muted-foreground">
                   Zahlungsstatus
                 </label>
-                <select
-                  id="status"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as InvoiceStatus)}
-                  className="w-full px-4 py-3 bg-muted/20 rounded-xl border-2 border-transparent focus:border-primary transition-all focus:outline-none appearance-none cursor-pointer"
-                >
-                  {INVOICE_STATUSES.map(({ value, label }) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    id="status"
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as InvoiceStatus)}
+                    className="w-full px-4 py-3 bg-muted/20 rounded-xl border-2 border-transparent focus:border-primary transition-all focus:outline-none appearance-none cursor-pointer pr-10"
+                  >
+                    {INVOICE_STATUSES.map(({ value, label }) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                </div>
               </div>
 
               <div className="space-y-2">
