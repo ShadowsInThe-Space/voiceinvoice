@@ -8,6 +8,7 @@
  */
 
 import { getPrismaClient } from './prisma';
+import type { Prisma } from '../../generated/client';
 
 /**
  * Entry from the client sync queue.
@@ -17,7 +18,7 @@ export interface SyncQueueEntry {
   entityType: string;
   entityId: string;
   operation: 'CREATE' | 'UPDATE' | 'DELETE';
-  data?: any;
+  data?: Prisma.InputJsonValue;
   timestamp: number;
 }
 
@@ -26,7 +27,7 @@ export interface SyncQueueEntry {
  */
 export interface PushResult {
   success: boolean;
-  serverData?: any;
+  serverData?: Prisma.JsonValue;
   error?: string;
 }
 
@@ -37,7 +38,7 @@ export interface ServerChange {
   entityType: string;
   entityId: string;
   operation: 'CREATE' | 'UPDATE' | 'DELETE';
-  data: any;
+  data: Prisma.JsonValue;
   updatedAt: string;
 }
 
@@ -63,7 +64,7 @@ export async function pushEntity(licenseKey: string, entry: SyncQueueEntry): Pro
     // Get license ID (and verify existence)
     const license = await prisma.license.findUnique({
       where: { licenseKey },
-      select: { id: true }
+      select: { id: true },
     });
 
     if (!license) {
@@ -80,7 +81,7 @@ export async function pushEntity(licenseKey: string, entry: SyncQueueEntry): Pro
             licenseId: license.id,
             entityType,
             entityId,
-          }
+          },
         },
         create: {
           licenseId: license.id,
@@ -92,7 +93,7 @@ export async function pushEntity(licenseKey: string, entry: SyncQueueEntry): Pro
         update: {
           deleted: true,
           data: {},
-        }
+        },
       });
     } else {
       // CREATE or UPDATE
@@ -104,7 +105,7 @@ export async function pushEntity(licenseKey: string, entry: SyncQueueEntry): Pro
             licenseId: license.id,
             entityType,
             entityId,
-          }
+          },
         },
         create: {
           licenseId: license.id,
@@ -116,7 +117,7 @@ export async function pushEntity(licenseKey: string, entry: SyncQueueEntry): Pro
         update: {
           data: data ?? {},
           deleted: false,
-        }
+        },
       });
     }
 
@@ -136,13 +137,16 @@ export async function pushEntity(licenseKey: string, entry: SyncQueueEntry): Pro
  * @param sinceTimestamp - Timestamp to fetch changes from
  * @returns List of changes
  */
-export async function pullChanges(licenseKey: string, sinceTimestamp: number | null): Promise<PullResult> {
+export async function pullChanges(
+  licenseKey: string,
+  sinceTimestamp: number | null
+): Promise<PullResult> {
   const prisma = getPrismaClient();
 
   try {
     const license = await prisma.license.findUnique({
       where: { licenseKey },
-      select: { id: true }
+      select: { id: true },
     });
 
     if (!license) {
@@ -155,15 +159,15 @@ export async function pullChanges(licenseKey: string, sinceTimestamp: number | n
       where: {
         licenseId: license.id,
         updatedAt: {
-          gt: sinceDate
-        }
+          gt: sinceDate,
+        },
       },
       orderBy: {
-        updatedAt: 'asc'
-      }
+        updatedAt: 'asc',
+      },
     });
 
-    const changes: ServerChange[] = entities.map(e => ({
+    const changes: ServerChange[] = entities.map((e) => ({
       entityType: e.entityType,
       entityId: e.entityId,
       operation: e.deleted ? 'DELETE' : 'UPDATE', // Use UPDATE for upserts
@@ -173,13 +177,14 @@ export async function pullChanges(licenseKey: string, sinceTimestamp: number | n
 
     // Calculate new timestamp (max of updatedData)
     // If no changes, keep the old timestamp (or current time if null)
-    const lastTimestamp = entities.length > 0
-      ? entities[entities.length - 1].updatedAt.getTime()
-      : (sinceTimestamp || Date.now());
+    const lastTimestamp =
+      entities.length > 0
+        ? entities[entities.length - 1].updatedAt.getTime()
+        : sinceTimestamp || Date.now();
 
     return {
       data: changes,
-      lastSyncTimestamp: lastTimestamp
+      lastSyncTimestamp: lastTimestamp,
     };
   } catch (error) {
     console.error('Pull error:', error);
