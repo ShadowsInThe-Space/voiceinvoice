@@ -90,11 +90,16 @@ model License {
   tenantId        String        @unique
   tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  // Stripe Customer Portal Integration
+  stripeCustomerId String?      @unique
+  companyName      String
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   @@index([licenseKey])
   @@index([status])
+  @@index([stripeCustomerId])
 }
 
 // Domain Models

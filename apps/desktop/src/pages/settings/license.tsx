@@ -11,6 +11,7 @@ import {
   Star,
   Zap,
   Crown,
+  Settings,
 } from 'lucide-react';
 import { licenseApi, License } from '../../lib/api/license-api';
 
@@ -59,6 +60,7 @@ export default function LicenseSettings() {
   const [inputKey, setInputKey] = useState('');
   const [validating, setValidating] = useState(false);
   const [purchasing, setPurchasing] = useState<string | null>(null);
+  const [openingPortal, setOpeningPortal] = useState(false);
 
   useEffect(() => {
     loadStatus();
@@ -125,6 +127,28 @@ export default function LicenseSettings() {
         'Zahlungsvorgang konnte nicht gestartet werden. Bitte versuchen Sie es später erneut.'
       );
       setPurchasing(null);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    setOpeningPortal(true);
+    setError(null);
+
+    try {
+      const response = await licenseApi.createPortalSession({
+        returnUrl: `${window.location.origin}/settings/license`,
+      });
+
+      // Redirect to Stripe Billing Portal
+      window.location.href = response.url;
+    } catch (err) {
+      console.error('Failed to open billing portal:', err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Portal konnte nicht geöffnet werden. Bitte versuchen Sie es später erneut.'
+      );
+      setOpeningPortal(false);
     }
   };
 
@@ -212,6 +236,23 @@ export default function LicenseSettings() {
                   ></div>
                 </div>
               </div>
+
+              {/* Manage Subscription Button */}
+              {license.status === 'ACTIVE' && (
+                <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+                  <button
+                    onClick={handleManageSubscription}
+                    disabled={openingPortal}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Settings className="h-4 w-4" />
+                    {openingPortal ? 'Öffne Portal...' : 'Abo verwalten'}
+                  </button>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                    Zahlungsmethode ändern, Rechnungen ansehen, Abo kündigen
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">

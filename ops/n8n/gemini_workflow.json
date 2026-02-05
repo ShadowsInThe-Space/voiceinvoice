@@ -1,0 +1,124 @@
+{
+  "name": "Gemini Voice/Text Agent",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rechnungseingang",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "voice-command-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = items[0].json;\nconst binary = items[0].binary;\n\n// Prompt für Intent Evaluation\nconst systemPrompt = `extrahiere als JSON:\n1. intent: 'rechnung_erinnerung', 'termin_erinnerung'\n2. kunde: Name (String)\n3. details: Rechnungsnummer/Datum\n4. dringlichkeit: 'normal', 'dringend'`;\n\nlet contents = [];\n\n// 1. Text-Prompt hinzufügen\ncontents.push({\n  role: \"user\",\n  parts: [\n    { text: systemPrompt },\n    { text: input.text || \"(Audio Input)\" }\n  ]\n});\n\n// 2. Audio hinzufügen (falls vorhanden)\nif (input.audioData || (binary && binary.data)) {\n   // Wir nehmen an, dass 'audioData' bereits base64 ist, oder wir nutzen das Binary-File\n   // Falls via Webhook 'audioData' als String kommt:\n   const b64 = input.audioData || binary.data.data;\n   \n   contents[0].parts.push({\n     inline_data: {\n       mime_type: \"audio/mp3\",\n       data: b64\n     }\n   });\n}\n\nreturn {\n  json: {\n    contents: contents\n  }\n};"
+      },
+      "id": "prepare-gemini",
+      "name": "Code: Prepare Gemini",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "{{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ contents: $json.contents }) }}"
+      },
+      "id": "gemini-api",
+      "name": "API: Gemini 2.0 Flash",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = items[0].json;\nlet text = response.candidates[0].content.parts[0].text;\n\n// Markdown Code-Blocks entfernen falls Gemini welche sendet\ntext = text.replace(/```json/g, '').replace(/```/g, '');\n\nreturn { json: JSON.parse(text) };"
+      },
+      "id": "parse-response",
+      "name": "Code: Parse JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"Gemini processed\",\n  \"data\": {{ JSON.stringify($json) }}\n}"
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code: Prepare Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prepare Gemini": {
+      "main": [
+        [
+          {
+            "node": "API: Gemini 2.0 Flash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Gemini 2.0 Flash": {
+      "main": [
+        [
+          {
+            "node": "Code: Parse JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Parse JSON": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
