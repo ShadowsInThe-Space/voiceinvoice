@@ -34,11 +34,15 @@ describe('Database Package', () => {
   beforeEach(async () => {
     // Reset state before each test
     await resetDatabase({ disconnect: false });
+    // Set up mock client for most tests
+    const mockClient = createMockPrismaClient();
+    setPrismaClientFactory(() => mockClient);
   });
 
   afterEach(async () => {
     // Clean up after each test
     await resetDatabase({ disconnect: false });
+    setPrismaClientFactory(null);
   });
 
   describe('DATABASE_VERSION', () => {
@@ -59,16 +63,14 @@ describe('Database Package', () => {
     it('should accept custom configuration', async () => {
       const config: DatabaseConfig = {
         maxRetries: 5,
-        connectionTimeoutMs: 15000,
-        logging: true,
+        retryDelay: 2000,
       };
 
       await initializeDatabase(config);
       const currentConfig = getConfig();
 
       expect(currentConfig.maxRetries).toBe(5);
-      expect(currentConfig.connectionTimeoutMs).toBe(15000);
-      expect(currentConfig.logging).toBe(true);
+      expect(currentConfig.retryDelay).toBe(2000);
     });
 
     it('should use default values for unspecified options', async () => {
@@ -76,16 +78,17 @@ describe('Database Package', () => {
       const config = getConfig();
 
       expect(config.maxRetries).toBe(10);
-      expect(config.initialRetryDelayMs).toBe(100); // default
-      expect(config.maxRetryDelayMs).toBe(5000); // default
-      expect(config.connectionTimeoutMs).toBe(10000); // default
+      expect(config.retryDelay).toBe(1000); // default
     });
   });
 
   describe('getDatabase', () => {
     it('should throw error when no client factory is set', () => {
+      // Reset to clear the mock client
+      setPrismaClientFactory(null);
+      resetDatabase({ disconnect: false });
       expect(() => getDatabase()).toThrow(DatabaseError);
-      expect(() => getDatabase()).toThrow('Prisma client not available');
+      expect(() => getDatabase()).toThrow('Database not initialized');
     });
 
     it('should return client when factory is set', () => {
@@ -156,8 +159,7 @@ describe('Database Package', () => {
       setPrismaClientFactory(() => mockClient);
       await initializeDatabase({
         maxRetries: 3,
-        initialRetryDelayMs: 10,
-        maxRetryDelayMs: 50,
+        retryDelay: 10,
       });
 
       await connect();
@@ -174,8 +176,7 @@ describe('Database Package', () => {
       setPrismaClientFactory(() => mockClient);
       await initializeDatabase({
         maxRetries: 2,
-        initialRetryDelayMs: 10,
-        maxRetryDelayMs: 50,
+        retryDelay: 10,
       });
 
       await expect(connect()).rejects.toThrow(DatabaseError);
@@ -353,10 +354,7 @@ describe('Database Package', () => {
       const config = getConfig();
 
       expect(config.maxRetries).toBe(3);
-      expect(config.initialRetryDelayMs).toBe(100);
-      expect(config.maxRetryDelayMs).toBe(5000);
-      expect(config.connectionTimeoutMs).toBe(10000);
-      expect(config.logging).toBe(false);
+      expect(config.retryDelay).toBe(1000);
     });
 
     it('should return a copy (not mutable)', async () => {

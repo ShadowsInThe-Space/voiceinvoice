@@ -116,6 +116,8 @@ export interface ProcessedPayment {
   paymentIntentId: string;
   /** Idempotency key */
   idempotencyKey: string;
+  /** Stripe Customer ID */
+  stripeCustomerId: string;
 }
 
 /**
@@ -131,7 +133,6 @@ function getStripeClient(): Stripe {
   }
 
   return new Stripe(secretKey, {
-    apiVersion: '2025-12-15.clover',
     typescript: true,
   });
 }
@@ -320,6 +321,7 @@ export async function processCompletedCheckout(sessionId: string): Promise<Proce
     currency: session.currency || 'eur',
     paymentIntentId: paymentIntent?.id || '',
     idempotencyKey: metadata.idempotencyKey || '',
+    stripeCustomerId: (session.customer as string) || '',
   };
 }
 
