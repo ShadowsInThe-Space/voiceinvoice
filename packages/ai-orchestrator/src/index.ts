@@ -822,3 +822,15 @@ export {
   type InvoiceItem,
   type ExtractionResult,
 } from './entity-extraction';
+
+// Re-export RAG module (multi-tenant E2E encryption support)
+export {
+  TenantContext,
+  globalTenantContext,
+  MultiTenantSupabaseClient,
+  createMultiTenantClientFromEnv,
+  type DocumentType,
+  type EncryptedDocument,
+  type StoreDocumentInput,
+  type MultiTenantSupabaseConfig,
+} from './rag';

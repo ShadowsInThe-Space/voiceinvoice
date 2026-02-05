@@ -18,6 +18,7 @@ import { registerTranscribeRoutes } from './routes/transcribe';
 import { registerEnrichRoutes } from './routes/enrich';
 import { registerLicenseRoutes } from './routes/license';
 import { registerSyncRoutes } from './routes/sync';
+import { registerStripeRoutes } from './routes/stripe';
 import { createPrismaLicenseStore, setLicenseStore } from './services/license-store';
 import { getPrismaClient } from './services/prisma';
 
@@ -90,7 +91,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   await server.register(cors, {
     origin: corsOrigin,
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-license-key'],
     credentials: true,
   });
 
@@ -113,7 +114,10 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
       setLicenseStore(licenseStore);
       server.log.info('Using Prisma License Store');
     } catch (error) {
-      server.log.warn({ err: error }, 'Failed to initialize Prisma License Store, falling back to mock');
+      server.log.warn(
+        { err: error },
+        'Failed to initialize Prisma License Store, falling back to mock'
+      );
     }
   }
 
@@ -123,6 +127,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   await registerEnrichRoutes(server);
   await registerLicenseRoutes(server);
   await registerSyncRoutes(server);
+  await registerStripeRoutes(server);
 
   // Global error handler
   server.setErrorHandler((error: FastifyError, _request, reply) => {

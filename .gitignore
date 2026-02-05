@@ -62,6 +62,7 @@ yarn-error.log*
 *.key
 credentials.json
 service-account.json
+apps/desktop/google-credentials.json
 squashfs-root/
 
 *.venv
@@ -70,4 +71,7 @@ squashfs-root/
 archive/
 server_database.sqlite
 
-CLAUDE.md 
+# Worktrees
+.worktrees/
+
+CLAUDE.md
