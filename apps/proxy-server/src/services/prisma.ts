@@ -7,10 +7,18 @@
  * @module services/prisma
  */
 
-import { PrismaClient } from '../../generated/client';
+import { PrismaClient } from '../../../packages/database/generated/server';
 
 // Singleton instance
-let prisma: PrismaClient | null = null;
+let _prisma: PrismaClient | null = null;
+
+/**
+ * Shared prisma instance for direct import.
+ * @deprecated Use getPrismaClient() instead for better lifecycle management.
+ */
+export let prisma: PrismaClient | null = new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
+});
 
 /**
  * Get the Prisma Client instance.
@@ -20,12 +28,12 @@ let prisma: PrismaClient | null = null;
  * @returns {PrismaClient} The Prisma Client
  */
 export function getPrismaClient(): PrismaClient {
-  if (!prisma) {
-    prisma = new PrismaClient({
+  if (!_prisma) {
+    _prisma = new PrismaClient({
       log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
     });
   }
-  return prisma;
+  return _prisma;
 }
 
 /**

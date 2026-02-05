@@ -9,6 +9,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { transcribeAudio } from '../services/speech-service';
+import { createLicenseAuthHook } from './license';
 
 /**
  * Request body schema for transcription.
@@ -53,6 +54,7 @@ export async function registerTranscribeRoutes(server: FastifyInstance): Promise
     Body: TranscribeRequest;
   }>(
     '/transcribe',
+    { preHandler: createLicenseAuthHook() },
     async (request: FastifyRequest<{ Body: TranscribeRequest }>, reply: FastifyReply) => {
       // Validate request body
       const validation = TranscribeRequestSchema.safeParse(request.body);
