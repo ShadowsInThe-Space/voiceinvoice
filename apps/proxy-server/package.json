@@ -22,6 +22,7 @@
     "@google-cloud/aiplatform": "^3.10.0",
     "@google/generative-ai": "^0.21.0",
     "@prisma/client": "^5.9.0",
+    "@sentry/node": "^10.38.0",
     "@voiceinvoice/shared-types": "workspace:*",
     "dotenv": "^17.2.3",
     "fastify": "^5.7.3",
