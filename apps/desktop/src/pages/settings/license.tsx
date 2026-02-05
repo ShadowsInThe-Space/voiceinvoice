@@ -49,9 +49,11 @@ const PLANS = [
 ];
 
 /**
+ * Rendert die Einstellungsseite zur Lizenzverwaltung (Status, Aktivierung und Upgrades).
  *
+ * @returns {JSX.Element} Die gerenderte Seite zur Lizenzverwaltung.
  */
-export default function LicenseSettings() {
+export default function LicenseSettings(): JSX.Element {
   const router = useRouter();
   const [license, setLicense] = useState<License | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,7 +66,12 @@ export default function LicenseSettings() {
     loadStatus();
   }, []);
 
-  const loadStatus = async () => {
+  /**
+   * Lädt den aktuellen Lizenzstatus vom Backend und aktualisiert den lokalen State.
+   *
+   * @returns {Promise<void>} Ein Promise, das nach Abschluss des Ladevorgangs aufgelöst wird.
+   */
+  const loadStatus = async (): Promise<void> => {
     setLoading(true);
     try {
       const status = await licenseApi.getStatus();
@@ -79,7 +86,13 @@ export default function LicenseSettings() {
     }
   };
 
-  const handleUpdateLicense = async (e: React.FormEvent) => {
+  /**
+   * Validiert einen eingegebenen Lizenzschlüssel und speichert die neue Lizenz im State.
+   *
+   * @param {React.FormEvent} e - Submit-Event des Formulars.
+   * @returns {Promise<void>} Ein Promise, das nach Abschluss der Validierung aufgelöst wird.
+   */
+  const handleUpdateLicense = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     if (!inputKey.trim()) return;
 
@@ -99,7 +112,13 @@ export default function LicenseSettings() {
     }
   };
 
-  const handlePurchase = async (planId: string) => {
+  /**
+   * Startet den Kaufprozess für einen Plan, indem eine Stripe-Checkout-Session erstellt wird.
+   *
+   * @param {string} planId - Die ID des auszuwählenden Plans.
+   * @returns {Promise<void>} Ein Promise, das nach dem Start des Redirects aufgelöst wird.
+   */
+  const handlePurchase = async (planId: string): Promise<void> => {
     setPurchasing(planId);
     setError(null);
 
@@ -128,7 +147,13 @@ export default function LicenseSettings() {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  /**
+   * Ermittelt die Tailwind-CSS-Klassen für die Status-Anzeige basierend auf dem Lizenzstatus.
+   *
+   * @param {string} status - Der Lizenzstatus (z. B. `ACTIVE`, `TRIAL`, `EXPIRED`).
+   * @returns {string} CSS-Klassen für Text- und Hintergrundfarbe.
+   */
+  const getStatusColor = (status: string): string => {
     switch (status) {
       case 'ACTIVE':
         return 'text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400';

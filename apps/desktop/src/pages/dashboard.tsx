@@ -1,7 +1,7 @@
 /**
- * Dashboard Page
+ * Dashboard-Seite.
  *
- * Displays analytics overview, recent invoices, and quick actions.
+ * Zeigt eine KPI-Uebersicht, die letzten Rechnungen sowie Schnellaktionen.
  *
  * @module pages/dashboard
  */
@@ -10,7 +10,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 
 /**
- * Dashboard summary data types.
+ * Typen fuer die Dashboard-Zusammenfassung.
  */
 interface RevenueStats {
   total: number;
@@ -59,7 +59,7 @@ interface RecentInvoice {
 }
 
 /**
- * Export data structure for JSON export.
+ * Datenstruktur fuer den JSON-Export.
  */
 interface ExportInvoice {
   number: string;
@@ -75,8 +75,29 @@ interface ExportData {
 }
 
 /**
- * Status configuration for display.
- * Uses theme-aware utility classes for consistent branding.
+ * Repraesentiert ein einzelnes Rechnungs-Item aus der Invoices-List API.
+ */
+interface InvoicesListApiInvoice {
+  id: string;
+  invoiceNumber: string;
+  customerId: string;
+  customerName: string;
+  grossAmount: number;
+  status: string;
+  createdAt: string;
+}
+
+/**
+ * Antwortstruktur der Invoices-List API.
+ */
+interface InvoicesListApiResponse {
+  success: boolean;
+  invoices?: InvoicesListApiInvoice[];
+}
+
+/**
+ * Status-Konfiguration fuer die Anzeige.
+ * Verwendet Theme-kompatible Utility-Classes fuer konsistentes Branding.
  */
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   DRAFT: {
@@ -93,10 +114,10 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
 };
 
 /**
- * Format currency for German locale.
+ * Formatiert einen Geldbetrag fuer die deutsche Locale.
  *
- * @param {number} amount - The numeric amount to format.
- * @returns {string} The formatted currency string.
+ * @param {number} amount - Zu formatierender Betrag.
+ * @returns {string} Formatierter Betrag als Waehrungs-String.
  */
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('de-DE', {
@@ -106,10 +127,10 @@ function formatCurrency(amount: number): string {
 }
 
 /**
- * Format date for German locale.
+ * Formatiert ein Datum fuer die deutsche Locale.
  *
- * @param {Date} date - The date object to format.
- * @returns {string} The formatted date string.
+ * @param {Date} date - Zu formatierendes Datum.
+ * @returns {string} Formatierter Datums-String.
  */
 function formatDate(date: Date): string {
   return new Date(date).toLocaleDateString('de-DE', {
@@ -120,17 +141,17 @@ function formatDate(date: Date): string {
 }
 
 /**
- * Stat Card component.
- * Enhanced with better visual hierarchy and theme-consistent styling.
+ * Statistik-Karte (StatCard) fuer KPI-Kacheln.
+ * Optimiert fuer klare Hierarchie und theme-konsistente Darstellung.
  *
- * @param {object} props - Component properties.
- * @param {string} props.title - Title of the statistic.
- * @param {string | number} props.value - Primary value to display.
- * @param {string} [props.subtitle] - Optional descriptive subtitle.
- * @param {'up' | 'down' | 'stable'} [props.trend] - Direction of the trend.
- * @param {number} [props.trendPercent] - Percentage change for the trend.
- * @param {string} [props.testId] - ID for testing purposes.
- * @returns {React.ReactElement} The rendered StatCard.
+ * @param {object} props - Eigenschaften der Komponente.
+ * @param {string} props.title - Titel der Kennzahl.
+ * @param {string | number} props.value - Primaerer Anzeigewert.
+ * @param {string} [props.subtitle] - Optionale Unterzeile zur Einordnung.
+ * @param {'up' | 'down' | 'stable'} [props.trend] - Trendrichtung der Kennzahl.
+ * @param {number} [props.trendPercent] - Prozentuale Veraenderung fuer den Trend.
+ * @param {string} [props.testId] - Test-ID fuer E2E/Component-Tests.
+ * @returns {React.ReactElement} Gerendertes StatCard-Element.
  */
 function StatCard({
   title,
@@ -186,9 +207,9 @@ function StatCard({
 }
 
 /**
- * Dashboard Page component.
+ * Dashboard-Seitenkomponente.
  *
- * @returns {React.ReactElement} The rendered DashboardPage.
+ * @returns {React.ReactElement} Gerenderte Dashboard-Seite.
  */
 export default function DashboardPage(): React.ReactElement {
   const router = useRouter();
@@ -200,9 +221,11 @@ export default function DashboardPage(): React.ReactElement {
   const exportDropdownRef = React.useRef<HTMLDivElement>(null);
 
   /**
-   * Load dashboard data from API.
+   * Laedt Dashboard-Daten von den APIs und aktualisiert den lokalen State.
+   *
+   * @returns {Promise<void>} Promise, die abgeschlossen ist, sobald Laden/Fehlerbehandlung beendet ist.
    */
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     setError(null);
 
@@ -259,16 +282,18 @@ export default function DashboardPage(): React.ReactElement {
       // Process recent invoices
       let recentInvoicesList: RecentInvoice[] = [];
       if (invoicesResponse.ok) {
-        const invoicesData = await invoicesResponse.json();
+        const invoicesData = (await invoicesResponse.json()) as InvoicesListApiResponse;
         if (invoicesData.success && invoicesData.invoices) {
-          recentInvoicesList = invoicesData.invoices.slice(0, 5).map((inv: any) => ({
-            id: inv.id,
-            number: inv.invoiceNumber,
-            customer: { id: inv.customerId, name: inv.customerName },
-            total: inv.grossAmount,
-            status: inv.status,
-            createdAt: new Date(inv.createdAt),
-          }));
+          recentInvoicesList = invoicesData.invoices.slice(0, 5).map(
+            (inv): RecentInvoice => ({
+              id: inv.id,
+              number: inv.invoiceNumber,
+              customer: { id: inv.customerId, name: inv.customerName },
+              total: inv.grossAmount,
+              status: inv.status,
+              createdAt: new Date(inv.createdAt),
+            })
+          );
         }
       }
 
@@ -287,7 +312,7 @@ export default function DashboardPage(): React.ReactElement {
     loadData();
 
     // Reload data when navigating back to dashboard
-    const handleRouteChange = (url: string) => {
+    const handleRouteChange = (url: string): void => {
       if (url === '/dashboard') {
         loadData();
       }
@@ -295,30 +320,34 @@ export default function DashboardPage(): React.ReactElement {
 
     router.events.on('routeChangeComplete', handleRouteChange);
 
-    return () => {
+    return (): void => {
       router.events.off('routeChangeComplete', handleRouteChange);
     };
   }, [loadData, router.events]);
 
   /**
-   * Navigate to new invoice page.
+   * Navigiert zur Seite fuer eine neue Rechnung.
+   *
+   * @returns {void} Kein Rueckgabewert.
    */
-  const handleNewInvoice = useCallback(() => {
+  const handleNewInvoice = useCallback((): void => {
     router.push('/invoices/new');
   }, [router]);
 
   /**
-   * Toggle export dropdown visibility.
+   * Schaltet die Sichtbarkeit des Export-Dropdowns um.
+   *
+   * @returns {void} Kein Rueckgabewert.
    */
-  const handleExportClick = useCallback(() => {
+  const handleExportClick = useCallback((): void => {
     setShowExportDropdown((prev) => !prev);
   }, []);
 
   /**
-   * Convert invoices to CSV format.
+   * Konvertiert Rechnungen in das CSV-Format.
    *
-   * @param {RecentInvoice[]} invoices - Array of invoices to convert.
-   * @returns {string} CSV formatted string.
+   * @param {RecentInvoice[]} invoices - Liste der zu exportierenden Rechnungen.
+   * @returns {string} CSV-String (inkl. Header-Zeile).
    */
   const convertToCSV = useCallback((invoices: RecentInvoice[]): string => {
     const headers = ['Rechnungsnummer', 'Kunde', 'Datum', 'Betrag', 'Status'];
@@ -339,10 +368,10 @@ export default function DashboardPage(): React.ReactElement {
   }, []);
 
   /**
-   * Convert invoices to JSON export format.
+   * Konvertiert Rechnungen in das JSON-Exportformat.
    *
-   * @param {RecentInvoice[]} invoices - Array of invoices to convert.
-   * @returns {ExportData} JSON export data structure.
+   * @param {RecentInvoice[]} invoices - Liste der zu exportierenden Rechnungen.
+   * @returns {ExportData} Strukturierte Exportdaten fuer JSON.
    */
   const convertToJSON = useCallback((invoices: RecentInvoice[]): ExportData => {
     return {
@@ -358,15 +387,21 @@ export default function DashboardPage(): React.ReactElement {
   }, []);
 
   /**
-   * Trigger file download using Electron IPC or fallback to browser API.
+   * Startet einen Dateidownload per Electron-IPC oder faellt auf Browser-Download zurueck.
    *
-   * @param {string} content - The file content.
-   * @param {string} filename - The filename for download.
-   * @param {string} mimeType - The MIME type of the file.
-   * @param {string} extension - The file extension without dot.
+   * @param {string} content - Dateiinhalt.
+   * @param {string} filename - Dateiname fuer den Download.
+   * @param {string} mimeType - MIME-Type der Datei.
+   * @param {string} extension - Dateiendung ohne Punkt (z.B. "csv").
+   * @returns {Promise<void>} Promise, die abgeschlossen ist, sobald der Download angestossen wurde.
    */
   const downloadFile = useCallback(
-    async (content: string, filename: string, mimeType: string, extension: string) => {
+    async (
+      content: string,
+      filename: string,
+      mimeType: string,
+      extension: string
+    ): Promise<void> => {
       // Try Electron IPC method first
       if (typeof window !== 'undefined' && window.voiceinvoice?.file?.saveFile) {
         try {
@@ -399,9 +434,11 @@ export default function DashboardPage(): React.ReactElement {
   );
 
   /**
-   * Export invoices as CSV.
+   * Exportiert Rechnungen als CSV.
+   *
+   * @returns {Promise<void>} Promise, die nach Abschluss des Export-Flows erfuellt wird.
    */
-  const handleExportCSV = useCallback(async () => {
+  const handleExportCSV = useCallback(async (): Promise<void> => {
     const csvContent = convertToCSV(recentInvoices);
     const timestamp = new Date().toISOString().split('T')[0];
     await downloadFile(csvContent, `rechnungen-${timestamp}.csv`, 'text/csv;charset=utf-8;', 'csv');
@@ -409,9 +446,11 @@ export default function DashboardPage(): React.ReactElement {
   }, [recentInvoices, convertToCSV, downloadFile]);
 
   /**
-   * Export invoices as JSON.
+   * Exportiert Rechnungen als JSON.
+   *
+   * @returns {Promise<void>} Promise, die nach Abschluss des Export-Flows erfuellt wird.
    */
-  const handleExportJSON = useCallback(async () => {
+  const handleExportJSON = useCallback(async (): Promise<void> => {
     const jsonData = convertToJSON(recentInvoices);
     const jsonContent = JSON.stringify(jsonData, null, 2);
     const timestamp = new Date().toISOString().split('T')[0];
@@ -420,10 +459,12 @@ export default function DashboardPage(): React.ReactElement {
   }, [recentInvoices, convertToJSON, downloadFile]);
 
   /**
-   * Close export dropdown when clicking outside.
+   * Schliesst das Export-Dropdown, wenn ausserhalb geklickt wird.
+   *
+   * @returns {void} Kein Rueckgabewert.
    */
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: MouseEvent): void => {
       if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
         setShowExportDropdown(false);
       }
@@ -433,15 +474,17 @@ export default function DashboardPage(): React.ReactElement {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
-    return () => {
+    return (): void => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showExportDropdown]);
 
   /**
-   * Retry loading data.
+   * Startet das Laden der Daten erneut.
+   *
+   * @returns {void} Kein Rueckgabewert.
    */
-  const handleRetry = useCallback(() => {
+  const handleRetry = useCallback((): void => {
     loadData();
   }, [loadData]);
 

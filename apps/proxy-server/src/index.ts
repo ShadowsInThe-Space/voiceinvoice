@@ -80,7 +80,7 @@ export async function startServer(config?: Partial<ServerConfig>): Promise<void>
   }
 
   // Graceful shutdown
-  const shutdown = async () => {
+  const shutdown = async (): Promise<void> => {
     console.log('\nShutting down server...');
     await server.close();
     process.exit(0);

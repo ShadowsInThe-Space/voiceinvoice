@@ -64,6 +64,9 @@ export interface ExtractionResult {
 
 /**
  * Get the Gemini API client.
+ *
+ * @returns GoogleGenerativeAI client configured with `GOOGLE_API_KEY`
+ * @throws {Error} If `GOOGLE_API_KEY` is not set
  */
 function getClient(): GoogleGenerativeAI {
   const apiKey = process.env.GOOGLE_API_KEY;
@@ -253,6 +256,8 @@ If the transcript mentions "brutto" (gross), calculate backwards to get the net 
 /**
  * Check if the Gemini service is available.
  * Used for health checks.
+ *
+ * @returns True if the service is configured and can be used
  */
 export async function checkAvailability(): Promise<boolean> {
   try {

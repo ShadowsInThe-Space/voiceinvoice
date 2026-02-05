@@ -1,7 +1,7 @@
 /**
- * Settings Page
+ * Einstellungsseite.
  *
- * Configuration page for API keys, locale, and TTS settings.
+ * Konfigurationsseite fuer API-Keys, Locale und TTS-Einstellungen.
  *
  * @module pages/settings
  */
@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useCallback, FormEvent } from 'react';
 
 /**
- * Available locale options.
+ * Verfuegbare Locale-Optionen.
  */
 const LOCALE_OPTIONS = [
   { value: 'de-DE', label: 'Deutsch (Deutschland)' },
@@ -17,7 +17,7 @@ const LOCALE_OPTIONS = [
 ];
 
 /**
- * Available TTS voice options.
+ * Verfuegbare TTS-Stimmenoptionen.
  */
 const VOICE_OPTIONS = [
   { value: 'de-DE-Wavenet-A', label: 'Wavenet-A (Weiblich)' },
@@ -29,7 +29,7 @@ const VOICE_OPTIONS = [
 ];
 
 /**
- * LocalStorage keys.
+ * Schluessel fuer `localStorage`.
  */
 const STORAGE_KEYS = {
   apiKey: 'voiceinvoice_google_api_key',
@@ -40,7 +40,9 @@ const STORAGE_KEYS = {
 };
 
 /**
- * Settings Page component.
+ * Einstellungsseite-Komponente.
+ *
+ * @returns {React.ReactElement} React-Komponente fuer die Einstellungsseite.
  */
 export default function SettingsPage(): React.ReactElement {
   // Form state
@@ -73,14 +75,18 @@ export default function SettingsPage(): React.ReactElement {
   }, []);
 
   /**
-   * Toggle API key visibility.
+   * Schaltet die Sichtbarkeit des API-Keys um (Maskierung ein/aus).
+   *
+   * @returns {void} Kein Rueckgabewert.
    */
   const toggleApiKeyVisibility = useCallback(() => {
     setShowApiKey((prev) => !prev);
   }, []);
 
   /**
-   * Validate form.
+   * Validiert das Formular.
+   *
+   * @returns {boolean} `true`, wenn das Formular gueltig ist, sonst `false`.
    */
   const validateForm = useCallback((): boolean => {
     if (!apiKey.trim()) {
@@ -92,7 +98,9 @@ export default function SettingsPage(): React.ReactElement {
   }, [apiKey]);
 
   /**
-   * Save settings to localStorage.
+   * Speichert die Einstellungen in `localStorage`.
+   *
+   * @returns {Promise<void>} Promise, die nach Abschluss des Speicherns aufgeloest wird.
    */
   const handleSave = useCallback(
     async (e: FormEvent) => {
@@ -133,21 +141,27 @@ export default function SettingsPage(): React.ReactElement {
   );
 
   /**
-   * Open reset confirmation dialog.
+   * Oeffnet den Bestaetigungsdialog zum Zuruecksetzen.
+   *
+   * @returns {void} Kein Rueckgabewert.
    */
   const handleResetClick = useCallback(() => {
     setShowResetDialog(true);
   }, []);
 
   /**
-   * Cancel reset.
+   * Bricht das Zuruecksetzen ab und schliesst den Dialog.
+   *
+   * @returns {void} Kein Rueckgabewert.
    */
   const handleResetCancel = useCallback(() => {
     setShowResetDialog(false);
   }, []);
 
   /**
-   * Confirm reset and clear all settings.
+   * Bestaetigt das Zuruecksetzen und loescht alle gespeicherten Einstellungen.
+   *
+   * @returns {void} Kein Rueckgabewert.
    */
   const handleResetConfirm = useCallback(() => {
     localStorage.removeItem(STORAGE_KEYS.apiKey);
@@ -169,9 +183,7 @@ export default function SettingsPage(): React.ReactElement {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-        Einstellungen
-      </h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Einstellungen</h1>
 
       <form role="form" onSubmit={handleSave} className="space-y-8">
         {/* API Configuration Section */}
@@ -220,7 +232,10 @@ export default function SettingsPage(): React.ReactElement {
 
         {/* Integration Section */}
         <section role="group" aria-labelledby="integration-section">
-          <h2 id="integration-section" className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+          <h2
+            id="integration-section"
+            className="text-lg font-medium text-gray-900 dark:text-white mb-4"
+          >
             Integration
           </h2>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
@@ -248,7 +263,10 @@ export default function SettingsPage(): React.ReactElement {
 
         {/* Language Section */}
         <section role="group" aria-labelledby="language-section">
-          <h2 id="language-section" className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+          <h2
+            id="language-section"
+            className="text-lg font-medium text-gray-900 dark:text-white mb-4"
+          >
             Sprache
           </h2>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
@@ -341,9 +359,7 @@ export default function SettingsPage(): React.ReactElement {
                 : 'bg-red-50 text-red-800 dark:bg-red-900/50 dark:text-red-300'
             }`}
           >
-            {saveStatus === 'success'
-              ? 'Einstellungen gespeichert!'
-              : 'Fehler beim Speichern'}
+            {saveStatus === 'success' ? 'Einstellungen gespeichert!' : 'Fehler beim Speichern'}
           </div>
         )}
 
@@ -382,8 +398,8 @@ export default function SettingsPage(): React.ReactElement {
               Zuruecksetzen bestaetigen
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-              Moechten Sie alle Einstellungen auf die Standardwerte zuruecksetzen?
-              Diese Aktion kann nicht rueckgaengig gemacht werden.
+              Moechten Sie alle Einstellungen auf die Standardwerte zuruecksetzen? Diese Aktion kann
+              nicht rueckgaengig gemacht werden.
             </p>
             <div className="flex justify-end gap-3">
               <button
