@@ -53,6 +53,7 @@
     "@vitejs/plugin-react": "^4.2.0",
     "@voiceinvoice/ai-orchestrator": "workspace:*",
     "@voiceinvoice/database": "workspace:*",
+    "@voiceinvoice/encryption-layer": "workspace:*",
     "@voiceinvoice/privacy-engine": "workspace:*",
     "@voiceinvoice/shared-types": "workspace:*",
     "autoprefixer": "^10.4.0",

@@ -33,6 +33,15 @@ export interface CheckoutSessionResponse {
   url: string;
 }
 
+export interface PortalSessionParams {
+  returnUrl: string;
+}
+
+export interface PortalSessionResponse {
+  sessionId: string;
+  url: string;
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 class LicenseApi {
@@ -135,6 +144,30 @@ class LicenseApi {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to create checkout session');
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Create a Stripe Billing Portal session for subscription management.
+   * Requires active license with valid authentication token.
+   * @param params - Portal session parameters
+   * @returns Portal session with redirect URL
+   * @throws Error if not authenticated or portal creation fails
+   */
+  public async createPortalSession(params: PortalSessionParams): Promise<PortalSessionResponse> {
+    const response = await this.fetchWithAuth('/api/stripe/portal', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Unauthorized - please validate your license first');
+      }
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create portal session');
     }
 
     return response.json();
