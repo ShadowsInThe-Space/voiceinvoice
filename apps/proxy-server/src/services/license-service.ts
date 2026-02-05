@@ -19,6 +19,14 @@ export interface LicenseValidationResult {
   };
 }
 
+export interface LicenseTokenPayload {
+  licenseKey: string;
+  companyName: string;
+  expiresAt: Date;
+  monthlyQuota: number;
+  currentUsage: number;
+}
+
 /**
  * Validates a license key.
  * checks existence, status, and expiration.
