@@ -131,7 +131,6 @@ function getStripeClient(): Stripe {
   }
 
   return new Stripe(secretKey, {
-    apiVersion: '2025-12-15.clover',
     typescript: true,
   });
 }

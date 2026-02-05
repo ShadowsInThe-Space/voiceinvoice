@@ -6,9 +6,49 @@
  * @module routes/license
  */
 
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastify';
 import { z } from 'zod';
-import { validateLicense } from '../services/license-service';
+import { validateLicense, LicenseTokenPayload } from '../services/license-service';
+
+/**
+ * Extended FastifyRequest with license information.
+ */
+interface FastifyRequestWithLicense extends FastifyRequest {
+  license?: LicenseTokenPayload;
+}
+
+/**
+ * Creates a Fastify preHandler hook for license-based authentication.
+ *
+ * @returns Fastify preHandler hook
+ */
+export function createLicenseAuthHook(): preHandlerHookHandler {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const licenseKey = request.headers['x-license-key'] as string | undefined;
+
+    if (!licenseKey) {
+      return reply.status(401).send({
+        error: 'License key required',
+        statusCode: 401,
+      });
+    }
+
+    const result = await validateLicense(licenseKey);
+
+    if (!result.isValid) {
+      return reply.status(403).send({
+        error: `License invalid: ${result.error}`,
+        statusCode: 403,
+      });
+    }
+
+    // Attach license info to request for downstream handlers
+    (request as FastifyRequestWithLicense).license = {
+      licenseKey,
+      tenantId: licenseKey, // In this simple impl, licenseKey acts as tenantId
+    } as LicenseTokenPayload;
+  };
+}
 
 /**
  * Request body schema for license validation.
@@ -26,12 +66,14 @@ type ValidateLicenseRequest = z.infer<typeof ValidateLicenseSchema>;
 interface ValidateLicenseResponse {
   isValid: boolean;
   error?: string | undefined;
-  details?: {
-    companyName: string;
-    expiresAt: string; // ISO string
-    monthlyQuota: number;
-    currentUsage: number;
-  } | undefined;
+  details?:
+    | {
+        companyName: string;
+        expiresAt: string; // ISO string
+        monthlyQuota: number;
+        currentUsage: number;
+      }
+    | undefined;
 }
 
 /**

@@ -19,6 +19,8 @@ import {
   STRIPE_ERRORS,
 } from '../services/stripe-service';
 import { getLicenseStore, License } from '../services/license-store';
+import { getPaymentRecordStore } from '../services/payment-record-store';
+import { applyRefundEvent } from '../services/refund-service';
 import { randomBytes } from 'crypto';
 
 /**
@@ -254,6 +256,26 @@ export async function registerStripeRoutes(server: FastifyInstance): Promise<voi
                   (store as { addLicense: (license: License) => void }).addLicense(license);
                 }
 
+                if (payment.paymentIntentId) {
+                  const paymentStore = getPaymentRecordStore();
+                  await paymentStore.addRecord({
+                    sessionId: payment.sessionId,
+                    paymentIntentId: payment.paymentIntentId,
+                    licenseKey,
+                    amountPaid: payment.amountPaid,
+                    currency: payment.currency,
+                    refundedAmount: 0,
+                    refunds: {},
+                    createdAt: now,
+                    updatedAt: now,
+                  });
+                } else {
+                  server.log.warn(
+                    { sessionId: payment.sessionId },
+                    'Missing payment intent ID for payment record'
+                  );
+                }
+
                 server.log.info(
                   {
                     licenseKey,
@@ -287,6 +309,49 @@ export async function registerStripeRoutes(server: FastifyInstance): Promise<voi
                 error: paymentIntent.last_payment_error?.message,
               },
               'Payment failed'
+            );
+            break;
+          }
+
+          case 'refund.created':
+          case 'refund.updated': {
+            const refund = event.data.object as {
+              id: string;
+              amount: number;
+              currency: string;
+              payment_intent: string | null;
+              status: string;
+            };
+
+            if (!refund.payment_intent) {
+              server.log.warn({ refundId: refund.id }, 'Refund missing payment intent');
+              break;
+            }
+
+            const result = await applyRefundEvent({
+              refundId: refund.id,
+              paymentIntentId: refund.payment_intent,
+              amount: refund.amount,
+              currency: refund.currency,
+              status: refund.status,
+            });
+
+            if (!result.handled) {
+              server.log.warn(
+                { refundId: refund.id, paymentIntentId: refund.payment_intent },
+                'Refund payment intent not found'
+              );
+              break;
+            }
+
+            server.log.info(
+              {
+                refundId: refund.id,
+                paymentIntentId: refund.payment_intent,
+                refundedAmount: result.refundedAmount,
+                licenseUpdated: result.licenseUpdated,
+              },
+              'Refund processed'
             );
             break;
           }
