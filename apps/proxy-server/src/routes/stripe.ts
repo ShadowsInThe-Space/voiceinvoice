@@ -239,6 +239,7 @@ export async function registerStripeRoutes(server: FastifyInstance): Promise<voi
                   id: randomBytes(16).toString('hex'),
                   licenseKey,
                   companyName: payment.companyName,
+                  stripeCustomerId: payment.stripeCustomerId,
                   status: 'ACTIVE',
                   monthlyQuota: plan.monthlyQuota,
                   currentUsage: 0,
@@ -288,6 +289,113 @@ export async function registerStripeRoutes(server: FastifyInstance): Promise<voi
               },
               'Payment failed'
             );
+            break;
+          }
+
+          case 'customer.subscription.deleted': {
+            // Customer canceled subscription via Stripe Portal
+            const subscription = event.data.object as {
+              id: string;
+              customer: string;
+              status: string;
+            };
+
+            server.log.info(
+              {
+                subscriptionId: subscription.id,
+                customerId: subscription.customer,
+              },
+              'Subscription deleted - deactivating license'
+            );
+
+            try {
+              // Find license by stripeCustomerId
+              const store = getLicenseStore();
+              if ('updateLicenseByStripeCustomerId' in store) {
+                await (
+                  store as {
+                    updateLicenseByStripeCustomerId: (
+                      customerId: string,
+                      updates: Partial<License>
+                    ) => Promise<void>;
+                  }
+                ).updateLicenseByStripeCustomerId(subscription.customer, {
+                  status: 'EXPIRED',
+                  updatedAt: new Date(),
+                });
+
+                server.log.info(
+                  { customerId: subscription.customer },
+                  'License deactivated after subscription cancellation'
+                );
+              } else {
+                server.log.warn('License store does not support updateLicenseByStripeCustomerId');
+              }
+            } catch (err) {
+              server.log.error(
+                { err, subscriptionId: subscription.id },
+                'Failed to deactivate license after subscription deletion'
+              );
+            }
+            break;
+          }
+
+          case 'customer.subscription.updated': {
+            // Subscription updated (e.g., plan change, payment method update)
+            const subscription = event.data.object as {
+              id: string;
+              customer: string;
+              status: string;
+              cancel_at_period_end: boolean;
+            };
+
+            server.log.info(
+              {
+                subscriptionId: subscription.id,
+                customerId: subscription.customer,
+                status: subscription.status,
+                cancelAtPeriodEnd: subscription.cancel_at_period_end,
+              },
+              'Subscription updated'
+            );
+
+            // If subscription is set to cancel at period end, log warning
+            if (subscription.cancel_at_period_end) {
+              server.log.warn(
+                { customerId: subscription.customer },
+                'Subscription will be canceled at period end'
+              );
+            }
+
+            // If subscription becomes active again (e.g., payment succeeded after failure)
+            if (subscription.status === 'active') {
+              try {
+                const store = getLicenseStore();
+                if ('updateLicenseByStripeCustomerId' in store) {
+                  await (
+                    store as {
+                      updateLicenseByStripeCustomerId: (
+                        customerId: string,
+                        updates: Partial<License>
+                      ) => Promise<void>;
+                    }
+                  ).updateLicenseByStripeCustomerId(subscription.customer, {
+                    status: 'ACTIVE',
+                    updatedAt: new Date(),
+                  });
+
+                  server.log.info(
+                    { customerId: subscription.customer },
+                    'License reactivated after subscription update'
+                  );
+                }
+              } catch (err) {
+                server.log.error(
+                  { err, subscriptionId: subscription.id },
+                  'Failed to update license after subscription update'
+                );
+              }
+            }
             break;
           }
 
