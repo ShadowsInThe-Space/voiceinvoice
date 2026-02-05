@@ -18,6 +18,8 @@ import {
   EncryptedDocumentInput,
 } from '../services/encrypted-sync-service';
 
+type LicenseAuthedRequest = FastifyRequest & { license: LicenseTokenPayload };
+
 /**
  * Schema for POST /api/sync/push request body.
  */
@@ -68,7 +70,7 @@ export async function registerSyncRoutes(server: FastifyInstance): Promise<void>
       }
 
       const { entry } = parseResult.data;
-      const license = (request as any).license as LicenseTokenPayload;
+      const license = (request as LicenseAuthedRequest).license;
 
       const result = await pushEntity(license.licenseKey, entry);
 
@@ -106,7 +108,7 @@ export async function registerSyncRoutes(server: FastifyInstance): Promise<void>
 
       const sinceStr = parseResult.data.since;
       const since = sinceStr ? parseInt(sinceStr, 10) : null;
-      const license = (request as any).license as LicenseTokenPayload;
+      const license = (request as LicenseAuthedRequest).license;
 
       try {
         const result = await pullChanges(license.licenseKey, since);

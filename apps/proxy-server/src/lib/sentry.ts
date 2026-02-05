@@ -110,9 +110,13 @@ export function captureWebhookError(error: Error, context: WebhookErrorContext):
  * addBreadcrumb('Subscription updated', { status: subscription.status });
  * ```
  */
-export function addBreadcrumb(message: string, data?: Record<string, any>): void {
+export function addBreadcrumb(message: string, data?: Record<string, unknown>): void {
   if (process.env.NODE_ENV === 'production') {
-    Sentry.addBreadcrumb({ message, data, level: 'info' });
+    const breadcrumb: Sentry.Breadcrumb = { message, level: 'info' };
+    if (data !== undefined) {
+      breadcrumb.data = data;
+    }
+    Sentry.addBreadcrumb(breadcrumb);
   } else {
     console.log('[Sentry Mock] Breadcrumb:', message, data);
   }
