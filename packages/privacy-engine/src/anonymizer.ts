@@ -77,7 +77,7 @@ export class Anonymizer {
 
     // Helper to find word boundaries
     const wordIndices: {start: number, end: number}[] = [];
-    let regex = /\S+/g;
+    const regex = /\S+/g;
     let match;
     while ((match = regex.exec(this.text)) !== null) {
       wordIndices.push({ start: match.index, end: regex.lastIndex });
