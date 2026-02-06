@@ -8,7 +8,7 @@
  * This module ensures GDPR compliance by processing all
  * personal data before transmission to external services.
  *
- * @packageDocumentation
+ * @file Privacy Engine for VoiceInvoice Enterprise (dual-layer anonymization).
  * @module @voiceinvoice/privacy-engine
  */
 
@@ -236,8 +236,10 @@ export function anonymizeCustomers(text: string, customerNames?: string[]): Anon
 /**
  * Calculates Levenshtein distance between two strings.
  * Used for fuzzy matching in anonymizeCustomers.
- * @param a
- * @param b
+ *
+ * @param a - First string to compare.
+ * @param b - Second string to compare.
+ * @returns Edit distance between the two strings (0 means identical).
  */
 function levenshteinDistance(a: string, b: string): number {
   if (a.length === 0) return b.length;

@@ -1,7 +1,7 @@
 /**
- * Invoice Creation Page
+ * Seite zur Rechnungserstellung.
  *
- * Voice-first invoice creation with transcription, preview, and PDF export.
+ * Voice-first Rechnungserstellung mit Transkription, Vorschau und PDF-Export.
  *
  * @module pages/invoices/new
  */
@@ -24,7 +24,7 @@ import { useSpeechSynthesis } from '../../hooks/useSpeechSynthesis';
 import { PDFExporter } from '../../lib/export/pdf-exporter';
 
 /**
- * Invoice item type.
+ * Rechnungsposition.
  */
 interface InvoiceItem {
   id: string;
@@ -36,7 +36,7 @@ interface InvoiceItem {
 }
 
 /**
- * Customer type for invoice.
+ * Kundendaten zur Rechnung.
  */
 interface CustomerInfo {
   id: string;
@@ -50,7 +50,7 @@ interface CustomerInfo {
 }
 
 /**
- * Invoice type.
+ * Rechnung.
  */
 interface Invoice {
   id: string;
@@ -70,10 +70,59 @@ interface Invoice {
 }
 
 /**
- * Format currency for German locale.
+ * API-Modelle fuer das Edit-Loading (Route: `/api/invoices/[id]`).
  *
- * @param {number} amount - The numeric amount to format.
- * @returns {string} The formatted currency string.
+ * Hinweis: Diese Typen sind bewusst lokal, um `any` zu vermeiden und
+ * die Konvertierung in das UI-Model (`Invoice`) explizit zu halten.
+ */
+interface InvoiceApiItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  unit?: string | null | undefined;
+}
+
+interface InvoiceApiCustomer {
+  name: string;
+  email?: string | null | undefined;
+  phone?: string | null | undefined;
+  address?: string | null | undefined;
+  city?: string | null | undefined;
+  zipCode?: string | null | undefined;
+  taxId?: string | null | undefined;
+}
+
+interface InvoiceApiModel {
+  id: string;
+  invoiceNumber: string;
+  customerId: string;
+  customer: InvoiceApiCustomer;
+  items?: InvoiceApiItem[] | null | undefined;
+  date?: string | null | undefined;
+  dueDate?: string | null | undefined;
+  paymentTerms?: string | null | undefined;
+  notes?: string | null | undefined;
+  taxRate?: number | null | undefined;
+  taxAmount: number;
+  netAmount: number;
+  grossAmount: number;
+  status: string;
+  createdAt: string;
+}
+
+interface FetchInvoiceForEditResponse {
+  success: boolean;
+  invoice?: InvoiceApiModel | null | undefined;
+  error?: string | undefined;
+}
+
+/**
+ * Formatiert einen Betrag als Waehrung im deutschen Locale.
+ *
+ * @param {number} amount - Betrag als Zahl.
+ * @returns {string} Formatierter Betrag (EUR).
  */
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('de-DE', {
@@ -83,9 +132,9 @@ function formatCurrency(amount: number): string {
 }
 
 /**
- * Invoice Creation Page component.
+ * Seite zur Erstellung einer neuen Rechnung.
  *
- * @returns {React.ReactElement} The rendered NewInvoicePage.
+ * @returns {React.ReactElement} Gerenderte Seite.
  */
 export default function NewInvoicePage(): React.ReactElement {
   const router = useRouter();
@@ -163,43 +212,48 @@ export default function NewInvoicePage(): React.ReactElement {
 
     if (!edit || typeof edit !== 'string') return;
 
-    const fetchInvoiceForEdit = async () => {
+    const fetchInvoiceForEdit = async (): Promise<void> => {
       try {
         const response = await fetch(`/api/invoices/${edit}`);
-        const data = await response.json();
+        const data = (await response.json()) as FetchInvoiceForEditResponse;
 
         if (data.success && data.invoice) {
+          // In eine lokale Konstante ziehen, damit TypeScript das Narrowing auch in Callbacks beibehaelt.
+          const invoiceForEdit = data.invoice;
+          const taxRate = invoiceForEdit.taxRate ?? 19;
+          const invoiceItems = invoiceForEdit.items ?? [];
+
           // Switch to manual mode
           setIsManualMode(true);
 
           // Fill form with invoice data
           setManualForm((prev) => ({
             ...prev,
-            customerName: data.invoice.customer?.name || '',
-            customerEmail: data.invoice.customer?.email || '',
-            customerPhone: data.invoice.customer?.phone || '',
-            customerAddress: data.invoice.customer?.address || '',
-            customerCity: data.invoice.customer?.city || '',
-            customerZipCode: data.invoice.customer?.zipCode || '',
-            customerTaxId: data.invoice.customer?.taxId || '',
-            invoiceNumber: data.invoice.invoiceNumber || '',
-            invoiceDate: data.invoice.date
-              ? new Date(data.invoice.date).toISOString().split('T')[0]
+            customerName: invoiceForEdit.customer?.name || '',
+            customerEmail: invoiceForEdit.customer?.email || '',
+            customerPhone: invoiceForEdit.customer?.phone || '',
+            customerAddress: invoiceForEdit.customer?.address || '',
+            customerCity: invoiceForEdit.customer?.city || '',
+            customerZipCode: invoiceForEdit.customer?.zipCode || '',
+            customerTaxId: invoiceForEdit.customer?.taxId || '',
+            invoiceNumber: invoiceForEdit.invoiceNumber || '',
+            invoiceDate: invoiceForEdit.date
+              ? new Date(invoiceForEdit.date).toISOString().split('T')[0]
               : new Date().toISOString().split('T')[0],
-            dueDate: data.invoice.dueDate
-              ? new Date(data.invoice.dueDate).toISOString().split('T')[0]
+            dueDate: invoiceForEdit.dueDate
+              ? new Date(invoiceForEdit.dueDate).toISOString().split('T')[0]
               : '',
             paymentTerms:
-              data.invoice.paymentTerms || 'Zahlbar innerhalb von 14 Tagen nach Rechnungserhalt.',
-            notes: data.invoice.notes || '',
-            items: data.invoice.items?.map((item: any) => ({
+              invoiceForEdit.paymentTerms || 'Zahlbar innerhalb von 14 Tagen nach Rechnungserhalt.',
+            notes: invoiceForEdit.notes || '',
+            items: invoiceItems.map((item: InvoiceApiItem) => ({
               id: item.id,
               description: item.description,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               unit: item.unit || 'Stück',
             })) || [{ id: '1', description: '', quantity: 1, unitPrice: 0, unit: 'Stück' }],
-            taxRate: String(data.invoice.taxRate || 19),
+            taxRate: String(taxRate),
           }));
 
           // Set processing state to complete to show preview
@@ -207,23 +261,23 @@ export default function NewInvoicePage(): React.ReactElement {
 
           // Set the invoice for preview
           const transformedInvoice: Invoice = {
-            id: data.invoice.id,
-            number: data.invoice.invoiceNumber,
-            customerId: data.invoice.customerId,
-            customer: { id: data.invoice.customerId, name: data.invoice.customer.name },
-            items: data.invoice.items.map((item: any) => ({
+            id: invoiceForEdit.id,
+            number: invoiceForEdit.invoiceNumber,
+            customerId: invoiceForEdit.customerId,
+            customer: { id: invoiceForEdit.customerId, name: invoiceForEdit.customer.name },
+            items: invoiceItems.map((item: InvoiceApiItem) => ({
               id: item.id,
               description: item.description,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               total: item.total,
             })),
-            subtotal: data.invoice.netAmount,
-            taxRate: data.invoice.taxRate,
-            taxAmount: data.invoice.taxAmount,
-            total: data.invoice.grossAmount,
-            status: data.invoice.status,
-            createdAt: new Date(data.invoice.createdAt),
+            subtotal: invoiceForEdit.netAmount,
+            taxRate,
+            taxAmount: invoiceForEdit.taxAmount,
+            total: invoiceForEdit.grossAmount,
+            status: invoiceForEdit.status,
+            createdAt: new Date(invoiceForEdit.createdAt),
           };
           setInvoice(transformedInvoice);
         }
@@ -237,7 +291,7 @@ export default function NewInvoicePage(): React.ReactElement {
   }, [router.query]);
 
   /**
-   * Handle recording completion.
+   * Handler nach Abschluss der Audioaufnahme.
    */
   const handleRecordingComplete = useCallback(async (blob: Blob, duration: number) => {
     console.log(
@@ -442,7 +496,7 @@ export default function NewInvoicePage(): React.ReactElement {
   const handleBack = useCallback(() => router.back(), [router]);
 
   /**
-   * Handle manual form field changes.
+   * Handler fuer Aenderungen an Feldern im manuellen Formular.
    */
   const handleManualFormChange = useCallback((field: string, value: string) => {
     setManualForm((prev) => ({ ...prev, [field]: value }));
@@ -474,7 +528,7 @@ export default function NewInvoicePage(): React.ReactElement {
   }, []);
 
   /**
-   * Calculate totals from manual form items
+   * Berechnet Summen aus den Positionen des manuellen Formulars.
    */
   const manualTotals = useMemo(() => {
     let subtotal = 0;
@@ -490,7 +544,7 @@ export default function NewInvoicePage(): React.ReactElement {
   }, [manualForm.items, manualForm.taxRate]);
 
   /**
-   * Generate invoice number.
+   * Generiert eine Rechnungsnummer.
    */
   const generateInvoiceNumber = useCallback(() => {
     const year = new Date().getFullYear();
@@ -499,7 +553,7 @@ export default function NewInvoicePage(): React.ReactElement {
   }, []);
 
   /**
-   * Handle manual form submission.
+   * Handler fuer das Erstellen der Rechnung aus der manuellen Eingabe.
    */
   const handleManualSubmit = useCallback(() => {
     const { subtotal, taxAmount, total } = manualTotals;
@@ -554,7 +608,7 @@ export default function NewInvoicePage(): React.ReactElement {
   }, [manualForm]);
 
   /**
-   * Toggle between voice and manual mode.
+   * Wechselt zwischen Sprach- und manuellem Modus.
    */
   const handleToggleMode = useCallback(() => {
     setIsManualMode((prev) => !prev);

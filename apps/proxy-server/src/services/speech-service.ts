@@ -32,6 +32,9 @@ export interface TranscribeResult {
 /**
  * Get the Gemini API client.
  * Uses GOOGLE_API_KEY environment variable.
+ *
+ * @returns GoogleGenerativeAI client configured with `GOOGLE_API_KEY`
+ * @throws {Error} If `GOOGLE_API_KEY` is not set
  */
 function getClient(): GoogleGenerativeAI {
   const apiKey = process.env.GOOGLE_API_KEY;
@@ -43,7 +46,9 @@ function getClient(): GoogleGenerativeAI {
 
 /**
  * Map audio format to MIME type.
- * @param format
+ *
+ * @param format - Audio format/extension (e.g. `webm`, `wav`, `mp3`)
+ * @returns MIME type for the given format
  */
 function getMimeType(format: string): string {
   const mimeTypes: Record<string, string> = {
@@ -120,7 +125,9 @@ If the audio is silent or empty, respond with [no speech detected].`;
 
 /**
  * Get human-readable language name from BCP-47 code.
- * @param languageCode
+ *
+ * @param languageCode - BCP-47 language code (e.g. `de-DE`, `en-US`)
+ * @returns Human-readable language name used in prompts
  */
 function getLanguageName(languageCode: string): string {
   const languages: Record<string, string> = {
@@ -139,7 +146,9 @@ function getLanguageName(languageCode: string): string {
 
 /**
  * Calculate confidence score based on transcript quality indicators.
- * @param transcript
+ *
+ * @param transcript - Transcribed text (already trimmed)
+ * @returns Confidence score between 0.1 and 1.0
  */
 function calculateConfidence(transcript: string): number {
   if (!transcript || transcript === '[no speech detected]') {
@@ -164,6 +173,8 @@ function calculateConfidence(transcript: string): number {
 /**
  * Check if the speech service is available.
  * Used for health checks.
+ *
+ * @returns True if the service is configured and can be used
  */
 export async function checkAvailability(): Promise<boolean> {
   try {
