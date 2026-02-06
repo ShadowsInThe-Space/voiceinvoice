@@ -79,8 +79,8 @@ function StatusBadge({ success }: { success: boolean }) {
 
 /**
  * Error type badge component.
- * @param root0
- * @param root0.errorType
+ * @param root0 - Component props.
+ * @param root0.errorType - Error type identifier (e.g. `TIMEOUT`, `UNKNOWN`).
  */
 function ErrorTypeBadge({ errorType }: { errorType: string }) {
   const colors: Record<string, string> = {
