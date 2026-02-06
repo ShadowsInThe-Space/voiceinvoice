@@ -33,7 +33,7 @@ import {
   getTimelineInvoicesHandler,
   getTopCustomersHandler,
 } from './ipc/analytics-handlers';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../src/generated/prisma';
 import {
   selectCsvFilesHandler,
   selectFolderHandler,
