@@ -6,7 +6,7 @@
  * @module routes/license
  */
 
-import { FastifyInstance, FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { validateLicense, LicenseTokenPayload } from '../services/license-service';
 
@@ -120,6 +120,7 @@ export function createLicenseAuthHook(): (
       // Attach license details to request
       const licensePayload: LicenseTokenPayload = {
         licenseKey,
+        tenantId: licenseKey,
         ...result.details!,
       };
 

@@ -139,14 +139,14 @@ export class Anonymizer {
   }
 
   private maskEmails(): void {
-    const regex = /\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b/g;
+    const regex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
     this.replaceRegex(regex, 'EMAIL');
   }
 
   private maskIBANs(): void {
     // Basic IBAN regex (Germany starts with DE, 22 chars usually)
     // Covering generic IBAN format
-    const regex = /\\b[A-Z]{2}\\d{2}[ ]?(?:\\d{4}[ ]?){3,6}\\d{0,2}\\b/g;
+    const regex = /\b[A-Z]{2}\d{2}[ ]?(?:\d{4}[ ]?){3,6}\d{0,2}\b/g;
     this.replaceRegex(regex, 'IBAN');
   }
 
@@ -154,14 +154,14 @@ export class Anonymizer {
     // German phone number approximations
     // Examples: +49 123 456789, 0123 456789, 030-123456
     // Min length 7?
-    const regex = /(?:\\+49|0)(?:\\s*\\d){6,}\\b/g;
+    const regex = /(?:\+49|0)(?:\s*\d){6,}\b/g;
     this.replaceRegex(regex, 'PHONE');
   }
 
   private maskAmounts(): void {
     // 100 EUR, 100.00 €, $50
     const regex =
-      /(?:\\b\\d+(?:[.,]\\d{1,2})?\\s?(?:EUR|€|USD|GBP)\\b)|(?:(?:\\$|€|£)\\s?\\d+(?:[.,]\\d{1,2})?\\b)/gi;
+      /(?:\b\d+(?:[.,]\d{1,2})?\s?(?:EUR|€|USD|GBP)\b)|(?:(?:\$|€|£)\s?\d+(?:[.,]\d{1,2})?\b)/gi;
     this.replaceRegex(regex, 'AMOUNT');
   }
 
