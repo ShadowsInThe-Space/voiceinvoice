@@ -218,11 +218,10 @@ export default function InvoicesPage(): React.ReactElement {
             const taxRate = parseTaxRate(inv.taxRate) ?? 19;
             const status = parseInvoiceStatus(inv.status) ?? 'PENDING';
 
-            return {
+            const invoice: Invoice = {
               id: inv.id,
               invoiceNumber: inv.invoiceNumber,
               date: new Date(inv.date),
-              dueDate: inv.dueDate ? new Date(inv.dueDate) : undefined,
               netAmount: inv.netAmount,
               taxRate,
               taxAmount: inv.taxAmount,
@@ -234,6 +233,10 @@ export default function InvoicesPage(): React.ReactElement {
               createdAt: new Date(inv.createdAt),
               updatedAt: new Date(inv.updatedAt),
             };
+            if (inv.dueDate) {
+              invoice.dueDate = new Date(inv.dueDate);
+            }
+            return invoice;
           });
           setInvoices(transformedInvoices);
         } else {

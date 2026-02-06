@@ -162,17 +162,18 @@ export class GoogleChirpClient implements ChirpClient {
     const matches = detectPII(transcript, patternsToRedact);
 
     // 4. Create redaction objects (using original indices)
-    const redactions: ChirpRedaction[] = matches.map((m) => ({
-      type: m.type,
-      original: m.value,
-      start: m.start,
-      end: m.end,
-    }));
+    const redactions: ChirpRedaction[] = matches.map(
+      (m: { type: string; value: string; start: number; end: number }) => ({
+        type: m.type,
+        original: m.value,
+        start: m.start,
+        end: m.end,
+      })
+    );
 
     // 5. Anonymize
     const anonymized = anonymize(transcript, {
       strategy: 'redact',
-      patterns: patternsToRedact,
     });
 
     return {
@@ -236,7 +237,7 @@ export class GoogleChirpClient implements ChirpClient {
 
       console.log('[Chirp3] Transcript length:', transcript.length, 'characters');
       return transcript;
-    } catch (error: any) {
+    } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorCode = (error as { code?: number })?.code;
       console.error('[Chirp3] API call failed:', errorMessage);

@@ -9,7 +9,7 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import { SyncQueue, SyncEngine, ConflictResolver } from '../../src/lib/sync';
-import type { SyncStatus, SyncStats } from '../../src/lib/sync';
+import type { SyncStatus, SyncStats, SyncEntityType } from '../../src/lib/sync';
 
 /**
  * Sync service singleton.
@@ -48,17 +48,23 @@ export function initSyncService(tenantId: string): void {
 
   // Create mock API client for MVP (actual implementation would connect to proxy server)
   const mockApiClient = {
-    pushChanges: async (): Promise<{
-      success: boolean;
-      syncedIds: string[];
-      conflicts: unknown[];
-    }> => ({ success: true, syncedIds: [], conflicts: [] }),
-    pullChanges: async (): Promise<{ entities: unknown[]; lastSyncTimestamp: string }> => ({
-      entities: [],
-      lastSyncTimestamp: new Date().toISOString(),
+    push: async (): Promise<{ success: boolean; serverData?: Record<string, unknown> }> => ({
+      success: true,
     }),
-    getServerVersion: async (_entityType: string, _entityId: string): Promise<null> => null,
-    healthCheck: async (): Promise<boolean> => isOnline,
+    pull: async (): Promise<{
+      data: Array<{
+        entityType: SyncEntityType;
+        entityId: string;
+        operation: 'CREATE' | 'UPDATE' | 'DELETE';
+        data: Record<string, unknown>;
+        serverVersion?: number;
+      }>;
+      lastSyncTimestamp: number;
+    }> => ({
+      data: [],
+      lastSyncTimestamp: Date.now(),
+    }),
+    checkConnection: async (): Promise<boolean> => isOnline,
   };
 
   // Initialize sync engine
@@ -70,9 +76,9 @@ export function initSyncService(tenantId: string): void {
   });
 
   // Listen for online/offline events
-  syncEngine.onConnectionChange((online) => {
-    isOnline = online;
-    notifyRenderer('sync:connection-changed', { isOnline: online });
+  syncEngine.onConnectionChange((state) => {
+    isOnline = state === 'ONLINE';
+    notifyRenderer('sync:connection-changed', { isOnline: state === 'ONLINE' });
   });
 
   syncEngine.onSyncComplete((result) => {
@@ -126,7 +132,9 @@ export function registerSyncHandlers(): void {
       isOnline,
       status: syncEngine.getStatus(),
       pendingChanges: pending.length,
-      lastSyncAt: syncEngine.getLastSyncTimestamp(),
+      lastSyncAt: syncEngine.getLastSyncTimestamp()
+        ? new Date(syncEngine.getLastSyncTimestamp()!).toISOString()
+        : null,
       stats: syncEngine.getStats(),
     };
   });
