@@ -143,8 +143,13 @@ const DEFAULT_CONFIG: Partial<OpenAIPipelineConfig> = {
 export class OpenAIPipelineClient extends EventEmitter {
   private config: OpenAIPipelineConfig;
   private conversationHistory: ChatMessage[] = [];
-  private pendingToolCalls: Map<string, { name: string; args: Record<string, unknown> }> = new Map();
+  private pendingToolCalls: Map<string, { name: string; args: Record<string, unknown> }> =
+    new Map();
 
+  /**
+   *
+   * @param config
+   */
   constructor(config: OpenAIPipelineConfig) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config } as OpenAIPipelineConfig;
@@ -179,6 +184,7 @@ export class OpenAIPipelineClient extends EventEmitter {
 
   /**
    * Send text directly (skip transcription).
+   * @param text
    */
   async sendText(text: string): Promise<void> {
     try {
@@ -190,6 +196,8 @@ export class OpenAIPipelineClient extends EventEmitter {
 
   /**
    * Send function result back to continue conversation.
+   * @param callId
+   * @param result
    */
   async sendFunctionResult(callId: string, result: unknown): Promise<void> {
     const toolCall = this.pendingToolCalls.get(callId);
@@ -213,6 +221,7 @@ export class OpenAIPipelineClient extends EventEmitter {
 
   /**
    * Transcribe audio using Whisper.
+   * @param audioBlob
    */
   private async transcribe(audioBlob: Blob): Promise<string> {
     const { apiKey, whisperModel, language } = this.config;
@@ -243,6 +252,7 @@ export class OpenAIPipelineClient extends EventEmitter {
 
   /**
    * Chat with GPT and synthesize response.
+   * @param userMessage
    */
   private async chat(userMessage: string): Promise<void> {
     const { apiKey, chatModel, tools } = this.config;
@@ -285,6 +295,7 @@ export class OpenAIPipelineClient extends EventEmitter {
 
   /**
    * Process streaming chat response.
+   * @param response
    */
   private async processStreamingResponse(response: Response): Promise<void> {
     const reader = response.body?.getReader();
@@ -294,11 +305,15 @@ export class OpenAIPipelineClient extends EventEmitter {
 
     const decoder = new TextDecoder();
     let fullResponse = '';
-    let toolCalls: Array<{ id: string; name: string; arguments: string }> = [];
+    const toolCalls: Array<{ id: string; name: string; arguments: string }> = [];
 
-    while (true) {
+    let streamDone = false;
+    while (!streamDone) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        streamDone = true;
+        continue;
+      }
 
       const chunk = decoder.decode(value, { stream: true });
       const lines = chunk.split('\n').filter((line) => line.startsWith('data: '));
@@ -413,6 +428,7 @@ export class OpenAIPipelineClient extends EventEmitter {
 
   /**
    * Synthesize text to speech using OpenAI TTS.
+   * @param text
    */
   private async synthesize(text: string): Promise<void> {
     const { apiKey, ttsModel, voice, responseFormat, speed } = this.config;
@@ -445,9 +461,13 @@ export class OpenAIPipelineClient extends EventEmitter {
       throw new Error('No audio response');
     }
 
-    while (true) {
+    let streamDone = false;
+    while (!streamDone) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        streamDone = true;
+        continue;
+      }
 
       this.emit('audioDelta', value.buffer);
     }
