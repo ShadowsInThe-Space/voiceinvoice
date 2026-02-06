@@ -356,7 +356,7 @@ export class SyncEngine {
 
     const errors: Error[] = [];
     let pushed = 0;
-    let conflicts = 0;
+    const conflicts = 0;
 
     try {
       const pending = this.queue.getPending();
@@ -453,8 +453,7 @@ export class SyncEngine {
         const localPending = this.queue
           .getPending()
           .find(
-            (e) =>
-              e.entityType === serverChange.entityType && e.entityId === serverChange.entityId
+            (e) => e.entityType === serverChange.entityType && e.entityId === serverChange.entityId
           );
 
         if (localPending) {
