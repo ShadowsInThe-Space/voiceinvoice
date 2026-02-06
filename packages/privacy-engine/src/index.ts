@@ -14,6 +14,21 @@
 
 import { Anonymizer } from './anonymizer';
 
+export { GoogleChirpClient } from './chirp-client';
+export { DualLayerPrivacy, PrivacyTokenManager } from './dual-layer-privacy';
+export type {
+  ChirpRedactionConfig,
+  ChirpTranscriptionResult,
+  ChirpRedaction,
+  ChirpClient,
+  DualLayerConfig,
+  DualLayerResult,
+  ServerPrivacyLayerConfig,
+  ClientPrivacyLayerConfig,
+  CustomerMatch,
+  FuzzyMatchConfig,
+} from './dual-layer-privacy';
+
 /**
  * Token mapping for reversible anonymization.
  *
@@ -299,6 +314,74 @@ export function deanonymize(anonymizedText: string, tokenMap: TokenMap): string 
     result = result.replace(new RegExp(`\\[${token}\\]`, 'g'), value);
   }
   return result;
+}
+
+/**
+ * Supported PII pattern types for detection and redaction.
+ */
+export type PIIPattern = 'EMAIL' | 'PHONE' | 'IBAN' | 'TAX_ID' | 'AMOUNT';
+
+/**
+ * Result of a single PII detection match.
+ */
+export interface PIIMatch {
+  /** Type of PII detected */
+  type: PIIPattern;
+  /** Matched value */
+  value: string;
+  /** Start position in source text */
+  start: number;
+  /** End position in source text */
+  end: number;
+}
+
+/**
+ * Regex patterns for PII detection.
+ */
+const PII_REGEXES: Record<PIIPattern, RegExp> = {
+  EMAIL: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+  PHONE: /(?:\+49|0049|0)\s?\(?\d{2,5}\)?\s?[\d\s/-]{4,12}\d/g,
+  IBAN: /\b[A-Z]{2}\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{0,2}\b/g,
+  TAX_ID: /\b\d{2,3}\/\d{3}\/\d{4,5}\b/g,
+  AMOUNT: /\b\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s?(?:EUR|€|Euro)\b/gi,
+};
+
+/**
+ * Detects PII patterns in text.
+ *
+ * Scans the given text for known PII patterns (email, phone, IBAN, etc.)
+ * and returns all matches with their positions.
+ *
+ * @param text - The text to scan for PII
+ * @param patterns - Which PII patterns to detect (defaults to all)
+ * @returns Array of PII matches found
+ *
+ * @example
+ * const matches = detectPII('Kontakt: test@example.com', ['EMAIL']);
+ * // [{ type: 'EMAIL', value: 'test@example.com', start: 9, end: 25 }]
+ */
+export function detectPII(text: string, patterns?: PIIPattern[]): PIIMatch[] {
+  const activePatterns = patterns ?? (Object.keys(PII_REGEXES) as PIIPattern[]);
+  const matches: PIIMatch[] = [];
+
+  for (const pattern of activePatterns) {
+    const regex = PII_REGEXES[pattern];
+    if (!regex) continue;
+
+    const re = new RegExp(regex.source, regex.flags);
+    let match: RegExpExecArray | null;
+
+    while ((match = re.exec(text)) !== null) {
+      matches.push({
+        type: pattern,
+        value: match[0],
+        start: match.index,
+        end: match.index + match[0].length,
+      });
+    }
+  }
+
+  return matches.sort((a, b) => a.start - b.start);
 }
 
 /**

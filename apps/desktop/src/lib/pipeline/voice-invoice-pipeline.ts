@@ -23,13 +23,6 @@ import type {
   InvoiceWithRelations,
 } from '../database/database-service';
 import type { PrivacyEngine, ConsentType } from '../privacy/privacy-engine';
-import {
-  AgentOrchestrator,
-  type Intent,
-  type IntentResult,
-  type WorkflowIntent,
-} from '@voiceinvoice/ai-orchestrator';
-import { triggerWorkflow, type WorkflowResult, type WorkflowParams } from '../workflow';
 import { anonymize, deanonymize } from '@voiceinvoice/privacy-engine';
 
 /**
@@ -272,10 +265,7 @@ export class VoiceInvoicePipeline {
 
     // Step 5 & 6: Create invoice in database
     try {
-      const invoice = await this.createInvoiceFromParsed(
-        deanonymizedInvoice,
-        transcription
-      );
+      const invoice = await this.createInvoiceFromParsed(deanonymizedInvoice, transcription);
 
       return {
         success: true,
@@ -301,7 +291,10 @@ export class VoiceInvoicePipeline {
    * @param tokenMap - Map of tokens to original values
    * @returns Invoice with restored PII
    */
-  private deanonymizeInvoice(invoice: ParsedInvoice, tokenMap: Record<string, string>): ParsedInvoice {
+  private deanonymizeInvoice(
+    invoice: ParsedInvoice,
+    tokenMap: Record<string, string>
+  ): ParsedInvoice {
     const result = { ...invoice };
 
     if (result.customerName) {
@@ -388,7 +381,12 @@ export class VoiceInvoicePipeline {
 
     // Map parsed invoice to database input
     const items = parsedInvoice.items.map((item) => {
-      const dbItem: { description: string; quantity: number; unitPrice: number; category?: string } = {
+      const dbItem: {
+        description: string;
+        quantity: number;
+        unitPrice: number;
+        category?: string;
+      } = {
         description: item.description,
         quantity: item.quantity,
         unitPrice: item.unitPrice,

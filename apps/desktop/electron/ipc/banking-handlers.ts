@@ -7,7 +7,7 @@
  */
 
 import { dialog } from 'electron';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../src/generated/prisma';
 import { BankingService, CONFIDENCE_THRESHOLDS } from '../../src/lib/banking/banking-service';
 
 /**
