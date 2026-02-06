@@ -263,7 +263,7 @@ function ErrorBreakdownChart({ data, loading }: { data: ErrorTypeBreakdown[]; lo
  * @param props - Component props
  * @param props.dailyCounts
  * @param props.successRates
- * @param props.errorBreakdown
+ * @param props.errorBreakdown - Error counts grouped by error type for the breakdown chart.
  * @param props.loading
  * @returns Statistics charts
  *

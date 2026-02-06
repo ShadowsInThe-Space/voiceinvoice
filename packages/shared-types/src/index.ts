@@ -4,7 +4,6 @@
  * This package provides the core type definitions and runtime validation
  * schemas used across the desktop application and proxy server.
  *
- * @packageDocumentation
  * @module @voiceinvoice/shared-types
  */
 
