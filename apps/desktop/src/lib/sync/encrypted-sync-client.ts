@@ -78,7 +78,9 @@ export class EncryptedSyncClient {
   constructor(config: EncryptedSyncConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
     this.getAuthToken = config.getAuthToken;
-    this.generateEmbedding = config.generateEmbedding;
+    if (config.generateEmbedding) {
+      this.generateEmbedding = config.generateEmbedding;
+    }
     this.timeoutMs = config.timeoutMs ?? 10000;
   }
 
@@ -122,15 +124,17 @@ export class EncryptedSyncClient {
       document_type: this.mapEntityTypeToDocumentType(entry.entityType),
       encrypted_content: encryptedContent,
       iv,
-      embedding,
       metadata: {
         entity_id: entry.entityId,
         entity_type: entry.entityType,
         operation: entry.operation,
         timestamp: entry.timestamp,
       },
-      sync_version: entry.version ?? 1,
+      sync_version: 1,
     };
+    if (embedding) {
+      payload.embedding = embedding;
+    }
 
     // Send to server
     const response = await this.fetchWithAuth('/api/sync/encrypted', {
@@ -273,7 +277,7 @@ export class EncryptedSyncClient {
     const data = entry.data as Record<string, unknown>;
 
     switch (entry.entityType) {
-      case 'INVOICE': {
+      case 'invoice': {
         const parts = [
           data.customerName,
           data.description,
@@ -285,12 +289,12 @@ export class EncryptedSyncClient {
         return parts.length > 0 ? parts.join(' ') : null;
       }
 
-      case 'CUSTOMER': {
+      case 'customer': {
         const parts = [data.name, data.company, data.notes].filter(Boolean);
         return parts.length > 0 ? parts.join(' ') : null;
       }
 
-      case 'RECORDING': {
+      case 'recording': {
         return (data.transcript as string) || null;
       }
 
@@ -305,14 +309,15 @@ export class EncryptedSyncClient {
    */
   private mapEntityTypeToDocumentType(entityType: SyncEntityType): string {
     const mapping: Record<SyncEntityType, string> = {
-      INVOICE: 'invoice',
-      CUSTOMER: 'customer',
-      RECORDING: 'recording',
-      CATEGORY: 'category',
-      BANK_TRANSACTION: 'bank_transaction',
-      APP_SETTINGS: 'app_settings',
+      customer: 'customer',
+      invoice: 'invoice',
+      invoiceItem: 'invoice_item',
+      recording: 'recording',
+      category: 'category',
+      bankTransaction: 'bank_transaction',
+      appSettings: 'app_settings',
     };
-    return mapping[entityType] || entityType.toLowerCase();
+    return mapping[entityType] || entityType;
   }
 
   /**
@@ -356,9 +361,12 @@ export function createEncryptedSyncClientFromEnv(
 ): EncryptedSyncClient {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-  return new EncryptedSyncClient({
+  const config: EncryptedSyncConfig = {
     baseUrl,
     getAuthToken,
-    generateEmbedding,
-  });
+  };
+  if (generateEmbedding) {
+    config.generateEmbedding = generateEmbedding;
+  }
+  return new EncryptedSyncClient(config);
 }

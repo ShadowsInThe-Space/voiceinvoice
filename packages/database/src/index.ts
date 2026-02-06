@@ -340,12 +340,19 @@ export function getConfig(): DatabaseConfig {
  * Executes an operation with retry logic.
  *
  * @param operation - The operation to execute
+ * @param options - Optional retry configuration overrides
+ * @param options.maxRetries
+ * @param options.initialDelayMs
+ * @param options.maxDelayMs
  * @returns The operation result
  * @throws {DatabaseError} If all retries fail
  */
-export async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
-  const maxRetries = config.maxRetries || 3;
-  const retryDelay = config.retryDelay || 1000;
+export async function withRetry<T>(
+  operation: () => Promise<T>,
+  options?: { maxRetries?: number; initialDelayMs?: number; maxDelayMs?: number }
+): Promise<T> {
+  const maxRetries = options?.maxRetries ?? config.maxRetries ?? 3;
+  const retryDelay = options?.initialDelayMs ?? config.retryDelay ?? 1000;
 
   let lastError: Error | null = null;
 

@@ -21,37 +21,11 @@ export interface LicenseValidationResult {
 
 export interface LicenseTokenPayload {
   licenseKey: string;
+  tenantId: string;
   companyName: string;
   expiresAt: Date;
   monthlyQuota: number;
   currentUsage: number;
-}
-
-/**
- * Token payload for license-based authentication.
- */
-export interface LicenseTokenPayload {
-  licenseKey: string;
-  tenantId: string;
-}
-
-/**
- * Standard license error messages.
- */
-export const LICENSE_ERRORS = {
-  LICENSE_NOT_FOUND: 'License not found',
-  QUOTA_EXCEEDED: 'Monthly quota exceeded',
-  EXPIRED: 'License has expired',
-  INACTIVE: 'License is inactive',
-  INVALID_KEY: 'Invalid license key',
-} as const;
-
-/**
- * Token payload for license-based authentication.
- */
-export interface LicenseTokenPayload {
-  licenseKey: string;
-  tenantId: string;
 }
 
 /**

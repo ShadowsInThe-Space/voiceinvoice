@@ -81,9 +81,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
    * @param error - Der aufgetretene Fehler
    * @param errorInfo - React Error Info mit Component Stack
    */
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+  override componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     if (process.env.NODE_ENV === 'production') {
-      Sentry.captureException(error, { extra: errorInfo });
+      Sentry.captureException(error, { extra: { componentStack: errorInfo.componentStack } });
     } else {
       console.error('[ErrorBoundary]', error, errorInfo);
     }
@@ -112,7 +112,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
    *
    * @returns React Element
    */
-  render(): React.ReactNode {
+  override render(): React.ReactNode {
     if (this.state.hasError) {
       return (
         <div style={{ padding: '2rem', textAlign: 'center' }}>
