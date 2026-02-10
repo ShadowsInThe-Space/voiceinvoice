@@ -249,9 +249,40 @@ interface PrismaLicenseClient {
   /** License model operations */
   license: {
     /** Find a unique license by criteria */
-    findUnique: (args: { where: { licenseKey: string } }) => Promise<License | null>;
+    findUnique: (args: { where: { licenseKey: string } }) => Promise<{
+      id: string;
+      licenseKey: string;
+      companyName: string;
+      status: string;
+      monthlyQuota: number;
+      currentUsage: number;
+      usageResetDate: Date;
+      expiresAt: Date;
+      stripeCustomerId: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    } | null>;
     /** Update a license record */
-    update: (args: { where: { licenseKey: string }; data: Partial<License> }) => Promise<License>;
+    update: (args: {
+      where: { licenseKey: string };
+      data: Partial<{
+        currentUsage: number;
+        usageResetDate: Date;
+        status: string;
+      }>;
+    }) => Promise<{
+      id: string;
+      licenseKey: string;
+      companyName: string;
+      status: string;
+      monthlyQuota: number;
+      currentUsage: number;
+      usageResetDate: Date;
+      expiresAt: Date;
+      stripeCustomerId: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
   };
 }
 
@@ -273,6 +304,42 @@ interface PrismaLicenseClient {
  * ```
  */
 export function createPrismaLicenseStore(prisma: PrismaLicenseClient): LicenseStore {
+  /**
+   * Convert Prisma license type to License interface type.
+   * Converts null to undefined for optional fields.
+   * @param prismaLicense
+   * @param prismaLicense.id
+   * @param prismaLicense.licenseKey
+   * @param prismaLicense.companyName
+   * @param prismaLicense.status
+   * @param prismaLicense.monthlyQuota
+   * @param prismaLicense.currentUsage
+   * @param prismaLicense.usageResetDate
+   * @param prismaLicense.expiresAt
+   * @param prismaLicense.stripeCustomerId
+   * @param prismaLicense.createdAt
+   * @param prismaLicense.updatedAt
+   */
+  const convertToLicense = (prismaLicense: {
+    id: string;
+    licenseKey: string;
+    companyName: string;
+    status: string;
+    monthlyQuota: number;
+    currentUsage: number;
+    usageResetDate: Date;
+    expiresAt: Date;
+    stripeCustomerId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): License => {
+    const { stripeCustomerId, ...rest } = prismaLicense;
+    return {
+      ...rest,
+      ...(stripeCustomerId !== null && { stripeCustomerId }),
+    };
+  };
+
   return {
     async getLicense(licenseKey: string): Promise<License | null> {
       const license = await prisma.license.findUnique({
@@ -293,10 +360,10 @@ export function createPrismaLicenseStore(prisma: PrismaLicenseClient): LicenseSt
             usageResetDate: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
           },
         });
-        return updatedLicense;
+        return convertToLicense(updatedLicense);
       }
 
-      return license;
+      return convertToLicense(license);
     },
 
     async incrementUsage(licenseKey: string): Promise<UsageIncrementResult> {
@@ -319,10 +386,11 @@ export function createPrismaLicenseStore(prisma: PrismaLicenseClient): LicenseSt
 
     async updateStatus(licenseKey: string, status: string): Promise<License | null> {
       try {
-        return await prisma.license.update({
+        const updated = await prisma.license.update({
           where: { licenseKey },
           data: { status },
         });
+        return convertToLicense(updated);
       } catch {
         return null;
       }
