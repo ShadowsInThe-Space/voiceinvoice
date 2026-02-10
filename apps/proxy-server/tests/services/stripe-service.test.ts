@@ -65,6 +65,8 @@ describe('Stripe Service', () => {
       expect(STRIPE_ERRORS.INVALID_SIGNATURE).toBe('Invalid webhook signature');
       expect(STRIPE_ERRORS.SESSION_NOT_FOUND).toBe('Checkout session not found');
       expect(STRIPE_ERRORS.PAYMENT_INCOMPLETE).toBe('Payment not completed');
+      expect(STRIPE_ERRORS.CUSTOMER_NOT_FOUND).toBe('Stripe customer not found');
+      expect(STRIPE_ERRORS.LICENSE_NOT_FOUND).toBe('License not found for customer');
     });
   });
 
@@ -257,6 +259,39 @@ describe('Stripe Service', () => {
 
       expect(() => verifyWebhookSignature(Buffer.from('{}'), 'invalid_signature')).toThrow(
         STRIPE_ERRORS.INVALID_SIGNATURE
+      );
+    });
+  });
+
+  describe('createBillingPortalSession', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      vi.resetModules();
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it('should throw error when STRIPE_SECRET_KEY is not set', async () => {
+      delete process.env.STRIPE_SECRET_KEY;
+
+      const { createBillingPortalSession } = await import('../../src/services/stripe-service');
+
+      await expect(
+        createBillingPortalSession('cus_xxx', 'https://example.com/settings')
+      ).rejects.toThrow(STRIPE_ERRORS.MISSING_SECRET_KEY);
+    });
+
+    it('should throw error when stripeCustomerId is empty', async () => {
+      process.env.STRIPE_SECRET_KEY = 'sk_test_xxx';
+
+      const { createBillingPortalSession } = await import('../../src/services/stripe-service');
+
+      await expect(createBillingPortalSession('', 'https://example.com/settings')).rejects.toThrow(
+        STRIPE_ERRORS.CUSTOMER_NOT_FOUND
       );
     });
   });

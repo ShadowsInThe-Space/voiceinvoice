@@ -6,7 +6,7 @@
  * @module services/license-service
  */
 
-import { getPrismaClient } from './prisma';
+import { getLicenseStore } from './license-store';
 
 export interface LicenseValidationResult {
   isValid: boolean;
@@ -48,10 +48,8 @@ export const LICENSE_ERRORS = {
  */
 export async function validateLicense(licenseKey: string): Promise<LicenseValidationResult> {
   try {
-    const prisma = getPrismaClient();
-    const license = await prisma.license.findUnique({
-      where: { licenseKey },
-    });
+    const store = getLicenseStore();
+    const license = await store.getLicense(licenseKey);
 
     if (!license) {
       return { isValid: false, error: 'INVALID_KEY' };

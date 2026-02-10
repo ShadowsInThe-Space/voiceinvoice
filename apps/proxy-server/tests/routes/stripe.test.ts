@@ -9,16 +9,43 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { buildServer } from '../../src/server';
 import type { FastifyInstance } from 'fastify';
+import {
+  createMockLicenseStore,
+  setLicenseStore,
+  type License,
+} from '../../src/services/license-store';
 
 describe('Stripe Routes', () => {
   let server: FastifyInstance;
+  let mockLicenseStore: ReturnType<typeof createMockLicenseStore>;
 
   beforeEach(async () => {
+    // Create and set up mock license store
+    mockLicenseStore = createMockLicenseStore();
+    setLicenseStore(mockLicenseStore);
+
+    // Add a valid test license
+    const testLicense: License = {
+      id: 'test-license-id',
+      licenseKey: 'TEST-VALID-KEY',
+      companyName: 'Test Company',
+      status: 'ACTIVE',
+      monthlyQuota: 100,
+      currentUsage: 0,
+      usageResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      stripeCustomerId: 'cus_test123',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mockLicenseStore.addLicense(testLicense);
+
     server = await buildServer({ logger: false });
   });
 
   afterEach(async () => {
     await server.close();
+    setLicenseStore(null);
   });
 
   describe('GET /api/stripe/plans', () => {
@@ -240,6 +267,132 @@ describe('Stripe Routes', () => {
 
       // Should return 400 because session doesn't exist
       expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe('POST /api/stripe/billing-portal', () => {
+    it('should return 401 when no license key is provided', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/stripe/billing-portal',
+        payload: {
+          returnUrl: 'https://example.com/settings',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = JSON.parse(response.body);
+      expect(body.error).toContain('Missing license key');
+    });
+
+    it('should return 400 for invalid returnUrl', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/stripe/billing-portal',
+        headers: {
+          'x-license-key': 'TEST-VALID-KEY',
+        },
+        payload: {
+          returnUrl: 'not-a-url',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = JSON.parse(response.body);
+      expect(body.error).toContain('Url');
+    });
+
+    it('should return 400 for missing returnUrl', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/stripe/billing-portal',
+        headers: {
+          'x-license-key': 'TEST-VALID-KEY',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = JSON.parse(response.body);
+      expect(body.error).toBeDefined();
+    });
+
+    it('should return 403 for invalid license key', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/stripe/billing-portal',
+        headers: {
+          'x-license-key': 'INVALID-KEY',
+        },
+        payload: {
+          returnUrl: 'https://example.com/settings',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+
+      const body = JSON.parse(response.body);
+      expect(body.error).toBe('INVALID_KEY');
+    });
+
+    it('should return 400 when license has no stripeCustomerId', async () => {
+      // Add a license without stripeCustomerId
+      const licenseWithoutCustomer: License = {
+        id: 'no-customer-id',
+        licenseKey: 'TEST-NO-CUSTOMER',
+        companyName: 'No Customer Company',
+        status: 'ACTIVE',
+        monthlyQuota: 100,
+        currentUsage: 0,
+        usageResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        stripeCustomerId: undefined,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockLicenseStore.addLicense(licenseWithoutCustomer);
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/stripe/billing-portal',
+        headers: {
+          'x-license-key': 'TEST-NO-CUSTOMER',
+        },
+        payload: {
+          returnUrl: 'https://example.com/settings',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      const body = JSON.parse(response.body);
+      expect(body.error).toContain('No billing information');
+    });
+
+    it('should return 500 when Stripe key is not configured', async () => {
+      const originalKey = process.env.STRIPE_SECRET_KEY;
+      delete process.env.STRIPE_SECRET_KEY;
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/stripe/billing-portal',
+        headers: {
+          'x-license-key': 'TEST-VALID-KEY',
+        },
+        payload: {
+          returnUrl: 'https://example.com/settings',
+        },
+      });
+
+      process.env.STRIPE_SECRET_KEY = originalKey;
+
+      expect(response.statusCode).toBe(500);
+
+      const body = JSON.parse(response.body);
+      expect(body.error).toContain('STRIPE_SECRET_KEY');
     });
   });
 });
