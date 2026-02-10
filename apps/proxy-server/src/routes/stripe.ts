@@ -389,7 +389,7 @@ export async function registerStripeRoutes(server: FastifyInstance): Promise<voi
    */
   server.post<{
     Body: {
-      returnUrl?: string;
+      returnUrl: string;
     };
   }>(
     '/api/stripe/billing-portal',

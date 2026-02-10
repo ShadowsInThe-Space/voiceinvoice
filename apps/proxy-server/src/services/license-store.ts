@@ -307,7 +307,8 @@ export function createPrismaLicenseStore(prisma: PrismaLicenseClient): LicenseSt
   /**
    * Convert Prisma license type to License interface type.
    * Converts null to undefined for optional fields.
-   * @param prismaLicense
+   *
+   * @param prismaLicense - Prisma license object with nullable fields
    * @param prismaLicense.id
    * @param prismaLicense.licenseKey
    * @param prismaLicense.companyName
@@ -319,6 +320,7 @@ export function createPrismaLicenseStore(prisma: PrismaLicenseClient): LicenseSt
    * @param prismaLicense.stripeCustomerId
    * @param prismaLicense.createdAt
    * @param prismaLicense.updatedAt
+   * @returns License object with proper TypeScript optional fields
    */
   const convertToLicense = (prismaLicense: {
     id: string;
