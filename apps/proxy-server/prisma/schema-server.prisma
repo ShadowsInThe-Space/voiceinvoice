@@ -48,6 +48,7 @@ model License {
 
   @@index([licenseKey])
   @@index([status])
+  @@index([stripeCustomerId])
 }
 
 /// Generic storage for synced entities.
