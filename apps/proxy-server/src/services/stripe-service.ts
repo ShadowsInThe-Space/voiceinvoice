@@ -70,6 +70,8 @@ export const STRIPE_ERRORS = {
   INVALID_SIGNATURE: 'Invalid webhook signature',
   SESSION_NOT_FOUND: 'Checkout session not found',
   PAYMENT_INCOMPLETE: 'Payment not completed',
+  CUSTOMER_NOT_FOUND: 'Stripe customer not found',
+  LICENSE_NOT_FOUND: 'License not found for customer',
 } as const;
 
 /**
@@ -116,6 +118,8 @@ export interface ProcessedPayment {
   paymentIntentId: string;
   /** Idempotency key */
   idempotencyKey: string;
+  /** Stripe customer ID */
+  stripeCustomerId: string;
 }
 
 /**
@@ -310,6 +314,10 @@ export async function processCompletedCheckout(sessionId: string): Promise<Proce
 
   const paymentIntent = session.payment_intent as Stripe.PaymentIntent;
 
+  if (!session.customer) {
+    throw new Error(STRIPE_ERRORS.CUSTOMER_NOT_FOUND);
+  }
+
   return {
     sessionId: session.id,
     email: metadata.email || session.customer_email || '',
@@ -319,6 +327,7 @@ export async function processCompletedCheckout(sessionId: string): Promise<Proce
     currency: session.currency || 'eur',
     paymentIntentId: paymentIntent?.id || '',
     idempotencyKey: metadata.idempotencyKey || '',
+    stripeCustomerId: session.customer as string,
   };
 }
 
@@ -353,4 +362,48 @@ export function formatPrice(cents: number, currency = 'EUR'): string {
     style: 'currency',
     currency,
   }).format(cents / 100);
+}
+
+/**
+ * Create a Stripe billing portal session.
+ *
+ * SECURITY: This function requires a stripeCustomerId which must be
+ * extracted from the authenticated license, NOT from client input.
+ *
+ * @param stripeCustomerId - Stripe customer ID from license
+ * @param returnUrl - URL to redirect after portal session
+ * @returns Portal session URL
+ *
+ * @example
+ * ```typescript
+ * // In route handler with license auth:
+ * const license = await getLicenseStore().getLicense(licenseKey);
+ * if (!license.stripeCustomerId) {
+ *   throw new Error('No billing information found');
+ * }
+ * const session = await createBillingPortalSession(
+ *   license.stripeCustomerId,
+ *   'https://app.voiceinvoice.de/settings'
+ * );
+ * // Redirect user to session.url
+ * ```
+ */
+export async function createBillingPortalSession(
+  stripeCustomerId: string,
+  returnUrl: string
+): Promise<{ url: string }> {
+  if (!stripeCustomerId) {
+    throw new Error(STRIPE_ERRORS.CUSTOMER_NOT_FOUND);
+  }
+
+  const stripe = getStripeClient();
+
+  const session = await stripe.billingPortal.sessions.create({
+    customer: stripeCustomerId,
+    return_url: returnUrl,
+  });
+
+  return {
+    url: session.url,
+  };
 }

@@ -16,10 +16,12 @@ import {
   getAvailablePlans,
   getPlan,
   formatPrice,
+  createBillingPortalSession,
   STRIPE_ERRORS,
 } from '../services/stripe-service';
 import { getLicenseStore, License } from '../services/license-store';
 import { randomBytes } from 'crypto';
+import { createLicenseAuthHook } from './license';
 
 /**
  * Schema for POST /api/stripe/checkout request body.
@@ -30,6 +32,13 @@ const checkoutSchema = z.object({
   email: z.string().email('Valid email is required'),
   successUrl: z.string().url('Valid successUrl is required'),
   cancelUrl: z.string().url('Valid cancelUrl is required'),
+});
+
+/**
+ * Schema for POST /api/stripe/billing-portal request body.
+ */
+const billingPortalSchema = z.object({
+  returnUrl: z.string().url('Valid returnUrl is required'),
 });
 
 /**
@@ -45,6 +54,13 @@ interface ErrorResponse {
  */
 interface CheckoutResponse {
   sessionId: string;
+  url: string;
+}
+
+/**
+ * Billing portal response structure.
+ */
+interface BillingPortalResponse {
   url: string;
 }
 
@@ -239,6 +255,7 @@ export async function registerStripeRoutes(server: FastifyInstance): Promise<voi
                   currentUsage: 0,
                   usageResetDate,
                   expiresAt,
+                  stripeCustomerId: payment.stripeCustomerId,
                   createdAt: now,
                   updatedAt: now,
                 };
@@ -361,4 +378,86 @@ export async function registerStripeRoutes(server: FastifyInstance): Promise<voi
       return reply.status(400).send(errorResponse);
     }
   });
+
+  /**
+   * POST /api/stripe/billing-portal
+   *
+   * Creates a Stripe billing portal session for license management.
+   * SECURITY: Requires valid license key in x-license-key header.
+   * Customer ID is extracted from the authenticated license, NOT from client.
+   * Rate limited to 5 requests per minute per license.
+   */
+  server.post<{
+    Body: {
+      returnUrl?: string;
+    };
+  }>(
+    '/api/stripe/billing-portal',
+    {
+      preHandler: createLicenseAuthHook(),
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+          keyGenerator: (request) => request.headers['x-license-key'] as string,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      // Validate request body
+      const parseResult = billingPortalSchema.safeParse(request.body);
+
+      if (!parseResult.success) {
+        const errorResponse: ErrorResponse = {
+          error: parseResult.error.errors[0]?.message || 'Invalid request body',
+          statusCode: 400,
+        };
+        return reply.status(400).send(errorResponse);
+      }
+
+      const { returnUrl } = parseResult.data;
+
+      // Get license from header (validated by preHandler)
+      const licenseKey = request.headers['x-license-key'] as string;
+
+      try {
+        const store = getLicenseStore();
+        const license = await store.getLicense(licenseKey);
+
+        if (!license) {
+          const errorResponse: ErrorResponse = {
+            error: 'License not found',
+            statusCode: 404,
+          };
+          return reply.status(404).send(errorResponse);
+        }
+
+        if (!license.stripeCustomerId) {
+          const errorResponse: ErrorResponse = {
+            error: 'No billing information found for this license',
+            statusCode: 400,
+          };
+          return reply.status(400).send(errorResponse);
+        }
+
+        // Create portal session with customer ID from license (SECURE)
+        const session = await createBillingPortalSession(license.stripeCustomerId, returnUrl);
+
+        const response: BillingPortalResponse = {
+          url: session.url,
+        };
+
+        return reply.status(200).send(response);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to create portal session';
+        server.log.error({ err, licenseKey }, 'Billing portal error');
+
+        const errorResponse: ErrorResponse = {
+          error: message,
+          statusCode: 500,
+        };
+        return reply.status(500).send(errorResponse);
+      }
+    }
+  );
 }

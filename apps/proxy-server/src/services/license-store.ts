@@ -29,6 +29,8 @@ export interface License {
   usageResetDate: Date;
   /** License expiration date */
   expiresAt: Date;
+  /** Stripe customer ID for billing portal */
+  stripeCustomerId?: string;
   /** Record creation timestamp */
   createdAt: Date;
   /** Record update timestamp */
