@@ -1,0 +1,106 @@
+name: Build Linux
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  NODE_VERSION: '20'
+  DATABASE_URL: 'file:./prisma/data/voiceinvoice.db'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Get pnpm store directory
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: linux-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: linux-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        working-directory: apps/desktop
+        run: pnpm exec prisma generate
+
+      - name: Build shared packages
+        run: pnpm build --filter=@voiceinvoice/shared-types --filter=@voiceinvoice/privacy-engine --filter=@voiceinvoice/database --filter=@voiceinvoice/ai-orchestrator
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 libnotify-dev libnss3 libxss1 libasound2t64
+
+      - name: Setup database
+        working-directory: apps/desktop
+        run: |
+          mkdir -p prisma/data
+          pnpm exec prisma db push --skip-generate
+          pnpm exec tsx prisma/seed.ts
+
+      - name: Build Electron main process
+        working-directory: apps/desktop
+        run: node scripts/build-electron.mjs
+
+      - name: Build Next.js
+        working-directory: apps/desktop
+        run: pnpm exec next build
+
+      - name: Prepare standalone
+        working-directory: apps/desktop
+        run: node scripts/prepare-standalone.mjs
+
+      - name: Build Linux installer
+        working-directory: apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec electron-builder --linux --publish never
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: |
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.rpm
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Create Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.rpm
+          draft: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
