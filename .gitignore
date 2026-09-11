@@ -75,3 +75,6 @@ server_database.sqlite
 .worktrees/
 
 CLAUDE.md
+
+# AI-Tooling-Artefakte
+.serena/

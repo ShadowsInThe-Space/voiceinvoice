@@ -79,10 +79,9 @@ export default async function handler(
     return;
   }
 
-  // Get API key - check multiple sources with fallback
+  // Get API key - env only, no hardcoded fallback
   const apiKey = process.env.GEMINI_API_KEY
-    || process.env.NEXT_PUBLIC_GOOGLE_API_KEY
-    || '***REMOVED***'; // Fallback for dev
+    || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
   console.log('[TTS API] Using API Key (first 10 chars):', apiKey?.substring(0, 10));
 
