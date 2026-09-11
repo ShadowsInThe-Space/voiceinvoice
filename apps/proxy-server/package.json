@@ -25,7 +25,7 @@
     "@sentry/node": "^10.38.0",
     "@voiceinvoice/shared-types": "workspace:*",
     "dotenv": "^17.2.3",
-    "fastify": "^5.7.3",
+    "fastify": "^5.12.1",
     "pino-pretty": "^11.0.0",
     "stripe": "^20.2.0",
     "zod": "^3.22.0"
