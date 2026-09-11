@@ -125,8 +125,7 @@ export default async function handler(
 
     const supabaseKey =
       process.env.SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      '***REMOVED***';
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ;
 
     console.log('[RAG API] Using Supabase URL:', supabaseUrl);
 
