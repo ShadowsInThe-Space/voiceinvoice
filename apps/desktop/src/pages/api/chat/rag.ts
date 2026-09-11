@@ -113,11 +113,10 @@ export default async function handler(
   }
 
   try {
-    // Get environment variables with fallbacks for dev
+    // Get environment variables (env only, no hardcoded fallback)
     const geminiApiKey =
       process.env.GEMINI_API_KEY ||
-      process.env.NEXT_PUBLIC_GOOGLE_API_KEY ||
-      '***REMOVED***';
+      process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
     const supabaseUrl =
       process.env.SUPABASE_URL ||
