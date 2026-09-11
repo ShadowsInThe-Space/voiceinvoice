@@ -1,5 +1,7 @@
 # 🎙️ VoiceInvoice Enterprise
 
+> **English TL;DR:** Voice-first invoicing platform for freelancers — dictate invoices, get automatic payment reminders. Electron + Next.js desktop app with Gemini 2.5 Flash STT/LLM, RAG chat over your own documents, end-to-end encryption and DSGVO/GDPR-first architecture.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Status: Production Beta](https://img.shields.io/badge/Status-Production%20Beta-success)](https://github.com/Shadows-In-The-Space/invoice_finance_app)
 [![Privacy: Dual-Layer](https://img.shields.io/badge/Privacy-Dual--Layer%20DSGVO-blueviolet)](https://www.notion.so/2f24634900028171a180c524518a3897)
