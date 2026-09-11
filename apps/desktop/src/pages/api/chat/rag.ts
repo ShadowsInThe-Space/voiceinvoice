@@ -114,18 +114,21 @@ export default async function handler(
 
   try {
     // Get environment variables (env only, no hardcoded fallback)
-    const geminiApiKey =
-      process.env.GEMINI_API_KEY ||
-      process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+    const geminiApiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
     const supabaseUrl =
       process.env.SUPABASE_URL ||
       process.env.NEXT_PUBLIC_SUPABASE_URL ||
       'https://supabase.shadowsinthe.space';
 
-    const supabaseKey =
-      process.env.SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!geminiApiKey) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY is not configured' });
+    }
+    if (!supabaseKey) {
+      return res.status(500).json({ error: 'SUPABASE_ANON_KEY is not configured' });
+    }
 
     console.log('[RAG API] Using Supabase URL:', supabaseUrl);
 
