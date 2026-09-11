@@ -13,23 +13,25 @@ import { useVoiceRecording } from '../../src/hooks/use-voice-recording';
 
 // Mock AudioRecorder
 vi.mock('../../src/lib/voice/audio-recorder', () => ({
-  AudioRecorder: vi.fn().mockImplementation(() => ({
-    start: vi.fn().mockResolvedValue(undefined),
-    stop: vi.fn().mockResolvedValue({
-      blob: new Blob(['test'], { type: 'audio/webm' }),
-      duration: 1000,
-      mimeType: 'audio/webm;codecs=opus',
-    }),
-    pause: vi.fn(),
-    resume: vi.fn(),
-    getState: vi.fn().mockReturnValue('IDLE'),
-    getDuration: vi.fn().mockReturnValue(0),
-    getConfig: vi.fn().mockReturnValue({
-      mimeType: 'audio/webm;codecs=opus',
-      sampleRate: 48000,
-    }),
-    onStateChange: vi.fn(),
-  })),
+  AudioRecorder: vi.fn().mockImplementation(function (this: any) {
+    return {
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue({
+        blob: new Blob(['test'], { type: 'audio/webm' }),
+        duration: 1000,
+        mimeType: 'audio/webm;codecs=opus',
+      }),
+      pause: vi.fn(),
+      resume: vi.fn(),
+      getState: vi.fn().mockReturnValue('IDLE'),
+      getDuration: vi.fn().mockReturnValue(0),
+      getConfig: vi.fn().mockReturnValue({
+        mimeType: 'audio/webm;codecs=opus',
+        sampleRate: 48000,
+      }),
+      onStateChange: vi.fn(),
+    };
+  }),
   RecordingState: {
     IDLE: 'IDLE',
     RECORDING: 'RECORDING',

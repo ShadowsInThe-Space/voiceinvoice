@@ -75,7 +75,9 @@ describe('TTSClient', () => {
 
     // Mock Audio constructor
     mockAudio = new MockAudio();
-    global.Audio = vi.fn(() => mockAudio) as unknown as typeof Audio;
+    global.Audio = vi.fn(function (this: any) {
+      return mockAudio;
+    }) as unknown as typeof Audio;
 
     // Default successful API response
     mockFetch.mockResolvedValue({
@@ -159,7 +161,7 @@ describe('TTSClient', () => {
     it('should use specified voice override', async () => {
       const speakPromise = client.speak({
         text: 'Test',
-        voice: 'de-DE-Wavenet-A'
+        voice: 'de-DE-Wavenet-A',
       });
 
       setTimeout(() => mockAudio.simulateEnd(), 10);
@@ -175,7 +177,7 @@ describe('TTSClient', () => {
       const speakPromise = client.speak({ text: 'Test' });
 
       // Wait for audio to start
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 5));
       expect(client.isSpeaking).toBe(true);
 
       mockAudio.simulateEnd();
@@ -190,7 +192,7 @@ describe('TTSClient', () => {
 
       const speakPromise = client.speak({ text: 'Test' });
 
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 5));
       expect(onStart).toHaveBeenCalled();
 
       mockAudio.simulateEnd();
@@ -204,7 +206,7 @@ describe('TTSClient', () => {
       const speakPromise = client.speak({ text: 'Test' });
 
       // Wait for audio to start, then end
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
       mockAudio.simulateEnd();
       await speakPromise;
 
@@ -227,17 +229,17 @@ describe('TTSClient', () => {
 
     it('should interrupt current playback when interrupt option is true', async () => {
       // Start first speech
-      const firstSpeakPromise = client.speak({ text: 'First' }).catch(e => e);
-      await new Promise(resolve => setTimeout(resolve, 20));
+      const firstSpeakPromise = client.speak({ text: 'First' }).catch((e) => e);
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       // Interrupt with second speech
       const secondSpeakPromise = client.speak({
         text: 'Second',
-        interrupt: true
+        interrupt: true,
       });
 
       // Wait and simulate end for second audio
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
       mockAudio.simulateEnd();
       await secondSpeakPromise;
 
@@ -264,7 +266,7 @@ describe('TTSClient', () => {
   describe('stop', () => {
     it('should stop current playback', async () => {
       const speakPromise = client.speak({ text: 'Test' });
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 5));
 
       client.stop();
 
@@ -287,7 +289,7 @@ describe('TTSClient', () => {
   describe('pause', () => {
     it('should pause current playback', async () => {
       const speakPromise = client.speak({ text: 'Test' });
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 5));
 
       client.pause();
 
@@ -309,7 +311,7 @@ describe('TTSClient', () => {
   describe('resume', () => {
     it('should resume paused playback', async () => {
       const speakPromise = client.speak({ text: 'Test' });
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 5));
 
       client.pause();
       expect(client.isPaused).toBe(true);
@@ -354,11 +356,11 @@ describe('TTSClient', () => {
       const processPromise = client.processQueue();
 
       // Give time for first item to start
-      await new Promise(resolve => setTimeout(resolve, 30));
+      await new Promise((resolve) => setTimeout(resolve, 30));
       mockAudio.simulateEnd();
 
       // Give time for second item to start
-      await new Promise(resolve => setTimeout(resolve, 30));
+      await new Promise((resolve) => setTimeout(resolve, 30));
       mockAudio.simulateEnd();
 
       // Wait for queue to finish
@@ -383,7 +385,7 @@ describe('TTSClient', () => {
 
     it('should not stop current playback', async () => {
       const speakPromise = client.speak({ text: 'Current' });
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 5));
 
       client.queueText('Queued');
       client.clearQueue();
@@ -403,7 +405,7 @@ describe('TTSClient', () => {
 
     it('should return PLAYING when speaking', async () => {
       const speakPromise = client.speak({ text: 'Test' });
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 5));
 
       expect(client.getState()).toBe(PlaybackState.PLAYING);
 
@@ -413,7 +415,7 @@ describe('TTSClient', () => {
 
     it('should return PAUSED when paused', async () => {
       const speakPromise = client.speak({ text: 'Test' });
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 5));
 
       client.pause();
       expect(client.getState()).toBe(PlaybackState.PAUSED);
@@ -462,10 +464,10 @@ describe('VoiceResponseHelper', () => {
     id: 'INV-001',
     number: 'RE-2024-001',
     customerName: 'Max Mustermann',
-    total: 1250.50,
+    total: 1250.5,
     items: [
       { description: 'Beratung', quantity: 5, unitPrice: 200 },
-      { description: 'Reisekosten', quantity: 1, unitPrice: 250.50 },
+      { description: 'Reisekosten', quantity: 1, unitPrice: 250.5 },
     ],
     status: 'draft' as const,
     createdAt: new Date('2024-01-15'),
@@ -473,7 +475,9 @@ describe('VoiceResponseHelper', () => {
 
   beforeEach(() => {
     mockAudio = new MockAudio();
-    global.Audio = vi.fn(() => mockAudio) as unknown as typeof Audio;
+    global.Audio = vi.fn(function (this: any) {
+      return mockAudio;
+    }) as unknown as typeof Audio;
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ audioContent: 'dGVzdA==' }),

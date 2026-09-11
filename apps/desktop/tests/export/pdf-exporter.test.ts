@@ -19,28 +19,30 @@ import type {
 
 // Mock jsPDF
 vi.mock('jspdf', () => {
-  const mockJsPDF = vi.fn().mockImplementation(() => ({
-    setFontSize: vi.fn().mockReturnThis(),
-    setFont: vi.fn().mockReturnThis(),
-    text: vi.fn().mockReturnThis(),
-    line: vi.fn().mockReturnThis(),
-    rect: vi.fn().mockReturnThis(),
-    setDrawColor: vi.fn().mockReturnThis(),
-    setFillColor: vi.fn().mockReturnThis(),
-    setTextColor: vi.fn().mockReturnThis(),
-    setLineDashPattern: vi.fn().mockReturnThis(),
-    splitTextToSize: vi.fn().mockImplementation((text: string) => [text]),
-    addPage: vi.fn().mockReturnThis(),
-    addImage: vi.fn().mockReturnThis(),
-    getTextWidth: vi.fn().mockReturnValue(50),
-    internal: {
-      pageSize: {
-        getWidth: () => 210,
-        getHeight: () => 297,
+  const mockJsPDF = vi.fn().mockImplementation(function (this: any) {
+    return {
+      setFontSize: vi.fn().mockReturnThis(),
+      setFont: vi.fn().mockReturnThis(),
+      text: vi.fn().mockReturnThis(),
+      line: vi.fn().mockReturnThis(),
+      rect: vi.fn().mockReturnThis(),
+      setDrawColor: vi.fn().mockReturnThis(),
+      setFillColor: vi.fn().mockReturnThis(),
+      setTextColor: vi.fn().mockReturnThis(),
+      setLineDashPattern: vi.fn().mockReturnThis(),
+      splitTextToSize: vi.fn().mockImplementation((text: string) => [text]),
+      addPage: vi.fn().mockReturnThis(),
+      addImage: vi.fn().mockReturnThis(),
+      getTextWidth: vi.fn().mockReturnValue(50),
+      internal: {
+        pageSize: {
+          getWidth: () => 210,
+          getHeight: () => 297,
+        },
       },
-    },
-    output: vi.fn().mockReturnValue(new ArrayBuffer(100)),
-  }));
+      output: vi.fn().mockReturnValue(new ArrayBuffer(100)),
+    };
+  });
   return { default: mockJsPDF, jsPDF: mockJsPDF };
 });
 
